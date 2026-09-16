@@ -40,4 +40,25 @@ curl -sS -X POST "$FN/ai-proxy" "${auth[@]}" \
   -d "{\"provider\":\"$PROVIDER\",\"model\":\"gpt-4o-mini\",\"payload\":{\"messages\":[{\"role\":\"user\",\"content\":\"reply with the word ok\"}]}}"
 echo
 
+echo "==> checking the quota gate refuses a burst"
+# The free plan allows 20 requests/minute; 25 rapid calls must produce a 429.
+codes=""
+for _ in $(seq 1 25); do
+  code=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$FN/ai-proxy" "${auth[@]}" \
+    -d "{\"provider\":\"$PROVIDER\",\"model\":\"gpt-4o-mini\",\"payload\":{\"max_tokens\":1,\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}}")
+  codes="$codes $code"
+done
+echo "status codes:$codes"
+if echo "$codes" | grep -q 429; then
+  echo "ok: rate limiter refused the burst"
+else
+  echo "FAIL: 25 rapid requests produced no 429 -- the quota gate is not enforcing" >&2
+  exit 1
+fi
+
+echo "==> quota remaining"
+curl -sS "$SUPABASE_URL/rest/v1/my_ai_quota?select=*" \
+  -H "Authorization: Bearer $USER_JWT" -H "apikey: $SUPABASE_ANON_KEY"
+echo
+
 echo "==> done"

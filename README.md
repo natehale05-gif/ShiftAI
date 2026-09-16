@@ -24,6 +24,12 @@ Supports per-user bring-your-own-key credentials and ShiftAI-owned platform
 keys with the same schema; a user's own key is preferred, the platform key is
 the fallback.
 
+Every proxied request passes a quota gate enforced in Postgres: per-minute rate
+limits, daily request limits, and a daily token cap on platform-key usage so an
+account cannot run up an unbounded provider bill. Limits are per plan and
+per-account overridable — review the shipped defaults against your provider
+pricing before opening signups.
+
 **Setup:** see [docs/SUPABASE_SETUP.md](docs/SUPABASE_SETUP.md).
 
 ```bash

@@ -79,6 +79,49 @@ export async function chatStream(prompt: string): Promise<ReadableStream<Uint8Ar
   return res.body;
 }
 
+/**
+ * Remaining allowance for today, for a usage meter in the UI. One row per key
+ * scope: "platform" (ShiftAI pays) and "user" (their own key).
+ */
+export async function quotaStatus() {
+  const { data, error } = await supabase.from("my_ai_quota").select("*");
+  if (error) throw error;
+  return data as Array<{
+    plan_id: string;
+    plan_name: string;
+    is_blocked: boolean;
+    key_scope: "user" | "platform";
+    requests_today: number;
+    tokens_today: number;
+    requests_per_day: number | null;
+    tokens_per_day: number | null;
+    requests_per_minute: number | null;
+  }>;
+}
+
+/**
+ * chat() throws on a refused request like any other error. Unwrap it to tell a
+ * rate limit apart from a real failure -- the proxy answers 429 with the limit
+ * that was hit and how long to wait.
+ */
+export async function chatOrQuotaError(prompt: string) {
+  try {
+    return { ok: true as const, data: await chat(prompt) };
+  } catch (err) {
+    const res = (err as { context?: Response }).context;
+    if (res?.status === 429 || res?.status === 403) {
+      const body = await res.json().catch(() => ({}));
+      return {
+        ok: false as const,
+        limit: body.limit as string | null,
+        reason: body.error as string,
+        retryAfterSeconds: body.retry_after_seconds as number | null,
+      };
+    }
+    throw err;
+  }
+}
+
 /** Recent usage for a billing or activity screen. */
 export async function recentUsage(limit = 50) {
   const { data, error } = await supabase

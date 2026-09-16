@@ -57,6 +57,48 @@ Deno.serve(async (req: Request) => {
     return fail(req, 402, `no active ${providerId} key for this account`);
   }
 
+  // Quota gate. Checked after key resolution because the limits that apply
+  // depend on who pays: a platform key spends ShiftAI's money, the user's own
+  // key spends theirs. The check and the increment happen inside one locked
+  // statement in Postgres, so concurrent isolates cannot slip past it.
+  const { data: quotaRows, error: quotaError } = await db.rpc("consume_ai_quota", {
+    p_user: caller.userId,
+    p_key_scope: key.key_scope,
+  });
+  if (quotaError) return fail(req, 500, "quota check failed", quotaError.message);
+
+  const quota = Array.isArray(quotaRows) ? quotaRows[0] : quotaRows;
+  if (!quota?.allowed) {
+    await logUsage(db, {
+      user_id: caller.userId,
+      key_id: key.key_id,
+      provider_id: providerId,
+      model: model ?? null,
+      key_scope: key.key_scope,
+      status_code: 429,
+      ok: false,
+      latency_ms: 0,
+      error: quota?.reason ?? "quota denied",
+    });
+    return new Response(
+      JSON.stringify({
+        error: quota?.reason ?? "quota exceeded",
+        limit: quota?.limit_name ?? null,
+        retry_after_seconds: quota?.retry_after_seconds ?? null,
+      }),
+      {
+        status: quota?.limit_name === "account_blocked" ? 403 : 429,
+        headers: {
+          ...corsHeaders(req),
+          "content-type": "application/json",
+          ...(quota?.retry_after_seconds
+            ? { "retry-after": String(quota.retry_after_seconds) }
+            : {}),
+        },
+      },
+    );
+  }
+
   // Model is carried in the path for some providers and in the body for others;
   // only send it in the body when the provider expects it there.
   const outboundPayload = path.includes("{model}")
@@ -91,10 +133,16 @@ Deno.serve(async (req: Request) => {
   }
 
   const latency = Math.round(performance.now() - started);
-  const headers = {
+  const headers: Record<string, string> = {
     ...corsHeaders(req),
     "content-type": upstream.headers.get("content-type") ?? "application/json",
   };
+  if (quota.requests_remaining_day != null) {
+    headers["x-ratelimit-remaining-requests"] = String(quota.requests_remaining_day);
+  }
+  if (quota.tokens_remaining_day != null) {
+    headers["x-ratelimit-remaining-tokens"] = String(quota.tokens_remaining_day);
+  }
 
   // Awaited rather than fired-and-forgotten: the isolate can be torn down as
   // soon as the response is returned, dropping any in-flight query.
@@ -130,6 +178,19 @@ Deno.serve(async (req: Request) => {
   }
 
   const usage = extractUsage(parsed);
+
+  // Charge real usage against the daily token cap. Streaming responses skip
+  // this: their token counts are not available without buffering the stream,
+  // which would defeat the point of streaming.
+  if (upstream.ok && usage.total) {
+    const { error } = await db.rpc("record_ai_tokens", {
+      p_user: caller.userId,
+      p_key_scope: key.key_scope,
+      p_tokens: usage.total,
+    });
+    if (error) console.error("token accounting failed:", error.message);
+  }
+
   await logUsage(db, {
     user_id: caller.userId,
     key_id: key.key_id,

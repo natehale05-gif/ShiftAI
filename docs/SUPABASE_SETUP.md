@@ -117,15 +117,78 @@ const { data } = await supabase.functions.invoke("ai-proxy", {
 - **Rotation keeps history.** Re-storing the same `(provider, label)` updates the
   vault secret in place, so `ai_usage_events` stays attached.
 
+## Rate limits and spend caps
+
+Every `ai-proxy` call passes through `consume_ai_quota` before the provider is
+contacted. The check and the counter increment happen in a single statement that
+holds a row lock, so concurrent edge function isolates serialize on it rather
+than each reading a stale count and letting a burst through.
+
+Limits depend on who pays:
+
+| Limit                       | Platform key (ShiftAI pays) | User's own key (user pays) |
+|-----------------------------|-----------------------------|----------------------------|
+| `requests_per_minute`       | enforced                    | enforced                   |
+| `requests_per_day`          | enforced                    | generous abuse guard       |
+| `tokens_per_day`            | enforced — the spend cap    | not capped                 |
+
+Shipped plans (`public.ai_plans`):
+
+| Plan        | req/min | platform req/day | platform tokens/day | BYOK req/day |
+|-------------|---------|------------------|---------------------|--------------|
+| `free`      | 20      | 100              | 100,000             | 2,000        |
+| `pro`       | 60      | 5,000            | 5,000,000           | 20,000       |
+| `unlimited` | none    | none             | none                | none         |
+
+Users with no `user_ai_plan` row get `free`. **Review these numbers against your
+provider pricing before opening signups** — they are conservative placeholders,
+not a budget you have agreed to.
+
+A refused request returns `429` with a `Retry-After` header and a JSON body
+naming the limit hit; a blocked account returns `403`. Successful responses
+carry `x-ratelimit-remaining-requests` and `x-ratelimit-remaining-tokens`.
+
+Assign a plan, or block an account outright:
+
+```sql
+insert into public.user_ai_plan (user_id, plan_id) values ('<user-uuid>', 'pro')
+on conflict (user_id) do update set plan_id = excluded.plan_id;
+
+update public.user_ai_plan set is_blocked = true where user_id = '<user-uuid>';
+```
+
+Tune a plan globally:
+
+```sql
+update public.ai_plans set platform_tokens_per_day = 250000 where id = 'free';
+```
+
+The app can show remaining allowance by selecting from `public.my_ai_quota`.
+
+### Schedule counter pruning
+
+Minute buckets accumulate quickly. Enable `pg_cron` and prune daily:
+
+```sql
+create extension if not exists pg_cron with schema extensions;
+select cron.schedule(
+  'prune-ai-usage-counters', '17 4 * * *',
+  $$ select public.prune_ai_usage_counters(interval '3 days') $$
+);
+```
+
 ### What this does *not* do yet
 
-- **No rate limiting or spend caps.** A user with a valid JWT can call
-  `ai-proxy` as often as they like against a platform key. Add a quota check in
-  `ai-proxy` before opening this to untrusted signups.
 - **No per-request authorization beyond authentication.** Any signed-in user may
-  use the platform key for any enabled provider.
-- **Streaming responses are not token-accounted** — usage rows for SSE requests
-  record latency and status only.
+  use the platform key for any enabled provider, within their quota.
+- **Streaming responses are not token-accounted.** Their token counts are not
+  available without buffering the stream, so SSE requests count against the
+  request limits but contribute nothing to the daily token cap. If most of your
+  traffic streams, the token cap will under-count — lean on `requests_per_day`.
+- **The token cap can overshoot by one response.** Tokens are charged after the
+  provider answers, so the request that crosses the cap still completes.
+- **Limits are per user, not global.** There is no account-wide ShiftAI spend
+  ceiling; many users each within quota can still add up.
 
 ## Operations
 
