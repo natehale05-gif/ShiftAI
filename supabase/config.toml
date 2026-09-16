@@ -1,0 +1,40 @@
+# ShiftAI Supabase project configuration.
+# Local dev: `supabase start`. Hosted: `supabase link --project-ref <ref>`.
+
+project_id = "shiftai"
+
+[api]
+enabled = true
+port = 54321
+# Only these schemas are reachable over PostgREST. Nothing that touches
+# plaintext keys lives outside public, and the one decrypting function is
+# granted to service_role alone.
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+major_version = 17
+
+[studio]
+enabled = true
+port = 54323
+
+[auth]
+enabled = true
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["http://localhost:3000"]
+jwt_expiry = 3600
+enable_signup = true
+
+[auth.email]
+enable_confirmations = true
+
+# Both functions authenticate the caller themselves; verify_jwt stays on so
+# unauthenticated requests are rejected at the gateway as well.
+[functions.keys]
+verify_jwt = true
+
+[functions.ai-proxy]
+verify_jwt = true

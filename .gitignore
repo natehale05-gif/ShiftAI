@@ -1,0 +1,15 @@
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Supabase
+supabase/.branches
+supabase/.temp
+supabase/.env
+
+# Dependencies / build output
+node_modules/
+dist/
+build/
+.DS_Store
