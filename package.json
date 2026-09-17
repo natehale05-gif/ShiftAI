@@ -1,0 +1,18 @@
+{
+  "name": "shiftai-supabase",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Tooling for the ShiftAI Supabase key server.",
+  "scripts": {
+    "import-keys": "node scripts/import-env-keys.mjs",
+    "sync-users": "node scripts/sync-users.mjs"
+  },
+  "dependencies": {
+    "jose": "^5.9.6",
+    "pg": "^8.13.1"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

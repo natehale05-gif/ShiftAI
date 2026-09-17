@@ -127,19 +127,112 @@ const { data } = await supabase.functions.invoke("ai-proxy", {
 });
 ```
 
-## Assumption: Supabase Auth
+## Mirroring ShiftAI users into Supabase Auth
 
-`owner_id` and `subject_id` are foreign keys into `auth.users`, and RLS keys off
-`auth.uid()`. That assumes the app's users are Supabase Auth users.
+`owner_id` and `subject_id` are foreign keys into `auth.users` and RLS keys off
+`auth.uid()`, but ShiftAI's users live in its own Postgres behind its own
+`JWT_SECRET`. Mirroring bridges the two: each app user gets a Supabase Auth
+user, and `external_user_map` records the correspondence. Nothing requires the
+two systems to agree on an id.
 
-**Platform keys do not depend on this** — they are service-role only, and a
-trusted server-side caller can use the proxy with no Supabase user at all. But
-per-user BYOK keys and per-user quota tracking do. If ShiftAI's users live in
-another database (a Neon Postgres behind your own `JWT_SECRET`, say), then
-before per-user features work you need to either mirror users into Supabase
-Auth, or change `owner_id`/`subject_id` to an opaque external user id and drop
-the `auth.users` foreign keys, with your server passing the user id to the proxy
-under service-role auth.
+### Mirror the users
+
+```bash
+npm install
+SOURCE_DATABASE_URL=postgresql://...        \
+SUPABASE_URL=https://<ref>.supabase.co      \
+SUPABASE_SERVICE_ROLE_KEY=<service-role-key> \
+  node scripts/sync-users.mjs --table users --id-column id --email-column email
+```
+
+It reports what it would do; add `--confirm` to create the accounts. Re-running
+is safe — mapped users are skipped, and a user created in Auth whose mapping row
+never landed is re-linked rather than duplicated. Run it again after a batch of
+signups, or on a schedule.
+
+Mirrored accounts have no password. ShiftAI stays the authority on identity.
+
+### Issue sessions
+
+Supabase never sees a ShiftAI password, so the ShiftAI server mints the session
+itself: a JWT signed with the project's JWT secret whose `sub` is the *mirrored*
+Supabase user id. Postgres resolves `auth.uid()` from it and every policy
+applies unchanged. `examples/mint-supabase-jwt.ts` is the whole flow — resolve
+the external id, mint, call the proxy.
+
+The secret is under **Project Settings → API → JWT Settings** (the "legacy JWT
+secret" on projects using asymmetric signing keys). Treat it like the service
+role key: server-side only, never in the app bundle.
+
+Claims must match what Supabase issues — `role` and `aud` both `authenticated`,
+`sub` the user id, HS256 — or the API gateway rejects the request before RLS
+ever runs.
+
+### Ordering
+
+Mirror a user *before* their first AI request. A token whose `sub` is not a real
+`auth.users` row fails at `auth.getUser()` in the proxy, which reads as a 401.
+If ShiftAI creates users continuously, call the sync on signup rather than
+relying on a nightly batch.
+
+## Calling the media providers
+
+ElevenLabs, HeyGen, Replicate, fal.ai, Flux, Runway and Luma are not
+chat-shaped: they are submit-then-poll, and some return a file rather than JSON.
+They have no `chat_path`, so the caller names the endpoint and the method.
+
+Submit, then poll:
+
+```ts
+// POST returns an id
+const submit = await supabase.functions.invoke("ai-proxy", {
+  body: {
+    provider: "replicate",
+    path: "/v1/predictions",
+    payload: { version: "<model-version>", input: { prompt: "a cat" } },
+  },
+});
+
+// GET polls it
+const poll = await supabase.functions.invoke("ai-proxy", {
+  body: { provider: "replicate", method: "GET", path: `/v1/predictions/${submit.data.id}` },
+});
+```
+
+Binary responses (ElevenLabs speech, a rendered video) stream straight through
+with their original `content-type` and `content-disposition`, so fetch them
+directly rather than through `functions.invoke`, which assumes JSON:
+
+```ts
+const res = await fetch(`${SUPABASE_URL}/functions/v1/ai-proxy`, {
+  method: "POST",
+  headers: { Authorization: `Bearer ${accessToken}`, apikey: ANON_KEY,
+             "content-type": "application/json" },
+  body: JSON.stringify({
+    provider: "elevenlabs",
+    path: "/v1/text-to-speech/<voice_id>",
+    payload: { text: "hello", model_id: "eleven_multilingual_v2" },
+  }),
+});
+const audio = await res.blob();
+```
+
+Provider specifics worth knowing:
+
+| Provider | Base | Auth header | Notes |
+|---|---|---|---|
+| ElevenLabs | `api.elevenlabs.io` | `xi-api-key` | returns audio; verify via `/v1/user/subscription` |
+| HeyGen | `api.heygen.com` | `X-Api-Key` | v2 endpoints; quota at `/v2/user/remaining_quota` |
+| Replicate | `api.replicate.com` | `Authorization: Bearer` | the old `Token` scheme is superseded |
+| fal.ai | `queue.fal.run` | `Authorization: Key` | poll `/{model}/requests/{id}/status` |
+| Flux (BFL) | `api.bfl.ai` | `x-key` | follow the returned `polling_url`, don't rebuild it |
+| Runway | `api.dev.runwayml.com` | `Authorization: Bearer` | requires the dated `X-Runway-Version` header |
+| Luma | `api.lumalabs.ai` | `Authorization: Bearer` | everything under `/dream-machine/v1` |
+
+**Media spend is bounded by request limits, not the token cap** — these
+providers report no token usage, so `platform_tokens_per_day` does not
+constrain them. Use `platform_requests_per_day` for that, and note a video
+render costs far more than a chat completion at the same request count.
 
 ## Security properties
 

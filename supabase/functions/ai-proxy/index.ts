@@ -2,10 +2,16 @@
 //
 //   POST /ai-proxy
 //   { "provider": "openai", "model": "gpt-4o-mini", "payload": { ...provider request... } }
+//   { "provider": "replicate", "method": "GET", "path": "/v1/predictions/<id>" }
 //
-// The caller supplies a normal provider request body; this function resolves the
+// The caller supplies a normal provider request; this function resolves the
 // credential (the user's own key first, the ShiftAI platform key as fallback),
-// injects it, forwards the call, streams the response back, and logs usage.
+// enforces quota, injects the key, forwards the call, and returns the response.
+//
+// Three response shapes are handled, because the media providers need all of
+// them: JSON (buffered so token usage can be read), SSE (streamed through), and
+// binary such as ElevenLabs audio or a rendered video (streamed through
+// untouched -- buffering it as text would corrupt it).
 
 import { corsHeaders, fail, preflight } from "../_shared/http.ts";
 import { requireUser, serviceClient } from "../_shared/supabase.ts";
@@ -15,9 +21,12 @@ type ProxyBody = {
   provider?: string;
   model?: string;
   path?: string;
+  method?: string;
   payload?: Record<string, unknown>;
   label?: string;
 };
+
+const PASSTHROUGH_METHODS = new Set(["GET", "POST", "PUT", "PATCH", "DELETE"]);
 
 Deno.serve(async (req: Request) => {
   const pre = preflight(req);
@@ -31,16 +40,22 @@ Deno.serve(async (req: Request) => {
   const providerId = (body.provider ?? "").trim();
   const payload = body.payload ?? {};
   const model = body.model ?? (payload.model as string | undefined);
+  const method = (body.method ?? "POST").toUpperCase();
 
   if (!providerId) return fail(req, 400, "provider is required");
+  if (!PASSTHROUGH_METHODS.has(method)) return fail(req, 400, `unsupported method: ${method}`);
 
   const db = serviceClient();
 
   const provider = await loadProvider(db, providerId).catch(() => null);
   if (!provider) return fail(req, 400, `unknown or disabled provider: ${providerId}`);
 
+  // Media providers have no default path: they are submit-then-poll, so the
+  // caller names the endpoint (and carries the request id in it when polling).
   const path = body.path ?? provider.chat_path;
-  if (!path) return fail(req, 400, `no default path for ${providerId}; pass "path"`);
+  if (!path) {
+    return fail(req, 400, `${providerId} has no default path; pass "path" explicitly`);
+  }
   if (path.includes("{model}") && !model) {
     return fail(req, 400, `${providerId} needs a model to build the request path`);
   }
@@ -108,13 +123,15 @@ Deno.serve(async (req: Request) => {
     : payload;
   if (outboundPayload.model === undefined) delete outboundPayload.model;
 
+  const sendsBody = method !== "GET" && method !== "DELETE";
+
   const started = performance.now();
   let upstream: Response;
   try {
     upstream = await fetch(upstreamUrl(provider, path, key.api_key, model), {
-      method: "POST",
+      method,
       headers: upstreamHeaders(provider, key.api_key),
-      body: JSON.stringify(outboundPayload),
+      body: sendsBody ? JSON.stringify(outboundPayload) : undefined,
       signal: AbortSignal.timeout(120_000),
     });
   } catch (err) {
@@ -133,15 +150,22 @@ Deno.serve(async (req: Request) => {
   }
 
   const latency = Math.round(performance.now() - started);
+  const contentType = upstream.headers.get("content-type") ?? "application/json";
+
   const headers: Record<string, string> = {
     ...corsHeaders(req),
-    "content-type": upstream.headers.get("content-type") ?? "application/json",
+    "content-type": contentType,
   };
   if (quota.requests_remaining_day != null) {
     headers["x-ratelimit-remaining-requests"] = String(quota.requests_remaining_day);
   }
   if (quota.tokens_remaining_day != null) {
     headers["x-ratelimit-remaining-tokens"] = String(quota.tokens_remaining_day);
+  }
+  // Media providers return files; keep the metadata a client needs to save them.
+  for (const header of ["content-disposition", "content-length"]) {
+    const value = upstream.headers.get(header);
+    if (value) headers[header] = value;
   }
 
   // Awaited rather than fired-and-forgotten: the isolate can be torn down as
@@ -151,10 +175,13 @@ Deno.serve(async (req: Request) => {
     .update({ last_used_at: new Date().toISOString() })
     .eq("id", key.key_id);
 
-  // Streaming responses are piped straight through; token usage is unavailable
-  // without buffering, which would defeat the point of streaming.
-  const isStream = (upstream.headers.get("content-type") ?? "").includes("text/event-stream");
-  if (isStream) {
+  const isStream = contentType.includes("text/event-stream");
+  const isJson = contentType.includes("json");
+
+  // Anything that is not JSON is passed through as a stream. Buffering an
+  // audio or video body as text would corrupt it, and token usage is not
+  // available from a stream without defeating the point of streaming.
+  if (isStream || !isJson) {
     await logUsage(db, {
       user_id: caller.userId,
       key_id: key.key_id,
@@ -164,7 +191,7 @@ Deno.serve(async (req: Request) => {
       status_code: upstream.status,
       ok: upstream.ok,
       latency_ms: latency,
-      error: null,
+      error: upstream.ok ? null : `non-json error body (${contentType})`,
     });
     return new Response(upstream.body, { status: upstream.status, headers });
   }
@@ -174,14 +201,13 @@ Deno.serve(async (req: Request) => {
   try {
     parsed = JSON.parse(text);
   } catch {
-    // non-JSON provider error body; logged as-is below
+    // provider claimed JSON but did not send it; logged as-is below
   }
 
   const usage = extractUsage(parsed);
 
-  // Charge real usage against the daily token cap. Streaming responses skip
-  // this: their token counts are not available without buffering the stream,
-  // which would defeat the point of streaming.
+  // Charge real usage against the daily token cap. Media providers report no
+  // tokens, so their spend is bounded by the request limits instead.
   if (upstream.ok && usage.total) {
     const { error } = await db.rpc("record_ai_tokens", {
       p_user: caller.userId,

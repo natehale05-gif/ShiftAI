@@ -11,14 +11,22 @@ inside an edge function.
 
 ```
 supabase/
-  migrations/     schema, row level security, key access RPCs
+  migrations/     schema, RLS, key access RPCs, quotas, user mapping
   functions/
     keys/         store, list, and revoke provider keys
     ai-proxy/     call a provider with the key injected server-side
-docs/SUPABASE_SETUP.md   provisioning and operations
-examples/client-usage.ts how the app calls it
-scripts/smoke-test.sh    end-to-end check against a deployed project
+docs/SUPABASE_SETUP.md        provisioning and operations
+examples/client-usage.ts      how the app calls it
+examples/mint-supabase-jwt.ts issuing sessions for mirrored users
+scripts/import-env-keys.mjs   load keys from an existing .env
+scripts/sync-users.mjs        mirror app users into Supabase Auth
+scripts/smoke-test.sh         end-to-end check against a deployed project
 ```
+
+Providers: OpenAI, Anthropic, Google, Groq, OpenRouter, ElevenLabs, HeyGen,
+Replicate, fal.ai, Flux, Runway, Luma. The chat providers proxy request and
+response directly; the media providers are submit-then-poll and stream binary
+results through untouched.
 
 Supports per-user bring-your-own-key credentials and ShiftAI-owned platform
 keys with the same schema; a user's own key is preferred, the platform key is
