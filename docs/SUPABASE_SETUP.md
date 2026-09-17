@@ -83,6 +83,30 @@ curl -sX POST "https://<ref>.supabase.co/functions/v1/keys" \
   -d '{"provider":"openai","secret":"sk-...","scope":"platform"}'
 ```
 
+## 4b. Import keys from an existing .env
+
+If ShiftAI's provider keys currently live in a `.env.local`, load them as
+platform keys in one pass:
+
+```bash
+node scripts/import-env-keys.mjs .env.local              # prints a plan
+SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... \
+  node scripts/import-env-keys.mjs .env.local --confirm  # stores them
+```
+
+The script prints only the last four characters of any value, skips empty vars,
+and refuses non-AI credentials by name — Stripe keys, session and JWT secrets,
+and database URLs do not belong in this vault. It writes straight to
+`store_provider_key`, so it needs the migrations applied but not the edge
+functions deployed; that also means it **skips the pre-storage verification**
+the `keys` function does, so run `scripts/smoke-test.sh` afterwards.
+
+Once imported, delete the provider keys from `.env.local` so there is one home
+for them rather than two that can drift.
+
+> **Any key that has been pasted into a chat, a ticket, or a shared file is
+> burned.** Rotate it at the provider first, then import the new value.
+
 ## 5. Use it from the app
 
 See `examples/client-usage.ts`. In short:
@@ -102,6 +126,20 @@ const { data } = await supabase.functions.invoke("ai-proxy", {
   },
 });
 ```
+
+## Assumption: Supabase Auth
+
+`owner_id` and `subject_id` are foreign keys into `auth.users`, and RLS keys off
+`auth.uid()`. That assumes the app's users are Supabase Auth users.
+
+**Platform keys do not depend on this** — they are service-role only, and a
+trusted server-side caller can use the proxy with no Supabase user at all. But
+per-user BYOK keys and per-user quota tracking do. If ShiftAI's users live in
+another database (a Neon Postgres behind your own `JWT_SECRET`, say), then
+before per-user features work you need to either mirror users into Supabase
+Auth, or change `owner_id`/`subject_id` to an opaque external user id and drop
+the `auth.users` foreign keys, with your server passing the user id to the proxy
+under service-role auth.
 
 ## Security properties
 

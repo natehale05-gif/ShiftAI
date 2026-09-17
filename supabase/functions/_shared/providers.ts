@@ -4,8 +4,9 @@ export type Provider = {
   id: string;
   display_name: string;
   base_url: string;
-  auth_scheme: "bearer" | "header" | "query";
+  auth_scheme: "header" | "query";
   auth_name: string;
+  auth_prefix: string;
   extra_headers: Record<string, string>;
   key_pattern: string | null;
   verify_path: string | null;
@@ -50,10 +51,11 @@ export function upstreamHeaders(provider: Provider, apiKey: string): Headers {
   for (const [name, value] of Object.entries(provider.extra_headers ?? {})) {
     headers.set(name, String(value));
   }
-  if (provider.auth_scheme === "bearer") {
-    headers.set(provider.auth_name, `Bearer ${apiKey}`);
-  } else if (provider.auth_scheme === "header") {
-    headers.set(provider.auth_name, apiKey);
+  // auth_prefix carries the scheme word where the provider wants one
+  // ("Bearer ", "Token " for Replicate, "Key " for fal.ai) and is empty for
+  // providers that take the raw key in a custom header.
+  if (provider.auth_scheme === "header") {
+    headers.set(provider.auth_name, `${provider.auth_prefix ?? ""}${apiKey}`);
   }
   return headers;
 }
