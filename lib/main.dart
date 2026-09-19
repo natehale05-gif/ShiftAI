@@ -57,10 +57,12 @@ class _BootScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Deliberately not themed: the theme lives in the state being loaded.
-    // These are ShiftColors.dark, matching the page behind the app so the
-    // hand-off is invisible.
-    const Color bg = Color(0xFF0E1628);
-    const Color muted = Color(0xFFA7B4CC);
+    // These are ShiftColors.retro, which is both the theme a new account
+    // opens on and the colour the page behind the app is painted, so the
+    // hand-off either side of this screen is invisible. They have to move
+    // together with that default.
+    const Color bg = Color(0xFF0A0A0F);
+    const Color muted = Color(0xFFBFBFBF);
 
     return MaterialApp(
       debugShowCheckedModeBanner: false,

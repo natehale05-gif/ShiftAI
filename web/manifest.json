@@ -3,9 +3,9 @@
     "short_name": "SHIFT AI",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0E1628",
-    "theme_color": "#0E1628",
-    "description": "SHIFT AI — the creator suite: chat, earnings, vault, trophies, notes, agents.",
+    "background_color": "#0A0A0F",
+    "theme_color": "#0A0A0F",
+    "description": "SHIFT AI \u2014 the creator suite: chat, earnings, vault, trophies, notes, agents.",
     "prefer_related_applications": false,
     "icons": [
         {

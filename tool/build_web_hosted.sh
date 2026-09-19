@@ -61,10 +61,13 @@ cat > index.html <<'HTML'
   <link rel="manifest" href="manifest.json">
   <title>SHIFT AI</title>
   <style>
-    html, body { margin: 0; padding: 0; height: 100%; background: #0E1628; }
+    /* ShiftColors.retro bg and textMuted. This is painted before any
+       Dart runs, so it has to match the theme a new account opens on or
+       the load flashes one ground and then repaints another. */
+    html, body { margin: 0; padding: 0; height: 100%; background: #0A0A0F; }
     #boot {
       position: fixed; inset: 0; display: flex; align-items: center;
-      justify-content: center; background: #0E1628; color: #A7B4CC;
+      justify-content: center; background: #0A0A0F; color: #BFBFBF;
       font: 500 11px/14px ui-monospace, "SF Mono", Menlo, Consolas, monospace;
       letter-spacing: 0.16em;
     }
