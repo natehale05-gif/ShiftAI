@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../../app/modes.dart';
 import '../../app/shell.dart';
 import '../../state/app_state.dart';
 import '../../theme/tokens.dart';
@@ -34,6 +35,8 @@ class SettingsSurface extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
                 _AppearanceCard(),
+                SizedBox(height: Space.x4),
+                _FeaturesCard(),
                 SizedBox(height: Space.x4),
                 _AvatarCard(),
                 SizedBox(height: Space.x4),
@@ -101,9 +104,8 @@ class _AppearanceCard extends StatelessWidget {
           const SizedBox(height: Space.x3),
           Text(
             'The retro pair carries the older SHIFT identity — neon on '
-            'black, or the same ink printed on paper. They are for branded '
-            'surfaces and campaign moments; dark stays the default and '
-            'light stays the alternate.',
+            'black, or the same ink printed on paper. Retro neon is what a '
+            'new account opens on; dark and light are the plainer pair.',
             style: ShiftType.caption(ShiftColors.of(context).textMuted),
           ),
         ],
@@ -175,11 +177,78 @@ class _ThemeTile extends StatelessWidget {
   }
 }
 
+/// The switches that hide whole sections of the app.
+///
+/// Off means gone, not greyed out: the sidebar row, the surface and every
+/// link into it disappear together. Nothing here deletes anything — a
+/// feature switched back on returns with its contents untouched.
+class _FeaturesCard extends StatelessWidget {
+  const _FeaturesCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final AppState state = AppScope.of(context);
+    final ShiftColors c = ShiftColors.of(context);
+
+    return ShiftCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          const Eyebrow('Sections'),
+          const SizedBox(height: Space.x2),
+          Text(
+            'Switch off what you do not use. Nothing is deleted, and Suite '
+            'and Settings always stay.',
+            style: ShiftType.caption(c.textMuted),
+          ),
+          const SizedBox(height: Space.x3),
+          for (final ShiftFeature feature in ShiftFeature.values)
+            Padding(
+              padding: const EdgeInsets.only(bottom: Space.x2),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Text(
+                          feature.label,
+                          style: ShiftType.bodyStrong(c.text),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          feature.description,
+                          style: ShiftType.caption(c.textMuted),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: Space.x3),
+                  Switch(
+                    value: state.isEnabled(feature),
+                    onChanged: (bool on) =>
+                        state.setFeatureEnabled(feature, on),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 class _ConnectionsCard extends StatelessWidget {
   const _ConnectionsCard();
 
   @override
   Widget build(BuildContext context) {
+    // Gated here rather than in the list above so that list stays const.
+    // The SizedBox leaves the spacer above it, which is invisible anyway.
+    if (!AppScope.of(context).isEnabled(ShiftFeature.connectors)) {
+      return const SizedBox.shrink();
+    }
     final ShiftColors c = ShiftColors.of(context);
     // The catalogue comes from the engine; with no server behind it that
     // is the built-in list, so this reads the same either way.

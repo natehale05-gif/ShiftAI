@@ -268,6 +268,10 @@ class ArtifactCard extends StatelessWidget {
     final ShiftColors c = ShiftColors.of(context);
     final bool video = attachment.kind == MediaKind.video;
 
+    // With the Vault switched off there is nowhere for this to go, and a
+    // button that silently returns you to Suite is worse than no button.
+    final bool canOpen = state.isEnabled(ShiftFeature.vault);
+
     void open() {
       state.selectVaultItem(attachment.vaultItemId);
       state.setSurface(Surface.vault);
@@ -328,11 +332,14 @@ class ArtifactCard extends StatelessWidget {
                     Expanded(child: label),
                   ],
                 ),
-                const SizedBox(height: Space.x3),
-                OutlinedButton(
-                  onPressed: open,
-                  child: Text('Open in Vault', style: ShiftType.bodySm(c.text)),
-                ),
+                if (canOpen) ...<Widget>[
+                  const SizedBox(height: Space.x3),
+                  OutlinedButton(
+                    onPressed: open,
+                    child:
+                        Text('Open in Vault', style: ShiftType.bodySm(c.text)),
+                  ),
+                ],
               ],
             );
           }
@@ -342,11 +349,13 @@ class ArtifactCard extends StatelessWidget {
               thumb,
               const SizedBox(width: Space.x4),
               Expanded(child: label),
-              const SizedBox(width: Space.x3),
-              OutlinedButton(
-                onPressed: open,
-                child: Text('Open in Vault', style: ShiftType.bodySm(c.text)),
-              ),
+              if (canOpen) ...<Widget>[
+                const SizedBox(width: Space.x3),
+                OutlinedButton(
+                  onPressed: open,
+                  child: Text('Open in Vault', style: ShiftType.bodySm(c.text)),
+                ),
+              ],
             ],
           );
         },
