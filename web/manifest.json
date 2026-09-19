@@ -1,12 +1,11 @@
 {
-    "name": "shift_ai",
-    "short_name": "shift_ai",
+    "name": "SHIFT AI",
+    "short_name": "SHIFT AI",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
-    "orientation": "portrait-primary",
+    "background_color": "#0E1628",
+    "theme_color": "#0E1628",
+    "description": "SHIFT AI — the creator suite: chat, earnings, vault, trophies, notes, agents.",
     "prefer_related_applications": false,
     "icons": [
         {
