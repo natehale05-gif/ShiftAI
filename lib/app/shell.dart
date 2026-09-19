@@ -305,7 +305,7 @@ class SidebarNav extends StatelessWidget {
                 ),
                 children: <Widget>[
                   const _GroupLabel('Modes'),
-                  ...ShiftMode.values.map(
+                  ...state.visibleModes.map(
                     (ShiftMode mode) => _NavRow(
                       icon: mode.icon,
                       label: mode.label,
@@ -315,19 +315,24 @@ class SidebarNav extends StatelessWidget {
                       onTap: () => go(() => state.setMode(mode)),
                     ),
                   ),
-                  const _GroupLabel('Workspace', spaced: true),
-                  ...kWorkspaceSurfaces.map(
-                    (Surface surface) => _NavRow(
-                      icon: surface.icon,
-                      label: surface.label,
-                      height: rowHeight,
-                      active: state.surface == surface,
-                      trailing: surface == Surface.earnings && state.you != null
-                          ? _RankBadge(rank: state.you!.rank)
-                          : null,
-                      onTap: () => go(() => state.setSurface(surface)),
+                  // With all three switched off the heading would sit above
+                  // nothing, so it goes with them.
+                  if (state.visibleWorkspace.isNotEmpty) ...<Widget>[
+                    const _GroupLabel('Workspace', spaced: true),
+                    ...state.visibleWorkspace.map(
+                      (Surface surface) => _NavRow(
+                        icon: surface.icon,
+                        label: surface.label,
+                        height: rowHeight,
+                        active: state.surface == surface,
+                        trailing:
+                            surface == Surface.earnings && state.you != null
+                                ? _RankBadge(rank: state.you!.rank)
+                                : null,
+                        onTap: () => go(() => state.setSurface(surface)),
+                      ),
                     ),
-                  ),
+                  ],
                 ],
               ),
             ),
