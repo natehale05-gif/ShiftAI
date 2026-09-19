@@ -1,0 +1,75 @@
+import 'package:flutter/material.dart';
+
+import 'app/app.dart';
+import 'state/app_state.dart';
+import 'theme/tokens.dart';
+import 'theme/type.dart';
+
+void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  runApp(const ShiftBoot());
+}
+
+/// Loading used to happen before the first frame, which is fine against a
+/// catalogue held in memory and a blank screen against a server on the
+/// other side of a network. The app now starts immediately and fills in.
+class ShiftBoot extends StatefulWidget {
+  const ShiftBoot({super.key});
+
+  @override
+  State<ShiftBoot> createState() => _ShiftBootState();
+}
+
+class _ShiftBootState extends State<ShiftBoot> {
+  late final Future<AppState> _state = AppState.load();
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<AppState>(
+      future: _state,
+      builder: (BuildContext context, AsyncSnapshot<AppState> snap) {
+        if (snap.hasData) return ShiftApp(state: snap.data!);
+        // load() answers even when the engine refuses, so an error here is
+        // the store itself failing — a corrupt preferences file, say.
+        return _BootScreen(error: snap.error);
+      },
+    );
+  }
+}
+
+class _BootScreen extends StatelessWidget {
+  const _BootScreen({this.error});
+
+  final Object? error;
+
+  @override
+  Widget build(BuildContext context) {
+    // Deliberately not themed: the theme lives in the state being loaded.
+    // These are ShiftColors.dark, matching the page behind the app so the
+    // hand-off is invisible.
+    const Color bg = Color(0xFF0E1628);
+    const Color muted = Color(0xFFA7B4CC);
+
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: Scaffold(
+        backgroundColor: bg,
+        body: Center(
+          child: error == null
+              ? Text(
+                  'LOADING SHIFT AI',
+                  style: ShiftType.labelSm(muted).copyWith(letterSpacing: 1.8),
+                )
+              : Padding(
+                  padding: const EdgeInsets.all(Space.x6),
+                  child: Text(
+                    'SHIFT AI could not start.\n\n$error',
+                    textAlign: TextAlign.center,
+                    style: ShiftType.bodySm(muted),
+                  ),
+                ),
+        ),
+      ),
+    );
+  }
+}

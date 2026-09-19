@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- SHIFT AI does not track, and does not sell or share anything with
+       data brokers. If that ever changes this file changes with it, in the
+       same submission. -->
+  <key>NSPrivacyTracking</key>
+  <false/>
+  <key>NSPrivacyTrackingDomains</key>
+  <array/>
+
+  <key>NSPrivacyCollectedDataTypes</key>
+  <array>
+    <!-- The email the account is under. Needed to sign in; tied to the
+         account by definition, never used to follow anyone around. -->
+    <dict>
+      <key>NSPrivacyCollectedDataType</key>
+      <string>NSPrivacyCollectedDataTypeEmailAddress</string>
+      <key>NSPrivacyCollectedDataTypeLinked</key>
+      <true/>
+      <key>NSPrivacyCollectedDataTypeTracking</key>
+      <false/>
+      <key>NSPrivacyCollectedDataTypePurposes</key>
+      <array>
+        <string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+      </array>
+    </dict>
+    <!-- What the person makes and keeps: vault pieces, notes, prompts. -->
+    <dict>
+      <key>NSPrivacyCollectedDataType</key>
+      <string>NSPrivacyCollectedDataTypeOtherUserContent</string>
+      <key>NSPrivacyCollectedDataTypeLinked</key>
+      <true/>
+      <key>NSPrivacyCollectedDataTypeTracking</key>
+      <false/>
+      <key>NSPrivacyCollectedDataTypePurposes</key>
+      <array>
+        <string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+      </array>
+    </dict>
+  </array>
+
+  <key>NSPrivacyAccessedAPITypes</key>
+  <array>
+    <!-- shared_preferences, for the theme, the surface you left on, and
+         the cached copy of your own vault. CA92.1: read and write only
+         this app's own data. -->
+    <dict>
+      <key>NSPrivacyAccessedAPIType</key>
+      <string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+      <key>NSPrivacyAccessedAPITypeReasons</key>
+      <array>
+        <string>CA92.1</string>
+      </array>
+    </dict>
+  </array>
+</dict>
+</plist>

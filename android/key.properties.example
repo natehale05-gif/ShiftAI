@@ -1,0 +1,8 @@
+# Copy to android/key.properties and fill in. Never commit the real one or
+# the keystore it points at: whoever holds them can publish as you, and
+# Play will not let you change the key after the first upload unless you
+# are enrolled in Play App Signing.
+storePassword=
+keyPassword=
+keyAlias=upload
+storeFile=/absolute/path/to/upload-keystore.jks
