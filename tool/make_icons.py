@@ -25,6 +25,10 @@ Writes:
   android/app/src/main/res/mipmap-*/ic_launcher.png     legacy launcher
   android/app/src/main/res/mipmap-*/ic_launcher_foreground.png
   android/app/src/main/res/values/ic_launcher_background.xml
+  web/icons/Icon-{192,512}.png                 PWA
+  web/icons/Icon-maskable-{192,512}.png        PWA, safe-zone crop
+  web/favicon.png                              browser tab
+  web/manifest.json                            background and theme colour
   store/icon-1024.png            App Store  (no alpha)
   store/icon-512.png             Play       (alpha allowed)
   store/feature-graphic.png      Play       1024x500
@@ -168,6 +172,18 @@ def adaptive_foreground(theme, size=1024):
     return _centre(im, mark)
 
 
+def maskable(theme, size=512):
+    """The web manifest's maskable icon.
+
+    A maskable icon is cropped by the browser to whatever shape the
+    platform wants, and only the centre circle of 80% diameter is
+    guaranteed to survive. The mark is therefore smaller than the
+    full-bleed icon's, on the same opaque ground — a maskable icon with
+    transparent corners gets them filled with black."""
+    mark = glyph(int(size * 0.46), THEMES[theme]["onAccent"])
+    return _centre(ground(size, theme), mark)
+
+
 def feature_graphic(theme, w=1024, h=500):
     """Play's header image: the whole lockup on the app's own ground."""
     t = THEMES[theme]
@@ -244,6 +260,36 @@ def install(theme):
         '    <color name="ic_launcher_background">'
         f'{THEMES[theme]["accent"]}</color>\n</resources>\n'
     )
+
+    # --- Web -------------------------------------------------------------
+    # The PWA icons and the tab favicon. These were still Flutter's
+    # template — a blue Flutter logo — because this script only ever wrote
+    # the two native platforms.
+    web = os.path.join(ROOT, "web")
+    icons = os.path.join(web, "icons")
+    os.makedirs(icons, exist_ok=True)
+    for px in (192, 512):
+        m.resize((px, px), Image.LANCZOS).save(
+            os.path.join(icons, f"Icon-{px}.png")
+        )
+        maskable(theme, 1024).resize((px, px), Image.LANCZOS).save(
+            os.path.join(icons, f"Icon-maskable-{px}.png")
+        )
+    # Flutter's template favicon is 16px, which is soft on a hidpi tab.
+    m.resize((64, 64), Image.LANCZOS).save(os.path.join(web, "favicon.png"))
+    print("web: 4 icons, favicon")
+
+    # The manifest's colours are the splash the browser paints before the
+    # app has drawn anything, so they follow the installed icon's theme.
+    # Left behind, they flash the old theme's ground on every cold load.
+    manifest_path = os.path.join(web, "manifest.json")
+    manifest = json.load(open(manifest_path))
+    manifest["background_color"] = THEMES[theme]["bg"]
+    manifest["theme_color"] = THEMES[theme]["bg"]
+    with open(manifest_path, "w") as fh:
+        json.dump(manifest, fh, indent=4)
+        fh.write("\n")
+    print(f"web: manifest colours -> {THEMES[theme]['bg']}")
 
     # --- Store listings --------------------------------------------------
     store = os.path.join(ROOT, "store")
