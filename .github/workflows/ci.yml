@@ -1,0 +1,82 @@
+# Analyzer, tests and the web build, on every push and pull request.
+#
+# This is the gate CLAUDE.md asks for before a commit, run somewhere that
+# cannot be skipped. The native builds are not here: they are slow and need
+# credentials, so they live in release.yml.
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Pinned to the revision in .metadata. The project is built and checked
+  # against this exact version; floating to latest stable is how a green
+  # branch starts failing for reasons nobody changed.
+  FLUTTER_VERSION: 3.35.1
+
+jobs:
+  checks:
+    name: Analyze and test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+
+      - name: flutter analyze
+        run: flutter analyze
+
+      - name: flutter test
+        run: flutter test
+
+      - name: Preflight
+        # Checks icons, the privacy manifest's membership in the Xcode
+        # project, bundle ids, the INTERNET permission and the R8 keep
+        # rules. It re-runs analyze and test internally; that is cheap
+        # next to finding any of this in an archive.
+        run: |
+          # The runner's Python is externally managed (PEP 668), so a bare
+          # pip install fails there. Pillow is only needed for the icon
+          # alpha-channel check.
+          python3 -m pip install --quiet pillow \
+            || python3 -m pip install --quiet --break-system-packages pillow
+          bash tool/preflight.sh
+
+  web:
+    name: Web bundle
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+
+      - name: Build hosted web bundle
+        # Not plain `flutter build web`: this script keeps CanvasKit local,
+        # drops the service worker so a reload picks up a new version, and
+        # works around hosts that will not serve .bin.
+        run: bash tool/build_web_hosted.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web
+          path: build/web
+          if-no-files-found: error

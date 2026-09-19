@@ -1,0 +1,212 @@
+# The three store artifacts: a web bundle, an Android app bundle, and an
+# iOS archive.
+#
+# Why this exists: neither mobile binary can be built in the environment
+# this project was written in — no Xcode, no Android SDK — and iOS cannot
+# be built on Linux at all. These runners have both toolchains, so this
+# workflow is the first place the native builds actually happen.
+#
+# Signing is opt-in. Without the secrets below each job still compiles,
+# which is the part worth knowing; it just produces something you cannot
+# upload. Each job says which it did.
+#
+#   ANDROID_KEYSTORE_BASE64     base64 of your upload .jks
+#   ANDROID_KEYSTORE_PASSWORD   storePassword
+#   ANDROID_KEY_PASSWORD        keyPassword
+#   ANDROID_KEY_ALIAS           keyAlias (the docs use "upload")
+#
+#   IOS_CERTIFICATE_BASE64      base64 of your distribution .p12
+#   IOS_CERTIFICATE_PASSWORD    its password
+#   IOS_PROVISIONING_PROFILE_BASE64   base64 of the .mobileprovision
+#   IOS_TEAM_ID                 10-character Apple team id
+name: Release
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  FLUTTER_VERSION: 3.35.1
+
+jobs:
+  web:
+    name: Web
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: bash tool/build_web_hosted.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: shift-ai-web
+          path: build/web
+          if-no-files-found: error
+
+  android:
+    name: Android app bundle
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          # AGP 8.9.1 needs 17 or newer. The app still targets Java 11
+          # bytecode; this is only the JDK Gradle itself runs on.
+          distribution: temurin
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+
+      - name: Configure release signing
+        id: signing
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          set -euo pipefail
+          if [ -z "${KEYSTORE_B64:-}" ]; then
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+            echo "::warning title=Unsigned bundle::No ANDROID_KEYSTORE_BASE64 secret, so build.gradle.kts falls back to the debug key. The bundle runs on a device and Play will refuse it."
+            exit 0
+          fi
+          printf '%s' "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/upload.jks"
+          # Written, never echoed. key.properties is gitignored; this copy
+          # only ever exists on the runner.
+          cat > android/key.properties <<PROPS
+          storePassword=${STORE_PASSWORD}
+          keyPassword=${KEY_PASSWORD}
+          keyAlias=${KEY_ALIAS}
+          storeFile=${RUNNER_TEMP}/upload.jks
+          PROPS
+          echo "signed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Build app bundle
+        # isMinifyEnabled is on, so this is also the check that the R8 keep
+        # rules in proguard-rules.pro still cover flutter_secure_storage and
+        # file_picker. If they stop, this build succeeds and the app crashes
+        # on first sign-in instead.
+        run: flutter build appbundle --release
+
+      - name: Report what was produced
+        run: |
+          ls -la build/app/outputs/bundle/release/
+          if [ "${{ steps.signing.outputs.signed }}" != "true" ]; then
+            echo "::warning::This .aab is debug-signed and cannot be uploaded to Play."
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: shift-ai-android-aab
+          path: build/app/outputs/bundle/release/*.aab
+          if-no-files-found: error
+
+  ios:
+    name: iOS archive
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+
+      - name: pod install
+        # file_picker and flutter_secure_storage both pull in platform code
+        # that has never been compiled for this project. If anything breaks
+        # first, it is most likely here.
+        run: cd ios && pod install
+
+      - name: Detect signing secrets
+        id: have
+        # The secrets context is not dependable inside a step-level `if`,
+        # so it is read once here and every later step keys off this output.
+        env:
+          CERT: ${{ secrets.IOS_CERTIFICATE_BASE64 }}
+          PROFILE: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
+        run: |
+          set -euo pipefail
+          if [ -n "${CERT:-}" ] && [ -n "${PROFILE:-}" ]; then
+            echo "signing=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "signing=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Import signing certificate
+        if: steps.have.outputs.signing == 'true'
+        uses: apple-actions/import-codesign-certs@v3
+        with:
+          p12-file-base64: ${{ secrets.IOS_CERTIFICATE_BASE64 }}
+          p12-password: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+
+      - name: Install provisioning profile
+        if: steps.have.outputs.signing == 'true'
+        env:
+          PROFILE_B64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
+        run: |
+          set -euo pipefail
+          dir="$HOME/Library/MobileDevice/Provisioning Profiles"
+          mkdir -p "$dir"
+          printf '%s' "$PROFILE_B64" | base64 -d > "$dir/shift.mobileprovision"
+
+      - name: Build unsigned (compile check)
+        if: steps.have.outputs.signing != 'true'
+        # The genuinely useful half. It proves the Dart, the pods and the
+        # Runner target all compile for a device, which is what has never
+        # been done. It cannot be uploaded: an unsigned .app is not an .ipa.
+        run: |
+          flutter build ios --release --no-codesign
+          echo "::warning title=Unsigned build::Compiled for device but not signed. Add the iOS secrets listed at the top of this file to get an uploadable .ipa."
+
+      - name: Build signed ipa
+        if: steps.have.outputs.signing == 'true'
+        env:
+          TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          cat > ios/ExportOptions.plist <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>teamID</key><string>${TEAM_ID}</string>
+            <key>uploadSymbols</key><true/>
+          </dict>
+          </plist>
+          PLIST
+          flutter build ipa --release --export-options-plist=ios/ExportOptions.plist
+
+      - name: Report what was produced
+        run: |
+          ls -la build/ios/ipa 2>/dev/null || true
+          ls -la build/ios/iphoneos 2>/dev/null || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: shift-ai-ios
+          path: |
+            build/ios/ipa/*.ipa
+            build/ios/iphoneos/*.app
+          if-no-files-found: error
