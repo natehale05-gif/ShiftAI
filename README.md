@@ -1,7 +1,13 @@
 # SHIFT AI — Flutter client
 
+### ▶ Live app: <https://natehale05-gif.github.io/ShiftAI/>
+
+Deployed from `main` on every push by `.github/workflows/pages.yml`.
+
+---
+
 The SHIFT AI product as a Flutter app: one shell, four modes, seven surfaces,
-three themes, responsive from a 390px phone to a 1440px desktop.
+four themes, responsive from a 390px phone to a 1440px desktop.
 
 The mode menu is **Suite, Agents, Design, Notes**. Everything else — chat,
 code, stills, documents, voice, music, avatars — is reachable through Suite
@@ -18,7 +24,7 @@ and on-device state.
 ```bash
 flutter pub get
 flutter run -d chrome     # or macos, windows, linux, ios, android
-flutter test              # 6 tests: shell, breakpoint, themes, standings, privacy
+flutter test              # 101 tests
 flutter analyze           # clean
 ```
 

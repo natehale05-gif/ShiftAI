@@ -155,7 +155,7 @@ Store Connect, because if you claim it Apple will test it.
 ## Before each submission
 
     flutter analyze                 # must be clean
-    flutter test                    # 81 tests
+    flutter test                    # 101 tests
     flutter build appbundle --release
     flutter build ipa --release
 
@@ -190,7 +190,7 @@ The keystore goes in as a secret and stays out of the repo — same rule as
 `android/key.properties`. Losing it still means never updating the app
 again, so the backup advice above applies to the local copy too.
 
-`.github/workflows/ci.yml` is the cheaper gate: analyzer, the 81 tests,
+`.github/workflows/ci.yml` is the cheaper gate: analyzer, the 101 tests,
 `tool/preflight.sh` and the web bundle, on every push.
 
 ## What I could not verify here
