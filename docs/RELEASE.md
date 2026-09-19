@@ -53,9 +53,8 @@ run, and set the signing team on the Runner target.
 
 ## Done in the project
 
-- **Identity.** `SHIFT AI` on both platforms. Bundle ids as they were:
-  `club.shiftai.shift_ai` (Android), `club.shiftai.shiftAi` (iOS). See the
-  warning about these below.
+- **Identity.** `SHIFT AI` on both platforms, bundle id `club.shiftai.app`
+  on both. Neither can change after the first upload.
 - **Version.** Reset to `1.0.0+1` in `pubspec.yaml`. It was `1.4.0+14`,
   which was prototype counting — a first submission should start at 1.
 - **Network.** `INTERNET` added to the Android manifest. Flutter only puts
@@ -87,14 +86,15 @@ legible and on-brand, but it is not a logo anyone designed. Put the real
 
     python3 tool/make_icons.py path/to/icon-1024.png
 
-### 2. Bundle ids differ between platforms
+### 2. Bundle ids — settled, and now frozen
 
-Android is `club.shiftai.shift_ai`, iOS is `club.shiftai.shiftAi`. Both are
-valid and they are allowed to differ, but if either is already registered
-in App Store Connect or Play, **changing it is not possible after the first
-upload** — a new id is a new app, with no reviews and no installs. Decide
-now, before the first submission, whether you want them unified. I did not
-change them for exactly this reason.
+Both platforms are `club.shiftai.app`; they were unified after this section
+was first written. Nothing to decide, but note what it costs to revisit:
+once either store has taken an upload under that id, **changing it is not
+possible** — a new id is a new app, with no reviews and no installs.
+
+`macos/Runner.xcodeproj` still carries the old `club.shiftai.shiftAi`. That
+is harmless while the Mac App Store is not a target; fix it before it is.
 
 ### 3. There is no sign-in
 
@@ -155,12 +155,43 @@ Store Connect, because if you claim it Apple will test it.
 ## Before each submission
 
     flutter analyze                 # must be clean
-    flutter test                    # 47 tests
+    flutter test                    # 81 tests
     flutter build appbundle --release
     flutter build ipa --release
 
 The `.aab` goes to Play (not an `.apk` — Play has not taken those for new
 apps since 2021). The `.ipa` goes up through Transporter or Xcode.
+
+## Building without the toolchains
+
+`.github/workflows/release.yml` builds all three artifacts on GitHub's
+runners: the web bundle and the `.aab` on Linux, the iOS archive on macOS.
+Run it from the Actions tab, or push a `v*` tag. This is the only way to
+get an iOS build without a Mac — Xcode does not run on anything else.
+
+Signing is opt-in, and each job says which it did. With no secrets set the
+Android job still produces a debug-signed `.aab` and the iOS job still
+compiles for device without signing. Neither is uploadable, but both prove
+the build works, which is the part that has never been established. Add
+these repository secrets to get artifacts you can actually submit:
+
+| Secret | What it is |
+|---|---|
+| `ANDROID_KEYSTORE_BASE64` | `base64 -w0 upload.jks` |
+| `ANDROID_KEYSTORE_PASSWORD` | `storePassword` |
+| `ANDROID_KEY_PASSWORD` | `keyPassword` |
+| `ANDROID_KEY_ALIAS` | `upload`, per the keystore section above |
+| `IOS_CERTIFICATE_BASE64` | base64 of the distribution `.p12` |
+| `IOS_CERTIFICATE_PASSWORD` | its password |
+| `IOS_PROVISIONING_PROFILE_BASE64` | base64 of the `.mobileprovision` |
+| `IOS_TEAM_ID` | the 10-character Apple team id |
+
+The keystore goes in as a secret and stays out of the repo — same rule as
+`android/key.properties`. Losing it still means never updating the app
+again, so the backup advice above applies to the local copy too.
+
+`.github/workflows/ci.yml` is the cheaper gate: analyzer, the 81 tests,
+`tool/preflight.sh` and the web bundle, on every push.
 
 ## What I could not verify here
 
