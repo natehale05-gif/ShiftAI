@@ -83,6 +83,11 @@ class _SuiteSurfaceState extends State<SuiteSurface> {
                   ),
                 ),
         ),
+        // Above the composer rather than instead of it. The bar is not
+        // only a send button: it holds a draft handed over by Vault's
+        // Re-run and the sparkle rewrites what is in it, and both should
+        // still work while there is nobody to send to.
+        if (state.chatNeedsSignIn) const _SignInToChat(),
         PillComposer(
           hint: state.privateChat
               ? 'Private chat — nothing here is saved'
@@ -91,6 +96,77 @@ class _SuiteSurfaceState extends State<SuiteSurface> {
           onSend: state.sendMessage,
         ),
       ],
+    );
+  }
+}
+
+/// The standing notice above the composer when nobody is signed in.
+///
+/// It says so before anything is typed rather than only on send, so the
+/// bar is never a box you fill in and are then refused from.
+class _SignInToChat extends StatelessWidget {
+  const _SignInToChat();
+
+  @override
+  Widget build(BuildContext context) {
+    final AppState state = AppScope.of(context);
+    final ShiftColors c = ShiftColors.of(context);
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(Space.x5, 0, Space.x5, Space.x3),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 820),
+          child: Container(
+            padding: const EdgeInsets.all(Space.x4),
+            decoration: BoxDecoration(
+              color: c.surface,
+              borderRadius: Radii.lgAll,
+              border: Border.all(color: c.border),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Icon(
+                    Icons.lock_outline_rounded,
+                    size: 18,
+                    color: c.textMuted,
+                  ),
+                ),
+                const SizedBox(width: Space.x3),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(
+                        'Sign in to use chat.',
+                        style: ShiftType.bodyStrong(c.text),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Chat needs an account. Nothing you type here is '
+                        'sent anywhere yet.',
+                        style: ShiftType.caption(c.textMuted),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: Space.x3),
+                // signOut() is what puts the sign-in screen up. On the
+                // seeded demo it keeps the vault, notes and standings —
+                // only the thread and the avatar go — so this is a way in
+                // rather than a way to lose what is on screen.
+                OutlinedButton(
+                  onPressed: () => state.signOut(),
+                  child: Text('Sign in', style: ShiftType.bodySm(c.text)),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

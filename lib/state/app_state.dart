@@ -821,9 +821,21 @@ class AppState extends ChangeNotifier {
   /// from. Never written to storage — a private thread must leave nothing.
   String? lastAsk;
 
-  void sendMessage(String text) {
+  /// True when there is nobody real behind the chat.
+  ///
+  /// The seeded catalogue is a demo, not an account: it lets anyone
+  /// through and answers with a fixture. Handing that fixture back as
+  /// though an engine had replied is worse than refusing — it reads as a
+  /// real answer and it is not one. The composer asks for a sign-in
+  /// instead, and [sendMessage] refuses whatever calls it.
+  bool get chatNeedsSignIn => !signedIn || seededDemo;
+
+  /// False when the message was refused, which is the caller's cue to say
+  /// so rather than leave the composer looking like it sent.
+  bool sendMessage(String text) {
+    if (chatNeedsSignIn) return false;
     final String body = text.trim();
-    if (body.isEmpty) return;
+    if (body.isEmpty) return false;
     lastAsk = body;
     final String stamp = DateTime.now().microsecondsSinceEpoch.toString();
     messages = <ChatMessage>[
@@ -866,6 +878,7 @@ class AppState extends ChangeNotifier {
       thinking = false;
       _changed();
     }();
+    return true;
   }
 
   /// Rewrites what is in the composer into a fuller brief.

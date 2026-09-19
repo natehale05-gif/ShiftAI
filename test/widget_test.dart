@@ -8,7 +8,12 @@ import 'package:shift_ai/app/app.dart';
 import 'package:shift_ai/app/modes.dart';
 import 'package:shift_ai/app/shell.dart';
 import 'package:shift_ai/models/models.dart';
+import 'package:shift_ai/data/auth/auth_service.dart';
+import 'package:shift_ai/data/auth/session.dart';
 import 'package:shift_ai/data/auth/token_store.dart';
+import 'package:shift_ai/data/backend.dart';
+import 'package:shift_ai/data/seed.dart';
+import 'package:shift_ai/data/seed_repository.dart';
 import 'package:shift_ai/state/app_state.dart';
 import 'package:shift_ai/theme/tokens.dart';
 import 'package:shift_ai/features/settings/avatar.dart';
@@ -20,6 +25,39 @@ Future<AppState> _freshState() async {
   // Never the real keychain: there is no platform channel under the test
   // binding, and a test that reaches for one hangs rather than fails.
   return AppState.load(tokenStore: MemoryTokenStore());
+}
+
+class _StubAuth implements AuthService {
+  @override
+  dynamic noSuchMethod(Invocation invocation) =>
+      throw UnimplementedError(invocation.memberName.toString());
+}
+
+/// A state with an engine configured and a session already in the
+/// keychain. Chat refuses to send without one — the seeded catalogue is a
+/// demo, not an account — so anything that sends has to start here rather
+/// than from [_freshState].
+Future<AppState> _signedInState() async {
+  SharedPreferences.setMockInitialValues(<String, Object>{
+    'shift-backend': 'https://api.example.com',
+  });
+  final TokenStore tokens = MemoryTokenStore();
+  await tokens.write(Session(
+    accessToken: 'access-1',
+    refreshToken: 'refresh-1',
+    expiresAt: DateTime.now().add(const Duration(hours: 1)),
+    creator: Seed.creator,
+  ));
+  final AuthController controller =
+      AuthController(service: _StubAuth(), store: tokens);
+  await controller.restore();
+  return AppState.load(
+    engine: Backend(
+      repository: SeedRepository(),
+      auth: controller,
+      seeded: false,
+    ),
+  );
 }
 
 void main() {
@@ -123,7 +161,7 @@ void main() {
 
   testWidgets('a sent message brings back an answer',
       (WidgetTester tester) async {
-    final AppState state = await _freshState();
+    final AppState state = await _signedInState();
     await tester.pumpWidget(ShiftApp(state: state));
     await tester.pump();
 
@@ -288,7 +326,7 @@ void main() {
   });
 
   test('retry and edit have the last ask to work from', () async {
-    final AppState state = await _freshState();
+    final AppState state = await _signedInState();
     expect(state.lastAsk, isNull);
     state.sendMessage('Cut a 20 second vertical promo');
     expect(state.lastAsk, 'Cut a 20 second vertical promo');
