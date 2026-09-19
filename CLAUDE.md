@@ -1,12 +1,23 @@
 # SHIFT AI — orientation for whoever picks this up
 
 A Flutter creator suite: chat, vault, agents, design, notes, a weekly
-leaderboard and a trophy shelf. Web builds and runs today. **Neither the
-iOS nor the Android binary has ever been compiled** — they were built in
-an environment with no Xcode and no Android SDK, so the first native
-build of each is genuinely unknown territory. That is the job.
+leaderboard and a trophy shelf.
 
-Target: both app stores. Nothing is live yet.
+**The web app is live at <https://natehale05-gif.github.io/ShiftAI/>**,
+redeployed from `main` on every push by `.github/workflows/pages.yml`.
+
+Both mobile binaries now compile. They had never been built at all — this
+was written in an environment with no Xcode and no Android SDK — so
+`.github/workflows/release.yml` builds them on GitHub's runners, which is
+where the first `pod install` and the first Gradle run actually happened.
+**Neither has been signed, and neither has ever run on a device**, so the
+first install of each is still unknown territory. That is the job.
+
+In particular, R8 completing is not proof the keep rules below are
+sufficient: that failure is a release-only crash on first sign-in or on
+"+", never a build error.
+
+Target: both app stores. Neither has a build yet.
 
 ## Get it building
 
@@ -111,6 +122,6 @@ exploratory, branch.
 flutter analyze && flutter test
 ```
 
-81 tests. They have caught every regression listed above at least once,
+101 tests. They have caught every regression listed above at least once,
 including several of mine. If one fails, read it before changing it —
 twice now the test was right and my expectation was wrong.
