@@ -1,0 +1,588 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+
+import '../../app/modes.dart';
+import '../../app/shell.dart';
+import '../../models/models.dart';
+import '../../state/app_state.dart';
+import '../../theme/tokens.dart';
+import '../../theme/type.dart';
+import '../../util/format.dart';
+import '../../util/week.dart';
+import '../../widgets/common.dart';
+
+/// The weekly board: what is left on the clock, who is on the podium, where
+/// you are, who you can catch and who is catching you.
+class LeaderboardSurface extends StatelessWidget {
+  const LeaderboardSurface({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final AppState state = AppScope.of(context);
+    final StandingRow? you = state.you;
+    final StandingRow? target = state.target;
+    final StandingRow? chaser = state.chaser;
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(
+        Space.x5,
+        Space.x5,
+        Space.x5,
+        Space.x6,
+      ),
+      children: <Widget>[
+        Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: kContentWidth),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                ScreenBreadcrumb(
+                  parent: 'Create',
+                  title: 'Leaderboard',
+                  onBack: () => state.setSurface(Surface.suite),
+                ),
+                const SizedBox(height: Space.x5),
+                const _ClockRow(),
+                const SizedBox(height: Space.x6),
+                // A board arrives from the engine, so before the first
+                // week scores there is nothing to rank. Saying that is
+                // better than a podium of three blanks.
+                if (you == null)
+                  const _NoBoardYet()
+                else ...<Widget>[
+                  _Podium(rows: state.podium),
+                  const SizedBox(height: Space.x5),
+                  _YouCard(you: you),
+                  const SizedBox(height: Space.x4),
+                  _RivalRow(target: target, chaser: chaser, you: you),
+                  const SizedBox(height: Space.x5),
+                  ...state.rest.map((StandingRow row) => _Row(row: row)),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// The clock runs. It is computed from the real week rather than held at a
+/// number, so the board is never wrong about how long is left.
+/// Before the engine has a row for you: no podium, no invented rank, and
+/// a line that says which it is — a week that has not scored yet, or a
+/// board that could not be reached.
+class _NoBoardYet extends StatelessWidget {
+  const _NoBoardYet();
+
+  @override
+  Widget build(BuildContext context) {
+    final AppState state = AppScope.of(context);
+    final ShiftColors c = ShiftColors.of(context);
+    final bool failed = state.lastError != null;
+
+    return ShiftCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Icon(
+            failed ? Icons.cloud_off_rounded : Icons.bar_chart_rounded,
+            size: 28,
+            color: c.textMuted,
+          ),
+          const SizedBox(height: Space.x4),
+          Text(
+            failed ? 'The board did not load' : 'No board yet',
+            style: ShiftType.subheading(c.text),
+          ),
+          const SizedBox(height: Space.x2),
+          Text(
+            failed
+                ? state.lastError!.message
+                : 'Publish something this week and you are on it. Standings '
+                    'settle when the week closes.',
+            style: ShiftType.bodySm(c.textMuted),
+          ),
+          if (failed) ...<Widget>[
+            const SizedBox(height: Space.x4),
+            OutlinedButton(
+              onPressed: state.refreshing ? null : state.refresh,
+              child: const Text('Try again'),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _ClockRow extends StatefulWidget {
+  const _ClockRow();
+
+  @override
+  State<_ClockRow> createState() => _ClockRowState();
+}
+
+class _ClockRowState extends State<_ClockRow> {
+  Timer? _tick;
+
+  @override
+  void initState() {
+    super.initState();
+    _tick = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _tick?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ShiftColors c = ShiftColors.of(context);
+    final AppState state = AppScope.of(context);
+    final WeekClock clock = WeekClock();
+
+    return Wrap(
+      spacing: Space.x5,
+      runSpacing: Space.x2,
+      alignment: WrapAlignment.spaceBetween,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: <Widget>[
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: <Widget>[
+            Text(
+              'WEEK ${clock.weekNumber} LOCKS IN',
+              style: ShiftType.labelSm(c.accent),
+            ),
+            const SizedBox(width: Space.x3),
+            Text(
+              Fmt.countdown(clock.remaining),
+              style: ShiftType.mono(c.text, size: 19),
+            ),
+          ],
+        ),
+        // The pool and the payout line are the engine's, not the
+        // catalogue's. A week with nothing in it says nothing rather than
+        // announcing a pool of zero.
+        if (state.weekPool > 0)
+          Text(
+            '\$${Fmt.grouped(state.weekPool)} POOL · ${state.payoutLine}',
+            style: ShiftType.labelSm(c.textMuted),
+          )
+        else if (state.payoutLine.isNotEmpty)
+          Text(
+            state.payoutLine.toUpperCase(),
+            style: ShiftType.labelSm(c.textMuted),
+          ),
+      ],
+    );
+  }
+}
+
+/// A creator's face is not on the device, so the mark is their initials on
+/// a tier-coloured ring rather than a stand-in photograph.
+class _Face extends StatelessWidget {
+  const _Face({required this.row, required this.size});
+
+  final StandingRow row;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final ShiftColors c = ShiftColors.of(context);
+    final Color ring = row.tier?.colorOn(c) ?? c.border;
+    return Container(
+      width: size,
+      height: size,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: c.surfaceRaised,
+        shape: BoxShape.circle,
+        border: Border.all(color: ring, width: size >= 56 ? 2 : 1),
+      ),
+      child: Text(
+        row.initials,
+        style: ShiftType.mono(c.textMuted, size: size >= 56 ? 16 : 12),
+      ),
+    );
+  }
+}
+
+class _Podium extends StatelessWidget {
+  const _Podium({required this.rows});
+
+  final List<StandingRow> rows;
+
+  @override
+  Widget build(BuildContext context) {
+    if (rows.length < 3) return const SizedBox.shrink();
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: rows
+          .map(
+            (StandingRow row) => Expanded(
+              child: _PodiumSpot(row: row, lead: row.rank == 1),
+            ),
+          )
+          .toList(),
+    );
+  }
+}
+
+class _PodiumSpot extends StatelessWidget {
+  const _PodiumSpot({required this.row, required this.lead});
+
+  final StandingRow row;
+  final bool lead;
+
+  @override
+  Widget build(BuildContext context) {
+    final ShiftColors c = ShiftColors.of(context);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        _Face(row: row, size: lead ? 86 : 70),
+        const SizedBox(height: Space.x3),
+        Text(
+          '${row.rank}',
+          style: ShiftType.subheading(c.text).copyWith(
+            fontSize: lead ? 26 : 22,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        const SizedBox(height: Space.x1),
+        Text(
+          row.name,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: ShiftType.body(c.text),
+        ),
+        const SizedBox(height: Space.x1),
+        Text(
+          Fmt.money(row.earnings),
+          style: ShiftType.mono(c.success, size: 16),
+        ),
+        const SizedBox(height: Space.x1),
+        if (row.tier != null)
+          Text(
+            row.tier!.label.toUpperCase(),
+            style: ShiftType.labelSm(row.tier!.colorOn(c)),
+          ),
+      ],
+    );
+  }
+}
+
+class _YouCard extends StatelessWidget {
+  const _YouCard({required this.you});
+
+  final StandingRow you;
+
+  @override
+  Widget build(BuildContext context) {
+    final ShiftColors c = ShiftColors.of(context);
+    final bool up = you.movement > 0;
+    final bool flat = you.movement == 0;
+
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        // On a phone the money and the rank move matter; "this week" is
+        // the part that goes, rather than either of them truncating.
+        final bool roomForWeek = constraints.maxWidth >= 420;
+        return _buildCard(context, c, up: up, flat: flat, week: roomForWeek);
+      },
+    );
+  }
+
+  Widget _buildCard(
+    BuildContext context,
+    ShiftColors c, {
+    required bool up,
+    required bool flat,
+    required bool week,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: Space.x5,
+        vertical: Space.x4,
+      ),
+      decoration: BoxDecoration(
+        color: c.accentSoft,
+        borderRadius: Radii.lgAll,
+        border: Border.all(color: c.accent),
+      ),
+      child: Row(
+        children: <Widget>[
+          Text(
+            '${you.rank}',
+            style: ShiftType.displayL(c.text).copyWith(
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(width: Space.x5),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text('You', style: ShiftType.bodyStrong(c.text)),
+                if (!flat) ...<Widget>[
+                  const SizedBox(height: 2),
+                  Row(
+                    children: <Widget>[
+                      Icon(
+                        up
+                            ? Icons.arrow_drop_up_rounded
+                            : Icons.arrow_drop_down_rounded,
+                        size: 18,
+                        color: up ? c.success : c.danger,
+                      ),
+                      Flexible(
+                        child: Text(
+                          '${you.movement.abs()} ${up ? 'UP' : 'DOWN'}'
+                          '${week ? ' THIS WEEK' : ''}',
+                          style: ShiftType.labelSm(up ? c.success : c.danger),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(width: Space.x3),
+          Text(
+            Fmt.money(you.earnings),
+            style: ShiftType.mono(c.success, size: 24),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RivalRow extends StatelessWidget {
+  const _RivalRow({
+    required this.target,
+    required this.chaser,
+    required this.you,
+  });
+
+  final StandingRow? target;
+  final StandingRow? chaser;
+  final StandingRow you;
+
+  @override
+  Widget build(BuildContext context) {
+    final ShiftColors c = ShiftColors.of(context);
+
+    final List<Widget> cards = <Widget>[
+      if (target != null)
+        _RivalCard(
+          eyebrow: 'CATCH #${target!.rank}',
+          name: target!.name,
+          amount: '${Fmt.money(target!.earnings - you.earnings)} away',
+          tone: c.success,
+          icon: Icons.keyboard_double_arrow_up_rounded,
+        ),
+      if (chaser != null)
+        _RivalCard(
+          eyebrow: '#${chaser!.rank} ON YOUR TAIL',
+          name: chaser!.name,
+          amount: '${Fmt.money(you.earnings - chaser!.earnings)} behind',
+          tone: c.danger,
+          icon: Icons.keyboard_double_arrow_down_rounded,
+        ),
+    ];
+
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        if (constraints.maxWidth < 620) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              for (int i = 0; i < cards.length; i++) ...<Widget>[
+                if (i > 0) const SizedBox(height: Space.x3),
+                cards[i],
+              ],
+            ],
+          );
+        }
+        return IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              for (int i = 0; i < cards.length; i++) ...<Widget>[
+                if (i > 0) const SizedBox(width: Space.x4),
+                Expanded(child: cards[i]),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _RivalCard extends StatelessWidget {
+  const _RivalCard({
+    required this.eyebrow,
+    required this.name,
+    required this.amount,
+    required this.tone,
+    required this.icon,
+  });
+
+  final String eyebrow;
+  final String name;
+  final String amount;
+  final Color tone;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final ShiftColors c = ShiftColors.of(context);
+    return Container(
+      padding: const EdgeInsets.all(Space.x4),
+      decoration: BoxDecoration(
+        borderRadius: Radii.lgAll,
+        border: Border.all(color: tone),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(eyebrow, style: ShiftType.labelSm(tone)),
+          const SizedBox(height: Space.x2),
+          Row(
+            children: <Widget>[
+              Icon(icon, size: 20, color: tone),
+              const SizedBox(width: Space.x3),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      name,
+                      style: ShiftType.body(c.text),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    Text(amount, style: ShiftType.bodySm(c.textMuted)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Row extends StatelessWidget {
+  const _Row({required this.row});
+
+  final StandingRow row;
+
+  @override
+  Widget build(BuildContext context) {
+    final ShiftColors c = ShiftColors.of(context);
+    final bool up = row.movement > 0;
+    final bool flat = row.movement == 0;
+
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        final bool roomForMove = constraints.maxWidth >= 420;
+        final bool roomForTier = constraints.maxWidth >= 520;
+        return Padding(
+          padding: const EdgeInsets.only(bottom: Space.x1),
+          child: Column(
+            children: <Widget>[
+              SizedBox(
+                height: 56,
+                child: Row(
+                  children: <Widget>[
+                    SizedBox(
+                      width: 30,
+                      child: Text(
+                        '${row.rank}',
+                        textAlign: TextAlign.right,
+                        style: ShiftType.body(c.text),
+                      ),
+                    ),
+                    if (roomForMove)
+                      SizedBox(
+                        width: 48,
+                        child: flat
+                            ? const SizedBox.shrink()
+                            : Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: <Widget>[
+                                  Icon(
+                                    up
+                                        ? Icons.arrow_drop_up_rounded
+                                        : Icons.arrow_drop_down_rounded,
+                                    size: 18,
+                                    color: up ? c.success : c.danger,
+                                  ),
+                                  Text(
+                                    '${row.movement.abs()}',
+                                    style: ShiftType.caption(
+                                      up ? c.success : c.danger,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                      ),
+                    _Face(row: row, size: 30),
+                    const SizedBox(width: Space.x3),
+                    Flexible(
+                      child: Text(
+                        row.name,
+                        style: ShiftType.body(c.text),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (row.tier != null && roomForTier) ...<Widget>[
+                      const SizedBox(width: Space.x3),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: Space.x2,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: c.surfaceRaised,
+                          borderRadius: Radii.smAll,
+                        ),
+                        child: Text(
+                          row.tier!.label.toUpperCase(),
+                          style: ShiftType.labelSm(row.tier!.colorOn(c)),
+                        ),
+                      ),
+                    ],
+                    const Spacer(),
+                    Text(
+                      Fmt.money(row.earnings),
+                      style: ShiftType.mono(c.success, size: 16),
+                    ),
+                  ],
+                ),
+              ),
+              Divider(height: 1, color: c.border),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
