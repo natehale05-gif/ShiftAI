@@ -1,2 +1,2 @@
 # ShiftAI
-ShiftAi App, Website, and Server
+ShiftAi App
