@@ -15,10 +15,13 @@ extension ShiftThemeIdLabel on ShiftThemeId {
 
   String get storageValue => name;
 
+  /// Retro neon is the default a new account opens on. An account that
+  /// has already chosen a theme keeps it: its name is in the blob and is
+  /// matched here, so this fallback only applies when nothing was stored.
   static ShiftThemeId parse(String? value) {
     return ShiftThemeId.values.firstWhere(
       (t) => t.name == value,
-      orElse: () => ShiftThemeId.dark,
+      orElse: () => ShiftThemeId.retro,
     );
   }
 }

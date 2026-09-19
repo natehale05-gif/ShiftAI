@@ -39,8 +39,21 @@ abstract final class StoreKeys {
 class AppState extends ChangeNotifier {
   AppState._(this._prefs, Map<String, dynamic> blob, this._repo, this._snap) {
     themeId = ShiftThemeIdLabel.parse(blob['theme'] as String?);
+    // Stored as the disabled set rather than the enabled one, so a feature
+    // added by a later version is on by default instead of silently
+    // missing for everyone who already has a blob.
+    _disabled = <ShiftFeature>{
+      for (final Object? raw in (blob['disabledFeatures'] as List<Object?>?) ??
+          const <Object?>[])
+        if (ShiftFeature.parse(raw as String?) case final ShiftFeature f) f,
+    };
     surface = Surface.parse(blob['surface'] as String?);
     mode = ShiftMode.parse(blob['mode'] as String?);
+    // The blob can name a surface whose feature was switched off in a
+    // previous session. Opening straight onto a screen whose sidebar row
+    // is gone leaves no way back, so fall back to Suite.
+    if (!isEnabled(surface.feature)) surface = Surface.suite;
+    if (!isEnabled(mode.feature)) mode = ShiftMode.suite;
     signedIn = blob['signedIn'] as bool? ?? true;
     _backendBaseUrl = _prefs.getString(StoreKeys.backend);
     avatar = _readAvatar();
@@ -360,6 +373,26 @@ class AppState extends ChangeNotifier {
     return null;
   }
 
+  /// The features switched off in Settings. Empty means everything is on,
+  /// which is what a new account gets.
+  late Set<ShiftFeature> _disabled;
+
+  /// True when [feature] is switched on. A null feature is something that
+  /// cannot be switched off (Suite, Settings), so it is always true.
+  bool isEnabled(ShiftFeature? feature) =>
+      feature == null || !_disabled.contains(feature);
+
+  /// The modes whose row belongs in the sidebar right now.
+  List<ShiftMode> get visibleModes => ShiftMode.values
+      .where((ShiftMode m) => isEnabled(m.feature))
+      .toList(growable: false);
+
+  /// The workspace rows that belong in the sidebar right now. Can be empty,
+  /// and the sidebar drops its group heading when it is.
+  List<Surface> get visibleWorkspace => kWorkspaceSurfaces
+      .where((Surface s) => isEnabled(s.feature))
+      .toList(growable: false);
+
   // Commands ------------------------------------------------------------
   void setTheme(ShiftThemeId id) {
     if (themeId == id) return;
@@ -368,14 +401,33 @@ class AppState extends ChangeNotifier {
   }
 
   void setSurface(Surface next) {
-    if (surface == next) return;
-    surface = next;
+    // A switched-off surface is not navigable. The rows and links that
+    // lead to one are hidden, but guarding here too means a stale route
+    // cannot land on a screen with no way out of it.
+    final Surface target = isEnabled(next.feature) ? next : Surface.suite;
+    if (surface == target) return;
+    surface = target;
     _changed();
   }
 
   void setMode(ShiftMode next) {
-    mode = next;
-    surface = next.surface;
+    final ShiftMode target = isEnabled(next.feature) ? next : ShiftMode.suite;
+    mode = target;
+    surface = target.surface;
+    _changed();
+  }
+
+  /// Switch a feature on or off. Turning off whatever is currently open
+  /// moves to Suite rather than leaving the screen up with its row gone.
+  void setFeatureEnabled(ShiftFeature feature, bool enabled) {
+    if (enabled == isEnabled(feature)) return;
+    if (enabled) {
+      _disabled.remove(feature);
+    } else {
+      _disabled.add(feature);
+      if (surface.feature == feature) surface = Surface.suite;
+      if (mode.feature == feature) mode = ShiftMode.suite;
+    }
     _changed();
   }
 
@@ -855,6 +907,8 @@ class AppState extends ChangeNotifier {
     final Map<String, dynamic> blob = <String, dynamic>{
       'v': _blobVersion,
       'theme': themeId.name,
+      'disabledFeatures':
+          _disabled.map((ShiftFeature f) => f.name).toList(growable: false),
       'surface': surface.name,
       'mode': mode.name,
       'signedIn': signedIn,

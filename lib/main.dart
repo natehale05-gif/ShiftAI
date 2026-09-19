@@ -4,6 +4,7 @@ import 'app/app.dart';
 import 'state/app_state.dart';
 import 'theme/tokens.dart';
 import 'theme/type.dart';
+import 'widgets/common.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -21,7 +22,18 @@ class ShiftBoot extends StatefulWidget {
 }
 
 class _ShiftBootState extends State<ShiftBoot> {
-  late final Future<AppState> _state = AppState.load();
+  late final Future<AppState> _state = _boot();
+
+  /// The lockup is recoloured to the live theme, so its artwork has to be
+  /// in hand before the first frame — otherwise the top bar draws the
+  /// unrecoloured file and then swaps. Started alongside the store rather
+  /// than before it, because neither waits on the other.
+  Future<AppState> _boot() async {
+    final Future<void> artwork = ShiftLockup.preload();
+    final AppState state = await AppState.load();
+    await artwork;
+    return state;
+  }
 
   @override
   Widget build(BuildContext context) {
