@@ -132,14 +132,24 @@ class ShiftColors extends ThemeExtension<ShiftColors> {
   /// The retro identity on paper rather than on black: the same hot pink
   /// and cyan, printed. Ink is warm near-black, never pure grey, and the
   /// pink is taken down far enough to carry white text.
+  // White, not cream. The warm ground this used to have (#FCF4E8, with
+  // beige surfaces and brown text to match) read as aged paper rather than
+  // as the light half of the retro pair.
+  //
+  // The page is a hair off white rather than #FFFFFF because a card has to
+  // sit above the page it is on, and on a light ground that means lighter
+  // — there is nothing above pure white to raise a card to.
+  // theme_contrast_test.dart holds that ordering for every theme.
   static const ShiftColors retroLight = ShiftColors(
-    bg: Color(0xFFFCF4E8),
+    bg: Color(0xFFF7F7F8),
     surface: Color(0xFFFFFFFF),
-    surfaceRaised: Color(0xFFF4E6D5),
-    border: Color(0xFFE2CFB8),
-    borderStrong: Color(0xFF6F5B49),
-    text: Color(0xFF1A120C),
-    textMuted: Color(0xFF6B5747),
+    surfaceRaised: Color(0xFFEDEDEF),
+    border: Color(0xFFD8D8DC),
+    borderStrong: Color(0xFF55555C),
+    // Retro's own ground, inverted onto white, so the pair reads as one
+    // identity in two directions.
+    text: Color(0xFF0A0A0F),
+    textMuted: Color(0xFF5F5F67),
     accent: Color(0xFFC4005F),
     accentHover: Color(0xFF99004A),
     accentSoft: Color(0xFFFFE1EE),

@@ -60,7 +60,7 @@ THEMES = {
               "onAccent": "#FFFFFF"},
     "retro": {"bg": "#0A0A0F", "text": "#FFFFFF", "accent": "#FF1A8C",
               "onAccent": "#0A0A0F"},
-    "retroLight": {"bg": "#FCF4E8", "text": "#1A120C", "accent": "#C4005F",
+    "retroLight": {"bg": "#F7F7F8", "text": "#0A0A0F", "accent": "#C4005F",
                    "onAccent": "#FFFFFF"},
 }
 

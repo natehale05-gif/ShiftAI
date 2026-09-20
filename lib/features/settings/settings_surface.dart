@@ -104,8 +104,8 @@ class _AppearanceCard extends StatelessWidget {
           const SizedBox(height: Space.x3),
           Text(
             'The retro pair carries the older SHIFT identity — neon on '
-            'black, or the same ink printed on paper. Retro neon is what a '
-            'new account opens on; dark and light are the plainer pair.',
+            'black, or the same ink on white. Retro neon is what a new '
+            'account opens on; dark and light are the plainer pair.',
             style: ShiftType.caption(ShiftColors.of(context).textMuted),
           ),
         ],
