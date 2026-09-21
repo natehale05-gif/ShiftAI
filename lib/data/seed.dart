@@ -15,7 +15,9 @@ abstract final class Seed {
   ];
 
   static const Creator creator = Creator(
-    handle: '@natehale',
+    // No '@': docs/API.md stores the bare handle and every screen adds the
+    // '@' when it draws one.
+    handle: 'natehale',
     name: 'Nate Hale',
     email: 'natehale05@icloud.com',
     initials: 'NH',

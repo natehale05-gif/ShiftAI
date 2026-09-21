@@ -395,6 +395,26 @@ void main() {
       // it — not just the screen that made the change.
       expect((await store.read())!.creator.handle, 'newhandle');
     });
+
+    test('an engine that sends the @ does not get it drawn twice', () {
+      // Every screen writes its own '@' in front of the handle, so one
+      // arriving in the value is what made the account card read
+      // "@@natehale".
+      const Creator withAt = Creator(
+        handle: '@natehale',
+        name: 'Nate Hale',
+        email: 'nate@example.com',
+        initials: 'NH',
+      );
+      const Creator without = Creator(
+        handle: 'natehale',
+        name: 'Nate Hale',
+        email: 'nate@example.com',
+        initials: 'NH',
+      );
+      expect(withAt.bareHandle, 'natehale');
+      expect(without.bareHandle, 'natehale');
+    });
   });
 
   group('avatars', () {
