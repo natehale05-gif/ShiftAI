@@ -52,6 +52,11 @@ class SettingsSurface extends StatelessWidget {
                   SizedBox(height: Space.x4),
                   _EngineCard(),
                 ],
+                // The one action on this screen that cannot be undone is
+                // the last thing on it, full stop — never near a button
+                // someone might actually mean to tap.
+                SizedBox(height: Space.x4),
+                DeleteAccountCard(),
               ],
             ),
           ),

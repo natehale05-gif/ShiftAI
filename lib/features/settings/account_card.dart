@@ -72,9 +72,47 @@ class AccountCard extends StatelessWidget {
             onPressed: state.signOut,
             child: Text('Sign out', style: ShiftType.bodySm(c.text)),
           ),
-          TextButton(
+        ],
+      ),
+    );
+  }
+}
+
+/// On its own at the very bottom of Settings — the one action here that
+/// cannot be undone belongs nowhere near the buttons people actually mean
+/// to tap.
+class DeleteAccountCard extends StatelessWidget {
+  const DeleteAccountCard({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final ShiftColors c = ShiftColors.of(context);
+
+    return ShiftCard(
+      child: Row(
+        children: <Widget>[
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text('Delete account', style: ShiftType.bodyStrong(c.text)),
+                const SizedBox(height: Space.x1),
+                Text(
+                  'Your vault, your notes, your designs and your place on '
+                  'the board go with it. This cannot be undone.',
+                  style: ShiftType.caption(c.textMuted),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: Space.x4),
+          OutlinedButton(
+            style: OutlinedButton.styleFrom(
+              foregroundColor: c.danger,
+              side: BorderSide(color: c.danger),
+            ),
             onPressed: () => _deleteAccount(context),
-            child: Text('Delete account', style: ShiftType.bodySm(c.danger)),
+            child: const Text('Delete'),
           ),
         ],
       ),
