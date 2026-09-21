@@ -110,6 +110,15 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, USER)
         self._send(404, {"message": f"No route {path}."})
 
+    def do_PATCH(self):
+        path = self.path.split("?")[0]
+        if path == "/v1/me":
+            length = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(length) or b"{}")
+            USER.update({k: v for k, v in body.items() if k in USER})
+            return self._send(200, USER)
+        self._send(404, {"message": f"No route {path}."})
+
     def do_DELETE(self):
         path = self.path.split("?")[0]
         if path.startswith("/v1/ecovault/") and path.endswith("/save"):
