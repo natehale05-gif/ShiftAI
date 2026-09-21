@@ -33,6 +33,25 @@ class AccountCard extends StatelessWidget {
             children: <Widget>[
               Text(state.creator.name, style: ShiftType.bodyStrong(c.text)),
               Text(state.creator.email, style: ShiftType.bodySm(c.textMuted)),
+              const SizedBox(height: Space.x1),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  Text(
+                    '@${state.creator.handle}',
+                    style: ShiftType.bodySm(c.textMuted),
+                  ),
+                  const SizedBox(width: Space.x1),
+                  InkWell(
+                    onTap: () => _renameHandle(context),
+                    borderRadius: Radii.smAll,
+                    child: Padding(
+                      padding: const EdgeInsets.all(Space.x1),
+                      child: Icon(Icons.edit, size: 14, color: c.textMuted),
+                    ),
+                  ),
+                ],
+              ),
             ],
           ),
           Container(
@@ -58,6 +77,58 @@ class AccountCard extends StatelessWidget {
             child: Text('Delete account', style: ShiftType.bodySm(c.danger)),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// The username that attributes a person's work in EcoVault.
+Future<void> _renameHandle(BuildContext context) async {
+  final AppState state = AppScope.read(context);
+  final TextEditingController controller =
+      TextEditingController(text: state.creator.handle);
+  final String? next = await showDialog<String>(
+    context: context,
+    builder: (BuildContext context) {
+      final ShiftColors c = ShiftColors.of(context);
+      return AlertDialog(
+        backgroundColor: c.surface,
+        shape: const RoundedRectangleBorder(borderRadius: Radii.lgAll),
+        title: Text('Change username', style: ShiftType.subheading(c.text)),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          style: ShiftType.bodySm(c.text),
+          decoration: const InputDecoration(prefixText: '@'),
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(controller.text),
+            child: const Text('SAVE'),
+          ),
+        ],
+      );
+    },
+  );
+  controller.dispose();
+  final String trimmed = (next ?? '').trim();
+  if (trimmed.isEmpty ||
+      trimmed.contains(RegExp(r'\s')) ||
+      trimmed == state.creator.handle ||
+      !context.mounted) {
+    return;
+  }
+
+  final ScaffoldMessengerState bar = ScaffoldMessenger.of(context);
+  if (!await state.updateHandle(trimmed)) {
+    bar.showSnackBar(
+      SnackBar(
+        content:
+            Text(state.lastError?.message ?? 'Could not change username.'),
       ),
     );
   }

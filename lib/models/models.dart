@@ -16,6 +16,13 @@ class Creator {
   final String name;
   final String email;
   final String initials;
+
+  Creator copyWith({String? handle, String? name, String? email}) => Creator(
+        handle: handle ?? this.handle,
+        name: name ?? this.name,
+        email: email ?? this.email,
+        initials: initials,
+      );
 }
 
 /// Trophy and leaderboard tiers. Points come from the tier, so a trophy

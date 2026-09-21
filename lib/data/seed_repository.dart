@@ -15,6 +15,7 @@ class SeedRepository implements ShiftRepository {
   /// The beat between asking and being answered. Zero in tests.
   final Duration replyDelay;
 
+  Creator _creator = Seed.creator;
   late List<VaultItem> _vault = List<VaultItem>.of(Seed.vault);
   late List<VaultItem> _eco = List<VaultItem>.of(Seed.ecoVault);
   late List<Note> _notes = List<Note>.of(Seed.notes);
@@ -24,7 +25,7 @@ class SeedRepository implements ShiftRepository {
 
   @override
   Future<ShiftSnapshot> load() async => ShiftSnapshot(
-        creator: Seed.creator,
+        creator: _creator,
         standings: List<StandingRow>.of(Seed.standings),
         trophies: List<Trophy>.of(Seed.trophies),
         vault: List<VaultItem>.of(_vault),
@@ -66,6 +67,12 @@ class SeedRepository implements ShiftRepository {
 
   @override
   Future<String> polish(String prompt) async => Prompt.polish(prompt);
+
+  @override
+  Future<Creator> updateHandle(String handle) async {
+    _creator = _creator.copyWith(handle: handle);
+    return _creator;
+  }
 
   /// An id nobody has is a 404, not a crash: the code above this only
   /// knows how to handle [ShiftApiException].

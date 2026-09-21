@@ -32,6 +32,32 @@ class _DeadRepository implements ShiftRepository {
       throw UnimplementedError(invocation.memberName.toString());
 }
 
+/// A repository whose only interesting behaviour is what changing the
+/// handle does — everything else is the empty snapshot.
+class _HandleRepo implements ShiftRepository {
+  _HandleRepo({this.fail = false});
+
+  final bool fail;
+
+  @override
+  Future<ShiftSnapshot> load() async => emptySnapshot();
+
+  @override
+  Future<Creator> updateHandle(String handle) async {
+    if (fail) {
+      throw const ShiftApiException(
+        ShiftApiErrorKind.badRequest,
+        'That username is taken.',
+      );
+    }
+    return _other.copyWith(handle: handle);
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) =>
+      throw UnimplementedError(invocation.memberName.toString());
+}
+
 class _StubAuth implements AuthService {
   _StubAuth(this.creator);
   final Creator creator;
@@ -283,6 +309,33 @@ void main() {
       expect(state.signedIn, isFalse);
       expect(await store.read(), isNull);
       expect(state.vault, isEmpty);
+    });
+  });
+
+  group('changing the username', () {
+    test('a refusal rolls it back', () async {
+      final AppState state =
+          await _server(repo: _HandleRepo(fail: true), signedIn: true);
+      final String before = state.creator.handle;
+
+      expect(await state.updateHandle('taken'), isFalse);
+      expect(state.creator.handle, before);
+      expect(state.lastError?.message, 'That username is taken.');
+    });
+
+    test('success is kept in the session, not just on screen', () async {
+      final MemoryTokenStore store = MemoryTokenStore();
+      final AppState state = await _server(
+        repo: _HandleRepo(),
+        store: store,
+        signedIn: true,
+      );
+
+      expect(await state.updateHandle(' newhandle '), isTrue);
+      expect(state.creator.handle, 'newhandle');
+      // The keychain-backed session carries it, so a restart still shows
+      // it — not just the screen that made the change.
+      expect((await store.read())!.creator.handle, 'newhandle');
     });
   });
 }
