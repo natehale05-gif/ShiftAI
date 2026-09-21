@@ -10,6 +10,15 @@ import 'package:shift_ai/models/models.dart';
 import 'package:shift_ai/data/auth/token_store.dart';
 import 'package:shift_ai/state/app_state.dart';
 
+/// The rings sheet opens on its own the moment `ShiftShell` mounts — see
+/// `ShiftShell._showRings` — so a test that then taps something underneath
+/// dismisses it first, the same way a person would.
+Future<void> _dismissRingsSheet(WidgetTester tester) async {
+  if (find.byType(BottomSheet).evaluate().isEmpty) return;
+  await tester.tapAt(const Offset(5, 5));
+  await tester.pumpAndSettle();
+}
+
 /// A repository that takes reads and refuses every write, which is what a
 /// server does when the token has expired or the row has moved on.
 class _RefusingRepository extends SeedRepository {
@@ -60,6 +69,51 @@ class _RefusingRepository extends SeedRepository {
   Future<AgentRun> startRun(String prompt, {required String scope}) async =>
       _no();
 }
+
+/// A repository whose league placement is whatever the test needs, so the
+/// compete ring's difficulty curve can be exercised at every rank band.
+class _LeagueRepo extends SeedRepository {
+  _LeagueRepo(this.league) : super(replyDelay: Duration.zero);
+
+  final League? league;
+
+  @override
+  Future<ShiftSnapshot> load() async {
+    final ShiftSnapshot base = await super.load();
+    return ShiftSnapshot(
+      creator: base.creator,
+      standings: base.standings,
+      trophies: base.trophies,
+      vault: base.vault,
+      ecoVault: base.ecoVault,
+      notes: base.notes,
+      agentRuns: base.agentRuns,
+      jobs: base.jobs,
+      designs: base.designs,
+      connectors: base.connectors,
+      weekPool: base.weekPool,
+      payoutLine: base.payoutLine,
+      avatars: base.avatars,
+      league: league,
+    );
+  }
+}
+
+League _soloLeague({required int rank, required int movement}) => League(
+      division: TrophyTier.bronze,
+      regionLabel: 'Test Metro',
+      promoteCount: 1,
+      relegateCount: 1,
+      rows: <StandingRow>[
+        StandingRow(
+          rank: rank,
+          name: 'You',
+          earnings: 100,
+          movement: movement,
+          isYou: true,
+        ),
+      ],
+    );
 
 Future<AppState> _state({ShiftRepository? repo}) async {
   SharedPreferences.setMockInitialValues(<String, Object>{});
@@ -160,9 +214,45 @@ void main() {
       expect(state.rings.publish, isTrue);
     });
 
-    test('opening the leaderboard closes the compete ring', () async {
-      final AppState state = await _state();
+    test('opening the leaderboard closes the compete ring outside the top '
+        'ten', () async {
+      final AppState state =
+          await _state(repo: _LeagueRepo(_soloLeague(rank: 11, movement: -5)));
       expect(state.rings.compete, isFalse);
+      state.setSurface(Surface.earnings);
+      // Rank 11 with none of it defended still counts as showing up.
+      expect(state.rings.compete, isTrue);
+    });
+
+    test('the top ten has to be held, not just watched', () async {
+      final AppState slipping =
+          await _state(repo: _LeagueRepo(_soloLeague(rank: 8, movement: -1)));
+      slipping.setSurface(Surface.earnings);
+      expect(slipping.rings.compete, isFalse);
+
+      final AppState holding =
+          await _state(repo: _LeagueRepo(_soloLeague(rank: 8, movement: 0)));
+      holding.setSurface(Surface.earnings);
+      expect(holding.rings.compete, isTrue);
+    });
+
+    test('the podium has to be gained, not just held', () async {
+      final AppState flat =
+          await _state(repo: _LeagueRepo(_soloLeague(rank: 2, movement: 0)));
+      flat.setSurface(Surface.earnings);
+      expect(flat.rings.compete, isFalse);
+
+      final AppState climbing =
+          await _state(repo: _LeagueRepo(_soloLeague(rank: 1, movement: 1)));
+      climbing.setSurface(Surface.earnings);
+      expect(climbing.rings.compete, isTrue);
+    });
+
+    test('falls back to the global board when there is no league yet',
+        () async {
+      // Seeded "You" sits at rank 13 globally — outside the top ten, so
+      // showing up is still enough even with no local placement.
+      final AppState state = await _state(repo: _LeagueRepo(null));
       state.setSurface(Surface.earnings);
       expect(state.rings.compete, isTrue);
     });
@@ -378,6 +468,7 @@ void main() {
       state.reusePrompt(item.prompt);
       await tester.pumpWidget(ShiftApp(state: state));
       await tester.pumpAndSettle();
+      await _dismissRingsSheet(tester);
 
       expect(find.text(item.prompt), findsOneWidget);
     });
@@ -393,6 +484,7 @@ void main() {
 
       await tester.tap(find.text('SIGN IN'));
       await tester.pumpAndSettle();
+      await _dismissRingsSheet(tester);
 
       expect(state.signedIn, isFalse);
       expect(
@@ -412,6 +504,7 @@ void main() {
       await tester.enterText(find.byType(TextField).last, 'a-password');
       await tester.tap(find.text('SIGN IN'));
       await tester.pumpAndSettle();
+      await _dismissRingsSheet(tester);
 
       expect(state.signedIn, isTrue);
     });
@@ -427,6 +520,7 @@ void main() {
     state.setSurface(Surface.trophies);
     await tester.pumpWidget(ShiftApp(state: state));
     await tester.pumpAndSettle();
+    await _dismissRingsSheet(tester);
 
     final Trophy trophy = state.trophies.first;
     await tester.tap(find.text(trophy.name).first);

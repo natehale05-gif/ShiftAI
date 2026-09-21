@@ -21,12 +21,22 @@ Future<AppState> _freshState() async {
   return AppState.load(tokenStore: MemoryTokenStore());
 }
 
+/// The rings sheet opens on its own the moment `ShiftShell` mounts — see
+/// `ShiftShell._showRings` — so every test that then wants to tap
+/// something underneath dismisses it first, the same way a person would.
+Future<void> _dismissRingsSheet(WidgetTester tester) async {
+  if (find.byType(BottomSheet).evaluate().isEmpty) return;
+  await tester.tapAt(const Offset(5, 5));
+  await tester.pumpAndSettle();
+}
+
 void main() {
   testWidgets('the shell opens on Create and reaches every surface',
       (WidgetTester tester) async {
     final AppState state = await _freshState();
     await tester.pumpWidget(ShiftApp(state: state));
     await tester.pump();
+    await _dismissRingsSheet(tester);
 
     expect(find.byType(ShiftShell), findsOneWidget);
     expect(state.surface, Surface.suite);
@@ -48,6 +58,7 @@ void main() {
     final AppState state = await _freshState();
     await tester.pumpWidget(ShiftApp(state: state));
     await tester.pump();
+    await _dismissRingsSheet(tester);
 
     expect(state.sidebarCollapsed, isTrue);
     expect(find.byType(SidebarNav), findsNothing);
@@ -67,6 +78,7 @@ void main() {
     final AppState state = await _freshState();
     await tester.pumpWidget(ShiftApp(state: state));
     await tester.pump();
+    await _dismissRingsSheet(tester);
 
     final ScaffoldState scaffold =
         tester.state<ScaffoldState>(find.byType(Scaffold).last);
@@ -125,6 +137,7 @@ void main() {
     final AppState state = await _freshState();
     await tester.pumpWidget(ShiftApp(state: state));
     await tester.pump();
+    await _dismissRingsSheet(tester);
 
     state.sendMessage('Cut a 20 second vertical promo');
     await tester.pump();
@@ -179,6 +192,7 @@ void main() {
     final AppState state = await _freshState();
     await tester.pumpWidget(ShiftApp(state: state));
     await tester.pump();
+    await _dismissRingsSheet(tester);
     state.setSurface(Surface.earnings);
     await tester.pump();
 
@@ -222,6 +236,7 @@ void main() {
     final AppState state = await _freshState();
     await tester.pumpWidget(ShiftApp(state: state));
     await tester.pump();
+    await _dismissRingsSheet(tester);
 
     await tester.enterText(
       find.byType(TextField).last,
@@ -251,6 +266,7 @@ void main() {
     final AppState state = await _freshState();
     await tester.pumpWidget(ShiftApp(state: state));
     await tester.pump();
+    await _dismissRingsSheet(tester);
 
     // Not pumpAndSettle: the training tile's spinner never settles. Pump
     // past the surface-switch fade (180ms) instead, so the old surface's
@@ -316,6 +332,7 @@ void main() {
     final AppState state = await _freshState();
     await tester.pumpWidget(ShiftApp(state: state));
     await tester.pump();
+    await _dismissRingsSheet(tester);
 
     final int before = state.notes.length;
     final Note made =

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../features/agents/agents_surface.dart';
+import '../features/chat/daily_rings_bar.dart';
 import '../features/chat/suite_surface.dart';
 import '../features/design/design_surface.dart';
 import '../features/earnings/leaderboard_surface.dart';
@@ -24,8 +25,47 @@ const double kSidebarWidth = 260;
 /// Every screen holds its content to this width and centres it.
 const double kContentWidth = 950;
 
-class ShiftShell extends StatelessWidget {
+class ShiftShell extends StatefulWidget {
   const ShiftShell({super.key});
+
+  @override
+  State<ShiftShell> createState() => _ShiftShellState();
+}
+
+class _ShiftShellState extends State<ShiftShell> with WidgetsBindingObserver {
+  AppLifecycleState? _lifecycle;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    // Covers a cold start; didChangeAppLifecycleState covers every reopen
+    // after this one.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _showRings());
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState next) {
+    // Only a genuine return from the background counts as "reopening" —
+    // the transient `inactive` a picker or a permission prompt passes
+    // through on its way back to `resumed` is not that.
+    if (next == AppLifecycleState.resumed &&
+        (_lifecycle == AppLifecycleState.paused ||
+            _lifecycle == AppLifecycleState.hidden)) {
+      _showRings();
+    }
+    _lifecycle = next;
+  }
+
+  void _showRings() {
+    if (mounted) showDailyRingsSheet(context);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -169,6 +209,7 @@ class ShiftAppBar extends StatelessWidget {
                     ),
                   ),
                 const Spacer(),
+                if (state.surface == Surface.suite) const DailyRingsButton(),
                 if (state.surface == Surface.suite)
                   IconButton(
                     tooltip: state.privateChat

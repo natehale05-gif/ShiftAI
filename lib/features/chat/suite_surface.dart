@@ -7,7 +7,6 @@ import '../../state/app_state.dart';
 import '../../theme/tokens.dart';
 import '../../theme/type.dart';
 import '../../widgets/common.dart';
-import 'daily_rings_bar.dart';
 import 'failure_card.dart';
 
 /// Create: one question, one composer. The thread only appears once you
@@ -53,7 +52,6 @@ class _SuiteSurfaceState extends State<SuiteSurface> {
 
     return Column(
       children: <Widget>[
-        const DailyRingsBar(),
         Expanded(
           child: empty
               ? const _EmptyState()

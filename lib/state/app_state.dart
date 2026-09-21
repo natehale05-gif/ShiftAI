@@ -458,8 +458,28 @@ class AppState extends ChangeNotifier {
     final Surface target = isEnabled(next.feature) ? next : Surface.suite;
     if (surface == target) return;
     surface = target;
-    if (target == Surface.earnings) _closeRing(RingKind.compete);
+    if (target == Surface.earnings && _competeRingCloses()) {
+      _closeRing(RingKind.compete);
+    }
     _changed();
+  }
+
+  /// Whether opening the board today is enough on its own, or whether
+  /// standing has to earn it. Doing well is exactly what makes checking in
+  /// easy — a rank nobody is defending is not a competition, so the ring
+  /// gets harder to close the better this account is placed: outside the
+  /// top ten, showing up closes it; inside the top ten it has to be held,
+  /// not just watched; on the podium it has to be gained.
+  ///
+  /// The local league is what this reads first — it is the board most
+  /// people are actually contesting day to day — and falls back to the
+  /// global board for whoever has not been placed in one yet.
+  bool _competeRingCloses() {
+    final StandingRow? row = league?.you ?? you;
+    if (row == null) return true;
+    if (row.rank <= 3) return row.movement > 0;
+    if (row.rank <= 10) return row.movement >= 0;
+    return true;
   }
 
   void setMode(ShiftMode next) {

@@ -255,12 +255,6 @@ class Avatar {
       );
 }
 
-/// Where a row on a [League] board sits relative to the week's cutoffs.
-/// Computed from rank rather than sent by the server: the same fact
-/// ["top 3 of 15"] the server already sent as `promoteCount`/`rows.length`,
-/// read once instead of asked for twice.
-enum LeagueZone { promotion, safe, relegation }
-
 /// A small board of people near this account in both rank and location —
 /// a fair fight instead of the whole board, the same idea as Duolingo's
 /// weekly leagues. Division is a rung on a ladder, promoted or relegated
@@ -293,12 +287,6 @@ class League {
 
   StandingRow? get you =>
       rows.where((StandingRow r) => r.isYou).firstOrNull;
-
-  LeagueZone zoneFor(StandingRow row) {
-    if (row.rank <= promoteCount) return LeagueZone.promotion;
-    if (row.rank > rows.length - relegateCount) return LeagueZone.relegation;
-    return LeagueZone.safe;
-  }
 
   static League? fromJson(Map<String, dynamic> json) {
     final Object? divisionRaw = json['division'];
