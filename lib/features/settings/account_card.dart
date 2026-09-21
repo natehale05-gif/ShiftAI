@@ -38,7 +38,7 @@ class AccountCard extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: <Widget>[
                   Text(
-                    '@${state.creator.handle}',
+                    '@${state.creator.bareHandle}',
                     style: ShiftType.bodySm(c.textMuted),
                   ),
                   const SizedBox(width: Space.x1),
@@ -123,8 +123,9 @@ class DeleteAccountCard extends StatelessWidget {
 /// The username that attributes a person's work in EcoVault.
 Future<void> _renameHandle(BuildContext context) async {
   final AppState state = AppScope.read(context);
+  // The field sits behind a '@' prefix, so it holds the bare handle.
   final TextEditingController controller =
-      TextEditingController(text: state.creator.handle);
+      TextEditingController(text: state.creator.bareHandle);
   final String? next = await showDialog<String>(
     context: context,
     builder: (BuildContext context) {
@@ -153,10 +154,13 @@ Future<void> _renameHandle(BuildContext context) async {
     },
   );
   controller.dispose();
-  final String trimmed = (next ?? '').trim();
+  // A typed-in '@' is dropped rather than sent: the engine stores the
+  // bare handle, and every screen adds the '@' back when it draws one.
+  String trimmed = (next ?? '').trim();
+  if (trimmed.startsWith('@')) trimmed = trimmed.substring(1).trim();
   if (trimmed.isEmpty ||
       trimmed.contains(RegExp(r'\s')) ||
-      trimmed == state.creator.handle ||
+      trimmed == state.creator.bareHandle ||
       !context.mounted) {
     return;
   }

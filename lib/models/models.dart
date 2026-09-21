@@ -17,6 +17,12 @@ class Creator {
   final String email;
   final String initials;
 
+  /// The handle with no leading `@`, whatever the engine sent. Every
+  /// screen draws the `@` itself, so one arriving in the value would be
+  /// shown twice — which is exactly what `@@natehale` was.
+  String get bareHandle =>
+      handle.startsWith('@') ? handle.substring(1) : handle;
+
   Creator copyWith({String? handle, String? name, String? email}) => Creator(
         handle: handle ?? this.handle,
         name: name ?? this.name,
