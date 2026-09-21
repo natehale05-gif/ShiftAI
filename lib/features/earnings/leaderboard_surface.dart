@@ -224,9 +224,18 @@ class _Podium extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (rows.length < 3) return const SizedBox.shrink();
+    final List<StandingRow> sorted = List<StandingRow>.of(rows)
+      ..sort((StandingRow a, StandingRow b) => a.rank.compareTo(b.rank));
+    // A race podium, not a ranked list: 2nd on the left, 1st in the
+    // middle, 3rd on the right.
+    final List<StandingRow> order = <StandingRow>[
+      sorted[1],
+      sorted[0],
+      sorted[2],
+    ];
     return Row(
       crossAxisAlignment: CrossAxisAlignment.end,
-      children: rows
+      children: order
           .map(
             (StandingRow row) => Expanded(
               child: _PodiumSpot(row: row, lead: row.rank == 1),
