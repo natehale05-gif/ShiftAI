@@ -22,3 +22,10 @@
 # Play Core is referenced by Flutter's deferred-components support even
 # when the app uses none. Without this, R8 warns and can fail the build.
 -dontwarn com.google.android.play.core.**
+
+# home_widget (the leaderboard home screen widgets) is not under
+# io.flutter.plugins, so the blanket rule above misses it. Same failure
+# shape as flutter_secure_storage and file_picker above: compiles either
+# way, and a stripped plugin only shows up as a widget that never
+# updates in a release build.
+-keep class es.antonborri.home_widget.** { *; }
