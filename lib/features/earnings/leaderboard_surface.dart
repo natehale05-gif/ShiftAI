@@ -327,18 +327,29 @@ class _LeagueBoard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final StandingRow? you = league.you;
+    // Same podium as the global board — it is the same StandingRow shape,
+    // just a smaller cohort behind it.
+    final List<StandingRow> podium =
+        league.rows.where((StandingRow r) => r.rank <= 3).toList();
+    final List<StandingRow> rest = league.rows
+        .where((StandingRow r) => r.rank > 3 && !r.isYou)
+        .toList();
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
         _LeagueHeader(league: league),
         const SizedBox(height: Space.x5),
-        if (you != null) ...<Widget>[
+        if (podium.length == 3) ...<Widget>[
+          _Podium(rows: podium),
+          const SizedBox(height: Space.x5),
+        ],
+        // Already on the podium: the you-card would just repeat that row.
+        if (you != null && you.rank > 3) ...<Widget>[
           _LeagueYouCard(you: you, zone: league.zoneFor(you)),
           const SizedBox(height: Space.x4),
         ],
-        ...league.rows
-            .where((StandingRow r) => !r.isYou)
-            .map((StandingRow r) => _LeagueRow(row: r, zone: league.zoneFor(r))),
+        ...rest.map((StandingRow r) => _LeagueRow(row: r, zone: league.zoneFor(r))),
       ],
     );
   }
