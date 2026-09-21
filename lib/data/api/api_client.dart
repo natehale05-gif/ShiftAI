@@ -105,7 +105,7 @@ class ApiClient {
                 ),
               );
         final http.StreamedResponse streamed =
-            await request.send().timeout(timeout);
+            await _client.send(request).timeout(timeout);
         return http.Response.fromStream(streamed);
       });
 
