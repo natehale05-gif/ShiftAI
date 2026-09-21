@@ -13,7 +13,8 @@ import 'account_card.dart';
 import 'avatar.dart';
 import 'connectors.dart';
 
-/// Appearance, the avatar maker, connections and the account, in order.
+/// The avatar maker and the account first, then appearance, sections and
+/// connections — who you are before how the app looks and behaves.
 class SettingsSurface extends StatelessWidget {
   const SettingsSurface({super.key});
 
@@ -33,15 +34,18 @@ class SettingsSurface extends StatelessWidget {
             child: const Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
+                // Who you are comes first: the avatar you show up as, then
+                // the account it belongs to. Everything below is how the
+                // app looks and behaves, not who is using it.
+                _AvatarsCard(),
+                SizedBox(height: Space.x4),
+                AccountCard(),
+                SizedBox(height: Space.x4),
                 _AppearanceCard(),
                 SizedBox(height: Space.x4),
                 _FeaturesCard(),
                 SizedBox(height: Space.x4),
-                _AvatarsCard(),
-                SizedBox(height: Space.x4),
                 _ConnectionsCard(),
-                SizedBox(height: Space.x4),
-                AccountCard(),
                 // Only in a debug build: pointing the app at an engine is
                 // a developer's job, not something to ship to a creator.
                 if (kDebugMode) ...<Widget>[
@@ -57,12 +61,16 @@ class SettingsSurface extends StatelessWidget {
   }
 }
 
+/// One row of colour swatches, one label for whichever is picked — the
+/// grid of four bordered, captioned cards this replaced said the same
+/// thing with a lot more to look at.
 class _AppearanceCard extends StatelessWidget {
   const _AppearanceCard();
 
   @override
   Widget build(BuildContext context) {
     final AppState state = AppScope.of(context);
+    final ShiftColors c = ShiftColors.of(context);
 
     return ShiftCard(
       child: Column(
@@ -70,51 +78,28 @@ class _AppearanceCard extends StatelessWidget {
         children: <Widget>[
           const Eyebrow('Appearance'),
           const SizedBox(height: Space.x3),
-          LayoutBuilder(
-            builder: (BuildContext context, BoxConstraints constraints) {
-              // Four themes no longer fit across one row on a laptop, so
-              // they wrap into a grid rather than squeezing.
-              final int columns = constraints.maxWidth >= 860
-                  ? 4
-                  : constraints.maxWidth >= 520
-                      ? 2
-                      : 1;
-              return GridView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: ShiftThemeId.values.length,
-                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: columns,
-                  mainAxisSpacing: Space.x3,
-                  crossAxisSpacing: Space.x3,
-                  mainAxisExtent: 66,
+          Wrap(
+            spacing: Space.x3,
+            runSpacing: Space.x3,
+            children: <Widget>[
+              for (final ShiftThemeId id in ShiftThemeId.values)
+                _ThemeSwatch(
+                  id: id,
+                  selected: state.themeId == id,
+                  onTap: () => state.setTheme(id),
                 ),
-                itemBuilder: (BuildContext context, int i) {
-                  final ShiftThemeId id = ShiftThemeId.values[i];
-                  return _ThemeTile(
-                    id: id,
-                    selected: state.themeId == id,
-                    onTap: () => state.setTheme(id),
-                  );
-                },
-              );
-            },
+            ],
           ),
           const SizedBox(height: Space.x3),
-          Text(
-            'The retro pair carries the older SHIFT identity — neon on '
-            'black, or the same ink printed on paper. Retro neon is what a '
-            'new account opens on; dark and light are the plainer pair.',
-            style: ShiftType.caption(ShiftColors.of(context).textMuted),
-          ),
+          Text(state.themeId.label, style: ShiftType.bodyStrong(c.text)),
         ],
       ),
     );
   }
 }
 
-class _ThemeTile extends StatelessWidget {
-  const _ThemeTile({
+class _ThemeSwatch extends StatelessWidget {
+  const _ThemeSwatch({
     required this.id,
     required this.selected,
     required this.onTap,
@@ -132,44 +117,32 @@ class _ThemeTile extends StatelessWidget {
     return Semantics(
       selected: selected,
       button: true,
+      label: id.label,
       child: InkWell(
-        borderRadius: Radii.mdAll,
+        borderRadius: Radii.pillAll,
         onTap: onTap,
         child: Container(
-          padding: const EdgeInsets.all(Space.x4),
+          width: 44,
+          height: 44,
+          alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: selected ? c.accentSoft : c.surface,
-            borderRadius: Radii.mdAll,
-            border: Border.all(color: selected ? c.accent : c.border),
+            color: preview.bg,
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: selected ? c.accent : preview.border,
+              width: selected ? 2 : 1,
+            ),
           ),
-          child: Row(
-            children: <Widget>[
-              Container(
-                width: 44,
-                height: 32,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: preview.bg,
-                  borderRadius: Radii.smAll,
-                  border: Border.all(color: preview.border),
-                ),
-                child: Container(
+          child: selected
+              ? Icon(Icons.check_rounded, size: 18, color: preview.accent)
+              : Container(
                   width: 12,
                   height: 12,
                   decoration: BoxDecoration(
                     color: preview.accent,
-                    borderRadius: Radii.pillAll,
+                    shape: BoxShape.circle,
                   ),
                 ),
-              ),
-              const SizedBox(width: Space.x3),
-              Expanded(
-                child: Text(id.label, style: ShiftType.bodyStrong(c.text)),
-              ),
-              if (selected)
-                Icon(Icons.check_rounded, size: 18, color: c.accent),
-            ],
-          ),
         ),
       ),
     );
