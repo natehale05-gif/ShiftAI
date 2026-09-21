@@ -21,6 +21,13 @@ abstract final class Seed {
     initials: 'NH',
   );
 
+  // Avatars ---------------------------------------------------------------
+
+  static const List<Avatar> avatars = <Avatar>[
+    Avatar(id: 'av-1', name: 'Everyday', status: AvatarStatus.ready, personal: true),
+    Avatar(id: 'av-2', name: 'Studio lighting', status: AvatarStatus.training),
+  ];
+
   // Leaderboard ---------------------------------------------------------
 
   static const int weekPool = 53497;

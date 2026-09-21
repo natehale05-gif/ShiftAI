@@ -31,6 +31,7 @@ class HttpRepository implements ShiftRepository {
   static const String _messages = '/v1/messages';
   static const String _polish = '/v1/polish';
   static const String _uploads = '/v1/uploads';
+  static const String _avatars = '/v1/avatars';
 
   @override
   Future<ShiftSnapshot> load() async {
@@ -48,6 +49,7 @@ class HttpRepository implements ShiftRepository {
       _api.get(_connections),
       _api.get(_week),
       _api.get(_eco),
+      _api.get(_avatars),
     ]);
 
     final Map<String, dynamic> week = parts[9] is Map<String, dynamic>
@@ -80,16 +82,27 @@ class HttpRepository implements ShiftRepository {
       connectors: Decode.connectors(parts[8]),
       weekPool: (week['pool'] as num?)?.toInt() ?? 0,
       payoutLine: week['payoutLine'] as String? ?? '',
+      avatars: Decode.rows(parts[11], 'avatars')
+          .map(Decode.avatar)
+          .toList(growable: false),
     );
   }
 
   @override
-  Future<List<ChatMessage>> send(String prompt, {bool private = false}) async {
+  Future<List<ChatMessage>> send(
+    String prompt, {
+    bool private = false,
+    String? avatarId,
+  }) async {
     final dynamic body = await _api.post(
       _messages,
       // `private` tells the server not to retain the exchange. The client
       // already keeps it out of its own storage.
-      body: <String, dynamic>{'prompt': prompt, 'private': private},
+      body: <String, dynamic>{
+        'prompt': prompt,
+        'private': private,
+        if (avatarId != null) 'avatarId': avatarId,
+      },
     );
     return Decode.rows(body, 'messages')
         .map(ChatMessage.fromJson)
@@ -113,6 +126,26 @@ class HttpRepository implements ShiftRepository {
         await _api.patch(_me, body: <String, dynamic>{'handle': handle})
             as Map<String, dynamic>,
       );
+
+  @override
+  Future<Avatar> createAvatar({
+    required String uploadId,
+    required String name,
+  }) async =>
+      Decode.avatar(
+        await _api.post(
+          _avatars,
+          body: <String, dynamic>{'uploadId': uploadId, 'name': name},
+        ) as Map<String, dynamic>,
+      );
+
+  @override
+  Future<Avatar> makeAvatarPersonal(String id) async => Decode.avatar(
+        await _api.post('$_avatars/$id/personal') as Map<String, dynamic>,
+      );
+
+  @override
+  Future<void> deleteAvatar(String id) => _api.delete('$_avatars/$id');
 
   @override
   Future<VaultItem> saveVaultItem(String id) async => VaultItem.fromJson(

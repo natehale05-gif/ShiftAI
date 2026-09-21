@@ -160,6 +160,18 @@ http.Response _snapshotRoute(http.BaseRequest request) {
         _json(<String, dynamic>{'pool': 53497, 'payoutLine': 'FRIDAY'}),
         200,
       ),
+    '/v1/avatars' => http.Response(
+        _json(<Map<String, dynamic>>[
+          <String, dynamic>{
+            'id': 'a1',
+            'name': 'Everyday',
+            'status': 'ready',
+            'personal': true,
+            'previewUrl': 'https://example.com/a1.png',
+          },
+        ]),
+        200,
+      ),
     _ => http.Response('{"message":"no route"}', 404),
   };
 }
@@ -195,6 +207,10 @@ void main() {
         reason: 'only what the server named is live',
       );
       expect(snap.weekPool, 53497);
+
+      expect(snap.avatars.single.name, 'Everyday');
+      expect(snap.avatars.single.status, AvatarStatus.ready);
+      expect(snap.avatars.single.personal, isTrue);
 
       // EcoVault carries an author and the viewer's own heart. A row with
       // no author is the viewer's own work; the heart is per-viewer, so
@@ -339,6 +355,71 @@ void main() {
         <String, dynamic>{'handle': 'nate2'},
       );
     });
+
+    test('creating an avatar uploads, then posts the upload id', () async {
+      final _FakeServer server = _FakeServer(
+        (http.BaseRequest r) => switch (r.url.path) {
+          '/v1/uploads' => http.Response(_json(<String, String>{'id': 'u1'}), 200),
+          '/v1/avatars' => http.Response(
+              _json(<String, dynamic>{
+                'id': 'a2',
+                'name': 'Studio',
+                'status': 'training',
+              }),
+              200,
+            ),
+          _ => http.Response('{"message":"no route"}', 404),
+        },
+      );
+      final ShiftRepository repo = HttpRepository(
+        ApiClient(baseUrl: 'https://api.example.com', client: server),
+      );
+
+      final String uploadId = await repo.upload(
+        fileName: 'me.png',
+        mimeType: 'image/png',
+        bytes: <int>[1, 2, 3],
+      );
+      expect(uploadId, 'u1');
+
+      final Avatar avatar =
+          await repo.createAvatar(uploadId: uploadId, name: 'Studio');
+      expect(avatar.status, AvatarStatus.training);
+      final http.Request created = server.seen.last as http.Request;
+      expect(created.method, 'POST');
+      expect(created.url.path, '/v1/avatars');
+      expect(
+        jsonDecode(created.body),
+        <String, dynamic>{'uploadId': 'u1', 'name': 'Studio'},
+      );
+    });
+
+    test('making an avatar personal and deleting one hit the right routes',
+        () async {
+      final _FakeServer server = _FakeServer(
+        (http.BaseRequest r) => http.Response(
+          _json(<String, dynamic>{
+            'id': 'a1',
+            'name': 'Everyday',
+            'status': 'ready',
+            'personal': true,
+          }),
+          200,
+        ),
+      );
+      final ShiftRepository repo = HttpRepository(
+        ApiClient(baseUrl: 'https://api.example.com', client: server),
+      );
+
+      final Avatar made = await repo.makeAvatarPersonal('a1');
+      expect(made.personal, isTrue);
+      expect(server.seen.last.method, 'POST');
+      expect(server.seen.last.url.path, '/v1/avatars/a1/personal');
+
+      await repo.deleteAvatar('a1');
+      expect(server.seen.last.method, 'DELETE');
+      expect(server.seen.last.url.path, '/v1/avatars/a1');
+    });
   });
 
   group('the seeded repository stands in for a server', () {
@@ -375,6 +456,36 @@ void main() {
       expect(next.handle, 'newhandle');
       expect(next.name, before.name, reason: 'only the handle changed');
       expect((await repo.load()).creator.handle, 'newhandle');
+    });
+
+    test('only one avatar is personal at a time', () async {
+      final SeedRepository repo = SeedRepository(replyDelay: Duration.zero);
+      final List<Avatar> seeded = (await repo.load()).avatars;
+      final Avatar wasPersonal = seeded.firstWhere((Avatar a) => a.personal);
+      final Avatar toPromote = seeded.firstWhere((Avatar a) => !a.personal);
+
+      final Avatar promoted = await repo.makeAvatarPersonal(toPromote.id);
+      expect(promoted.personal, isTrue);
+
+      final List<Avatar> after = (await repo.load()).avatars;
+      expect(
+        after.firstWhere((Avatar a) => a.id == wasPersonal.id).personal,
+        isFalse,
+      );
+      expect(after.where((Avatar a) => a.personal).length, 1);
+    });
+
+    test('a created avatar starts training and can be deleted', () async {
+      final SeedRepository repo = SeedRepository(replyDelay: Duration.zero);
+      final int before = (await repo.load()).avatars.length;
+
+      final Avatar created =
+          await repo.createAvatar(uploadId: 'u1', name: 'New face');
+      expect(created.status, AvatarStatus.training);
+      expect((await repo.load()).avatars.length, before + 1);
+
+      await repo.deleteAvatar(created.id);
+      expect((await repo.load()).avatars.length, before);
     });
   });
 }

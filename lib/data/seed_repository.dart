@@ -16,6 +16,7 @@ class SeedRepository implements ShiftRepository {
   final Duration replyDelay;
 
   Creator _creator = Seed.creator;
+  late List<Avatar> _avatars = List<Avatar>.of(Seed.avatars);
   late List<VaultItem> _vault = List<VaultItem>.of(Seed.vault);
   late List<VaultItem> _eco = List<VaultItem>.of(Seed.ecoVault);
   late List<Note> _notes = List<Note>.of(Seed.notes);
@@ -44,10 +45,15 @@ class SeedRepository implements ShiftRepository {
         connectors: List<Connector>.of(ConnectorCatalog.all),
         weekPool: Seed.weekPool,
         payoutLine: Seed.payoutLine,
+        avatars: List<Avatar>.of(_avatars),
       );
 
   @override
-  Future<List<ChatMessage>> send(String prompt, {bool private = false}) async {
+  Future<List<ChatMessage>> send(
+    String prompt, {
+    bool private = false,
+    String? avatarId,
+  }) async {
     if (replyDelay > Duration.zero) await Future<void>.delayed(replyDelay);
     final String stamp = DateTime.now().microsecondsSinceEpoch.toString();
     return Seed.cannedReply
@@ -87,6 +93,43 @@ class SeedRepository implements ShiftRepository {
       if (match(item)) return item;
     }
     _missing(what, id);
+  }
+
+  @override
+  Future<Avatar> createAvatar({
+    required String uploadId,
+    required String name,
+  }) async {
+    // Nothing here actually trains anything — there is no HeyGen behind
+    // the seeded catalogue — so the row sits in `training` forever, which
+    // is exactly the state the gallery needs to be able to draw.
+    final Avatar avatar = Avatar(
+      id: 'avatar-${DateTime.now().microsecondsSinceEpoch}',
+      name: name.trim().isEmpty ? 'Avatar' : name.trim(),
+      status: AvatarStatus.training,
+    );
+    _avatars = <Avatar>[..._avatars, avatar];
+    return avatar;
+  }
+
+  @override
+  Future<Avatar> makeAvatarPersonal(String id) async {
+    final Avatar target = _find<Avatar>(
+      _avatars,
+      (Avatar a) => a.id == id,
+      'avatar',
+      id,
+    );
+    final Avatar next = target.copyWith(personal: true);
+    _avatars = _avatars
+        .map((Avatar a) => a.id == id ? next : a.copyWith(personal: false))
+        .toList();
+    return next;
+  }
+
+  @override
+  Future<void> deleteAvatar(String id) async {
+    _avatars = _avatars.where((Avatar a) => a.id != id).toList();
   }
 
   VaultItem _setSaved(String id, bool saved) {

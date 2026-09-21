@@ -89,6 +89,7 @@ class AppState extends ChangeNotifier {
     agentRuns = List<AgentRun>.of(_snap.agentRuns);
     jobs = List<JobRow>.of(_snap.jobs);
     designs = List<DesignDoc>.of(_snap.designs);
+    avatars = List<Avatar>.of(_snap.avatars);
     messages = <ChatMessage>[];
 
     // Which scope each Agents tab was left pointed at. An unknown one
@@ -138,6 +139,7 @@ class AppState extends ChangeNotifier {
       agentRuns = List<AgentRun>.of(_snap.agentRuns);
       jobs = List<JobRow>.of(_snap.jobs);
       designs = List<DesignDoc>.of(_snap.designs);
+      avatars = List<Avatar>.of(_snap.avatars);
     } on ShiftApiException catch (error) {
       // Keep what is on screen. An empty list would read as "you have
       // nothing", which is a different and wrong statement.
@@ -274,7 +276,17 @@ class AppState extends ChangeNotifier {
   late List<AgentRun> agentRuns;
   late List<JobRow> jobs;
   late List<DesignDoc> designs;
+  late List<Avatar> avatars;
   late List<ChatMessage> messages;
+
+  /// The one avatar shown as the profile picture and on the leaderboard,
+  /// when there is one.
+  Avatar? get personalAvatar =>
+      avatars.where((Avatar a) => a.personal).firstOrNull;
+
+  /// Which avatar the next thing sent to the Suite should be generated as.
+  /// Null means whatever the engine answers with by default.
+  String? activeAvatarId;
 
   /// Agents has two tabs: the runs against a repository, and the jobs
   /// running in a folder.
@@ -603,6 +615,68 @@ class AppState extends ChangeNotifier {
     return _push(() => _repo.deleteDesign(id), () => designs = before);
   }
 
+  /// Uploads a photo and starts training a new avatar from it. This waits
+  /// for the engine rather than showing a row with a made-up id or a
+  /// training state it has not actually confirmed — same reasoning as
+  /// [addNote]. Null means the engine refused, and [lastError] says why.
+  Future<Avatar?> createAvatar(
+    List<int> bytes, {
+    required String name,
+    String fileName = 'avatar.png',
+    String mimeType = 'image/png',
+  }) async {
+    try {
+      final String uploadId = await _repo.upload(
+        fileName: fileName,
+        mimeType: mimeType,
+        bytes: bytes,
+      );
+      final Avatar created = await _repo.createAvatar(
+        uploadId: uploadId,
+        name: name,
+      );
+      avatars = <Avatar>[...avatars, created];
+      lastError = null;
+      _changed();
+      return created;
+    } on ShiftApiException catch (error) {
+      lastError = error;
+      _changed();
+      return null;
+    }
+  }
+
+  /// Makes [id] the one shown as the profile picture and on the
+  /// leaderboard, in place of whichever avatar was personal before.
+  Future<bool> makeAvatarPersonal(String id) async {
+    final List<Avatar> before = avatars;
+    avatars = avatars
+        .map((Avatar a) => a.copyWith(personal: a.id == id))
+        .toList();
+    activeAvatarId ??= id;
+    _changed();
+    return _push(
+      () => _repo.makeAvatarPersonal(id),
+      () => avatars = before,
+    );
+  }
+
+  Future<bool> deleteAvatar(String id) async {
+    final List<Avatar> before = avatars;
+    avatars = avatars.where((Avatar a) => a.id != id).toList();
+    if (activeAvatarId == id) activeAvatarId = null;
+    _changed();
+    return _push(() => _repo.deleteAvatar(id), () => avatars = before);
+  }
+
+  /// Which avatar the next Suite message should be generated as. Null
+  /// clears it back to the engine's default.
+  void setActiveAvatar(String? id) {
+    if (activeAvatarId == id) return;
+    activeAvatarId = id;
+    _changed();
+  }
+
   void showJobs(bool value) {
     if (showingJobs == value) return;
     showingJobs = value;
@@ -756,6 +830,7 @@ class AppState extends ChangeNotifier {
         connectors: _snap.connectors,
         weekPool: _snap.weekPool,
         payoutLine: _snap.payoutLine,
+        avatars: _snap.avatars,
       );
     }
   }
@@ -816,8 +891,10 @@ class AppState extends ChangeNotifier {
       agentRuns = <AgentRun>[];
       jobs = <JobRow>[];
       designs = <DesignDoc>[];
+      avatars = <Avatar>[];
       _snap = emptySnapshot();
     }
+    activeAvatarId = null;
     _prefs.remove(StoreKeys.photoAvatar);
     avatar = null;
     await _write();
@@ -877,8 +954,11 @@ class AppState extends ChangeNotifier {
     _reply?.ignore();
     _reply = () async {
       try {
-        final List<ChatMessage> answer =
-            await _repo.send(body, private: privateChat);
+        final List<ChatMessage> answer = await _repo.send(
+          body,
+          private: privateChat,
+          avatarId: activeAvatarId,
+        );
         messages = <ChatMessage>[...messages, ...answer];
         lastError = null;
       } on ShiftApiException catch (error) {

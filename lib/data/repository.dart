@@ -20,6 +20,7 @@ class ShiftSnapshot {
     required this.connectors,
     required this.weekPool,
     required this.payoutLine,
+    required this.avatars,
   });
 
   final Creator creator;
@@ -37,6 +38,9 @@ class ShiftSnapshot {
   final List<Connector> connectors;
   final int weekPool;
   final String payoutLine;
+
+  /// Every avatar this creator has trained, personal one included.
+  final List<Avatar> avatars;
 }
 
 /// An empty snapshot: what a brand new account looks like before it has
@@ -57,6 +61,7 @@ ShiftSnapshot emptySnapshot() => const ShiftSnapshot(
       connectors: <Connector>[],
       weekPool: 0,
       payoutLine: '',
+      avatars: <Avatar>[],
     );
 
 /// What a backend has to be able to do. Every screen in the app reads and
@@ -72,8 +77,14 @@ abstract interface class ShiftRepository {
   Future<ShiftSnapshot> load();
 
   /// Ask for something. The answer is whatever the engine sends back —
-  /// one or more messages, in order.
-  Future<List<ChatMessage>> send(String prompt, {bool private = false});
+  /// one or more messages, in order. [avatarId] names one of this
+  /// creator's own avatars to generate as; omitted, the engine answers in
+  /// whatever voice it answers in by default.
+  Future<List<ChatMessage>> send(
+    String prompt, {
+    bool private = false,
+    String? avatarId,
+  });
 
   /// Rewrite a rough ask into a fuller brief. Returning the text unchanged
   /// is a valid answer for a backend that does not do this.
@@ -83,6 +94,19 @@ abstract interface class ShiftRepository {
   /// Changes the signed-in creator's username. Whether it is taken is the
   /// server's call, reported back as [ShiftApiErrorKind.badRequest].
   Future<Creator> updateHandle(String handle);
+
+  // Avatars ----------------------------------------------------------------
+  /// Starts training a new avatar from an already-[upload]ed photo or
+  /// clip. Comes back `training` — HeyGen does not render synchronously,
+  /// so a later [load] or [refresh] is what learns it finished.
+  Future<Avatar> createAvatar({required String uploadId, required String name});
+
+  /// Makes this the avatar shown as the profile picture and on the
+  /// leaderboard. The server holds "exactly one personal avatar" as an
+  /// invariant; the client only ever asks for a specific one.
+  Future<Avatar> makeAvatarPersonal(String id);
+
+  Future<void> deleteAvatar(String id);
 
   // Vault ----------------------------------------------------------------
   /// Hearts a piece in EcoVault, which is what puts it in the person's own

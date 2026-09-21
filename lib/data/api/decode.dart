@@ -112,6 +112,17 @@ abstract final class Decode {
         kindLabel: json['kindLabel'] as String? ?? 'PAGE',
       );
 
+  static Avatar avatar(Map<String, dynamic> json) => Avatar(
+        id: _require<String>(json, 'id'),
+        name: json['name'] as String? ?? 'Avatar',
+        status: AvatarStatus.values.firstWhere(
+          (AvatarStatus s) => s.name == json['status'],
+          orElse: () => AvatarStatus.training,
+        ),
+        personal: json['personal'] as bool? ?? false,
+        previewUrl: json['previewUrl'] as String?,
+      );
+
   static Connector connector(Map<String, dynamic> json) => Connector(
         _require<String>(json, 'name'),
         live: json['live'] as bool? ?? false,
