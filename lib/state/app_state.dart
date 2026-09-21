@@ -12,6 +12,7 @@ import '../data/repository.dart';
 import '../data/seed.dart';
 import '../data/seed_repository.dart';
 import '../features/settings/connectors.dart';
+import '../features/widgets/widget_sync.dart';
 import '../models/models.dart';
 import '../theme/tokens.dart';
 
@@ -142,6 +143,7 @@ class AppState extends ChangeNotifier {
     } finally {
       refreshing = false;
       _changed();
+      unawaited(WidgetSync.push(this));
     }
   }
 
@@ -237,6 +239,8 @@ class AppState extends ChangeNotifier {
     state.seededDemo = seeded;
     state._auth = backend.auth;
     if (!seeded) state.signedIn = backend.auth.signedIn;
+    unawaited(WidgetSync.configure());
+    unawaited(WidgetSync.push(state));
     return state;
   }
 
@@ -864,6 +868,7 @@ class AppState extends ChangeNotifier {
     activeAvatarId = null;
     await _write();
     _changed();
+    unawaited(WidgetSync.clear());
   }
 
   /// Deletes the account and everything under it. Apple requires this to
