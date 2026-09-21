@@ -67,6 +67,14 @@ cat > index.html <<'HTML'
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="description" content="SHIFT AI — the creator suite: chat, earnings, vault, trophies, notes, agents.">
+  <!--
+    manifest.json's theme_color only reaches Chrome for Android at
+    install time, when it mints the WebAPK — it does not get re-read on
+    every load. A live theme-color meta tag is what recent Chrome
+    actually reads in real time for system chrome around the page, so it
+    is worth carrying here too even though the values agree.
+  -->
+  <meta name="theme-color" content="#0A0A0F">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <meta name="apple-mobile-web-app-title" content="SHIFT AI">
