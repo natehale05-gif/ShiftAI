@@ -504,7 +504,7 @@ class _AccountRow extends StatelessWidget {
         child: Row(
           children: <Widget>[
             ShiftAvatar(
-              photo: state.avatar,
+              previewUrl: state.personalAvatar?.previewUrl,
               initials: state.creator.initials,
             ),
             const SizedBox(width: Space.x3),

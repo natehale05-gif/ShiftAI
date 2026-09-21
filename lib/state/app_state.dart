@@ -11,7 +11,6 @@ import '../data/backend.dart';
 import '../data/repository.dart';
 import '../data/seed.dart';
 import '../data/seed_repository.dart';
-import '../features/settings/avatar.dart';
 import '../features/settings/connectors.dart';
 import '../models/models.dart';
 import '../theme/tokens.dart';
@@ -23,9 +22,6 @@ abstract final class StoreKeys {
   /// Whole app state blob: theme, active tab, earnings ledger, trophies,
   /// vault items, notes.
   static const String app = 'shift.app.v1';
-
-  /// The avatar photo and its framing.
-  static const String photoAvatar = 'shift.photoAvatar';
 
   /// Image picker scratch.
   static const String pickImage = 'shift-pick-image';
@@ -56,7 +52,6 @@ class AppState extends ChangeNotifier {
     if (!isEnabled(mode.feature)) mode = ShiftMode.suite;
     signedIn = blob['signedIn'] as bool? ?? true;
     _backendBaseUrl = _prefs.getString(StoreKeys.backend);
-    avatar = _readAvatar();
 
     // What the repository answered is the truth; the stored blob is a
     // local cache on top of it, so that a reload with no network still
@@ -307,11 +302,6 @@ class AppState extends ChangeNotifier {
   VaultScope vaultScope = VaultScope.mine;
   String? selectedVaultId;
 
-  /// The photo avatar, once one has been set. Null means initials. It
-  /// lives in its own key: a picture is far bigger than the rest of the
-  /// state and should not be rewritten on every unrelated change.
-  AvatarPhoto? avatar;
-
   String? _backendBaseUrl;
 
   String? get backendBaseUrl => _backendBaseUrl;
@@ -456,29 +446,6 @@ class AppState extends ChangeNotifier {
   void toggleSidebar() {
     sidebarCollapsed = !sidebarCollapsed;
     _changed();
-  }
-
-  /// Save the avatar photo and its framing, or clear it by passing null.
-  /// This one writes straight through: a picture is worth not losing to a
-  /// reload landing inside the debounce window.
-  void setAvatar(AvatarPhoto? photo) {
-    avatar = photo;
-    if (photo == null) {
-      _prefs.remove(StoreKeys.photoAvatar);
-    } else {
-      _prefs.setString(StoreKeys.photoAvatar, jsonEncode(photo.toJson()));
-    }
-    notifyListeners();
-  }
-
-  AvatarPhoto? _readAvatar() {
-    final String? raw = _prefs.getString(StoreKeys.photoAvatar);
-    if (raw == null || raw.isEmpty) return null;
-    try {
-      return AvatarPhoto.fromJson(jsonDecode(raw));
-    } on FormatException {
-      return null;
-    }
   }
 
   void setVaultScope(VaultScope scope) {
@@ -895,8 +862,6 @@ class AppState extends ChangeNotifier {
       _snap = emptySnapshot();
     }
     activeAvatarId = null;
-    _prefs.remove(StoreKeys.photoAvatar);
-    avatar = null;
     await _write();
     _changed();
   }

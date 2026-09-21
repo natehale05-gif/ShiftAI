@@ -187,8 +187,10 @@ class _ClockRowState extends State<_ClockRow> {
   }
 }
 
-/// A creator's face is not on the device, so the mark is their initials on
-/// a tier-coloured ring rather than a stand-in photograph.
+/// A stranger's face is not worth fetching, so every row but your own goes
+/// by initials on a tier-coloured ring. Your own row can carry
+/// [StandingRow.avatarUrl] — your personal avatar, hosted by the server —
+/// and that is worth drawing.
 class _Face extends StatelessWidget {
   const _Face({required this.row, required this.size});
 
@@ -199,18 +201,40 @@ class _Face extends StatelessWidget {
   Widget build(BuildContext context) {
     final ShiftColors c = ShiftColors.of(context);
     final Color ring = row.tier?.colorOn(c) ?? c.border;
+    final String? url = row.avatarUrl;
+
+    Widget initials() => Container(
+          width: size,
+          height: size,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: c.surfaceRaised,
+            shape: BoxShape.circle,
+            border: Border.all(color: ring, width: size >= 56 ? 2 : 1),
+          ),
+          child: Text(
+            row.initials,
+            style: ShiftType.mono(c.textMuted, size: size >= 56 ? 16 : 12),
+          ),
+        );
+
+    if (url == null || url.isEmpty) return initials();
+
     return Container(
       width: size,
       height: size,
-      alignment: Alignment.center,
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        color: c.surfaceRaised,
         shape: BoxShape.circle,
         border: Border.all(color: ring, width: size >= 56 ? 2 : 1),
       ),
-      child: Text(
-        row.initials,
-        style: ShiftType.mono(c.textMuted, size: size >= 56 ? 16 : 12),
+      child: Image.network(
+        url,
+        fit: BoxFit.cover,
+        width: size,
+        height: size,
+        errorBuilder: (BuildContext context, Object _, StackTrace? __) =>
+            initials(),
       ),
     );
   }

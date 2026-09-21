@@ -83,6 +83,7 @@ class _SuiteSurfaceState extends State<SuiteSurface> {
                   ),
                 ),
         ),
+        const _AvatarPicker(),
         PillComposer(
           hint: state.privateChat
               ? 'Private chat — nothing here is saved'
@@ -91,6 +92,68 @@ class _SuiteSurfaceState extends State<SuiteSurface> {
           onSend: state.sendMessage,
         ),
       ],
+    );
+  }
+}
+
+/// Which of your ready avatars, if any, the next ask should be generated
+/// as. Nothing here at all until you have at least one — a picker with
+/// one disabled-looking option is worse than no picker.
+class _AvatarPicker extends StatelessWidget {
+  const _AvatarPicker();
+
+  @override
+  Widget build(BuildContext context) {
+    final AppState state = AppScope.of(context);
+    final ShiftColors c = ShiftColors.of(context);
+    final List<Avatar> ready =
+        state.avatars.where((Avatar a) => a.ready).toList();
+    if (ready.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(Space.x5, 0, Space.x5, Space.x2),
+      child: SizedBox(
+        height: 36,
+        child: ListView.separated(
+          scrollDirection: Axis.horizontal,
+          itemCount: ready.length,
+          separatorBuilder: (_, __) => const SizedBox(width: Space.x2),
+          itemBuilder: (BuildContext context, int index) {
+            final Avatar avatar = ready[index];
+            final bool selected = state.activeAvatarId == avatar.id;
+            final String? previewUrl = avatar.previewUrl;
+            return ChoiceChip(
+              avatar: Container(
+                width: 20,
+                height: 20,
+                alignment: Alignment.center,
+                clipBehavior: Clip.antiAlias,
+                decoration: const BoxDecoration(shape: BoxShape.circle),
+                child: previewUrl == null
+                    ? Icon(Icons.face_rounded, size: 14, color: c.textMuted)
+                    : Image.network(
+                        previewUrl,
+                        fit: BoxFit.cover,
+                        width: 20,
+                        height: 20,
+                        errorBuilder:
+                            (BuildContext context, Object _, StackTrace? __) =>
+                                Icon(Icons.face_rounded,
+                                    size: 14, color: c.textMuted),
+                      ),
+              ),
+              label: Text(avatar.name),
+              labelStyle: ShiftType.labelSm(selected ? c.onAccent : c.text),
+              selected: selected,
+              onSelected: (_) =>
+                  state.setActiveAvatar(selected ? null : avatar.id),
+              selectedColor: c.accent,
+              backgroundColor: c.surfaceRaised,
+              side: BorderSide(color: c.border),
+            );
+          },
+        ),
+      ),
     );
   }
 }

@@ -8,6 +8,7 @@ import 'package:shift_ai/data/backend.dart';
 import 'package:shift_ai/data/repository.dart';
 import 'package:shift_ai/data/seed.dart';
 import 'package:shift_ai/data/seed_repository.dart';
+import 'package:shift_ai/features/settings/connectors.dart';
 import 'package:shift_ai/models/models.dart';
 import 'package:shift_ai/state/app_state.dart';
 
@@ -52,6 +53,56 @@ class _HandleRepo implements ShiftRepository {
     }
     return _other.copyWith(handle: handle);
   }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) =>
+      throw UnimplementedError(invocation.memberName.toString());
+}
+
+/// A repository whose avatar writes always refuse, to exercise rollback.
+class _RefusingAvatarRepo implements ShiftRepository {
+  @override
+  Future<ShiftSnapshot> load() async => ShiftSnapshot(
+        creator: Seed.creator,
+        standings: <StandingRow>[],
+        trophies: <Trophy>[],
+        vault: <VaultItem>[],
+        ecoVault: <VaultItem>[],
+        notes: <Note>[],
+        agentRuns: <AgentRun>[],
+        jobs: <JobRow>[],
+        designs: <DesignDoc>[],
+        connectors: <Connector>[],
+        weekPool: 0,
+        payoutLine: '',
+        avatars: List<Avatar>.of(Seed.avatars),
+      );
+
+  static Never _refuse() => throw const ShiftApiException(
+        ShiftApiErrorKind.badRequest,
+        'Refused.',
+      );
+
+  @override
+  Future<Avatar> createAvatar({
+    required String uploadId,
+    required String name,
+  }) async =>
+      _refuse();
+
+  @override
+  Future<Avatar> makeAvatarPersonal(String id) async => _refuse();
+
+  @override
+  Future<void> deleteAvatar(String id) async => _refuse();
+
+  @override
+  Future<String> upload({
+    required String fileName,
+    required String mimeType,
+    required List<int> bytes,
+  }) async =>
+      'u1';
 
   @override
   dynamic noSuchMethod(Invocation invocation) =>
@@ -336,6 +387,78 @@ void main() {
       // The keychain-backed session carries it, so a restart still shows
       // it — not just the screen that made the change.
       expect((await store.read())!.creator.handle, 'newhandle');
+    });
+  });
+
+  group('avatars', () {
+    test('the personal avatar is the one flagged personal', () async {
+      final AppState state =
+          await _server(repo: SeedRepository(replyDelay: Duration.zero), signedIn: true);
+      expect(state.personalAvatar?.id, 'av-1');
+      expect(state.personalAvatar?.status, AvatarStatus.ready);
+    });
+
+    test('creating one waits for the engine\'s id, same as a note', () async {
+      final AppState state =
+          await _server(repo: SeedRepository(replyDelay: Duration.zero), signedIn: true);
+      final int before = state.avatars.length;
+
+      final Avatar? created =
+          await state.createAvatar(<int>[1, 2, 3], name: 'New face');
+      expect(created, isNotNull);
+      expect(created!.status, AvatarStatus.training);
+      expect(state.avatars.length, before + 1);
+      expect(state.avatars.last.id, created.id);
+    });
+
+    test('a refused creation reports why and adds nothing', () async {
+      final AppState state = await _server(repo: _RefusingAvatarRepo(), signedIn: true);
+      final int before = state.avatars.length;
+
+      final Avatar? created =
+          await state.createAvatar(<int>[1, 2, 3], name: 'New face');
+      expect(created, isNull);
+      expect(state.avatars.length, before);
+      expect(state.lastError?.message, 'Refused.');
+    });
+
+    test('making one personal demotes whichever one was', () async {
+      final AppState state =
+          await _server(repo: SeedRepository(replyDelay: Duration.zero), signedIn: true);
+      final String wasPersonal = state.personalAvatar!.id;
+      final Avatar toPromote =
+          state.avatars.firstWhere((Avatar a) => a.id != wasPersonal);
+
+      expect(await state.makeAvatarPersonal(toPromote.id), isTrue);
+      expect(state.personalAvatar?.id, toPromote.id);
+      expect(
+        state.avatars.firstWhere((Avatar a) => a.id == wasPersonal).personal,
+        isFalse,
+      );
+    });
+
+    test('a refusal rolls the personal flag back', () async {
+      final AppState state = await _server(repo: _RefusingAvatarRepo(), signedIn: true);
+      final String before = state.personalAvatar!.id;
+      final Avatar other =
+          state.avatars.firstWhere((Avatar a) => a.id != before);
+
+      expect(await state.makeAvatarPersonal(other.id), isFalse);
+      expect(state.personalAvatar?.id, before);
+      expect(state.lastError?.message, 'Refused.');
+    });
+
+    test('deleting one is optimistic and rolls back on refusal', () async {
+      final AppState ok =
+          await _server(repo: SeedRepository(replyDelay: Duration.zero), signedIn: true);
+      final String id = ok.avatars.first.id;
+      expect(await ok.deleteAvatar(id), isTrue);
+      expect(ok.avatars.any((Avatar a) => a.id == id), isFalse);
+
+      final AppState refused = await _server(repo: _RefusingAvatarRepo(), signedIn: true);
+      final List<Avatar> before = refused.avatars;
+      expect(await refused.deleteAvatar(before.first.id), isFalse);
+      expect(refused.avatars.length, before.length);
     });
   });
 }
