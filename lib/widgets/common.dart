@@ -471,6 +471,7 @@ class PillComposer extends StatefulWidget {
     required this.hint,
     this.onSend,
     this.showSparkle = false,
+    this.showAvatarPicker = false,
     this.width = 950,
     super.key,
   });
@@ -480,6 +481,12 @@ class PillComposer extends StatefulWidget {
 
   /// Suite's composer carries the make-something mark; the others do not.
   final bool showSparkle;
+
+  /// Suite only — which avatar the next ask should be generated as. A
+  /// button rather than a row of chips sitting above the bar every time:
+  /// nothing to look at until it is opened, one popup instead of a strip
+  /// that ate space whether or not anyone was choosing anything.
+  final bool showAvatarPicker;
   final double width;
 
   @override
@@ -582,9 +589,28 @@ class _PillComposerState extends State<PillComposer> {
     _focus.requestFocus();
   }
 
+  /// Opens the avatar sheet and applies whatever gets tapped. Closing it
+  /// without tapping anything leaves the current choice alone.
+  void _pickAvatar(AppState state) {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (BuildContext sheetContext) =>
+          _AvatarSheet(state: state, onPicked: Navigator.of(sheetContext).pop),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final ShiftColors c = ShiftColors.of(context);
+    final AppState state = AppScope.of(context);
+    final Avatar? active = widget.showAvatarPicker
+        ? state.avatars
+            .where((Avatar a) => a.id == state.activeAvatarId)
+            .firstOrNull
+        : null;
+    final bool showAvatarButton =
+        widget.showAvatarPicker && state.avatars.any((Avatar a) => a.ready);
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(
@@ -679,6 +705,18 @@ class _PillComposerState extends State<PillComposer> {
                         ),
                       ),
                     ),
+                    if (showAvatarButton)
+                      IconButton(
+                        tooltip: active == null
+                            ? 'Choose an avatar to generate as'
+                            : 'Generating as ${active.name}',
+                        onPressed: () => _pickAvatar(state),
+                        icon: _AvatarGlyph(avatar: active, size: 22),
+                        style: IconButton.styleFrom(
+                          minimumSize:
+                              const Size(_controlSize, _controlSize),
+                        ),
+                      ),
                     if (widget.showSparkle)
                       IconButton(
                         tooltip: 'Polish my prompt',
@@ -736,6 +774,123 @@ class _PillComposerState extends State<PillComposer> {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// The composer button's own face: the active avatar's preview, ringed in
+/// the accent so it reads as "on" rather than just another icon, or a
+/// plain outline face when generating in the engine's own default voice.
+class _AvatarGlyph extends StatelessWidget {
+  const _AvatarGlyph({required this.avatar, required this.size});
+
+  final Avatar? avatar;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final ShiftColors c = ShiftColors.of(context);
+    if (avatar == null) {
+      return Icon(Icons.face_outlined, size: size, color: c.textMuted);
+    }
+    final String? previewUrl = avatar!.previewUrl;
+    Widget face() =>
+        Icon(Icons.face_rounded, size: size - 4, color: c.onAccent);
+    return Container(
+      width: size,
+      height: size,
+      alignment: Alignment.center,
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: c.accent)),
+      child: previewUrl == null
+          ? face()
+          : Image.network(
+              previewUrl,
+              fit: BoxFit.cover,
+              width: size,
+              height: size,
+              errorBuilder: (BuildContext context, Object _, StackTrace? __) =>
+                  face(),
+            ),
+    );
+  }
+}
+
+/// What tapping the composer's avatar button opens: this ask's default
+/// voice, plus every avatar that has finished training. Training ones are
+/// not offered — sending as one that is not ready is what `docs/API.md`
+/// calls a `badRequest`, and a picker should not offer choices the engine
+/// would refuse.
+class _AvatarSheet extends StatelessWidget {
+  const _AvatarSheet({required this.state, required this.onPicked});
+
+  final AppState state;
+  final VoidCallback onPicked;
+
+  @override
+  Widget build(BuildContext context) {
+    final ShiftColors c = ShiftColors.of(context);
+    final List<Avatar> ready =
+        state.avatars.where((Avatar a) => a.ready).toList();
+
+    void choose(String? id) {
+      state.setActiveAvatar(id);
+      onPicked();
+    }
+
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: Space.x4),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: Space.x5),
+              child: Text('Generate as', style: ShiftType.labelSm(c.textMuted)),
+            ),
+            const SizedBox(height: Space.x2),
+            _AvatarOption(
+              name: 'Default voice',
+              selected: state.activeAvatarId == null,
+              onTap: () => choose(null),
+            ),
+            for (final Avatar avatar in ready)
+              _AvatarOption(
+                avatar: avatar,
+                name: avatar.name,
+                selected: state.activeAvatarId == avatar.id,
+                onTap: () => choose(avatar.id),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AvatarOption extends StatelessWidget {
+  const _AvatarOption({
+    required this.name,
+    required this.selected,
+    required this.onTap,
+    this.avatar,
+  });
+
+  final Avatar? avatar;
+  final String name;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final ShiftColors c = ShiftColors.of(context);
+    return ListTile(
+      leading: _AvatarGlyph(avatar: avatar, size: 32),
+      title: Text(name, style: ShiftType.body(c.text)),
+      trailing:
+          selected ? Icon(Icons.check_rounded, color: c.accent) : null,
+      onTap: onTap,
     );
   }
 }
