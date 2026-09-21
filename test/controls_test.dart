@@ -10,12 +10,17 @@ import 'package:shift_ai/models/models.dart';
 import 'package:shift_ai/data/auth/token_store.dart';
 import 'package:shift_ai/state/app_state.dart';
 
-/// The rings sheet opens on its own the moment `ShiftShell` mounts — see
+/// The rings screen opens on its own the moment `ShiftShell` mounts — see
 /// `ShiftShell._showRings` — so a test that then taps something underneath
-/// dismisses it first, the same way a person would.
+/// closes it first, the same way a person would. Settling first is what
+/// actually lets the pushed route finish building — the push is requested
+/// from a post-frame callback, so it needs a frame of its own before its
+/// close button exists to find.
 Future<void> _dismissRingsSheet(WidgetTester tester) async {
-  if (find.byType(BottomSheet).evaluate().isEmpty) return;
-  await tester.tapAt(const Offset(5, 5));
+  await tester.pumpAndSettle();
+  final Finder close = find.byTooltip('Close');
+  if (close.evaluate().isEmpty) return;
+  await tester.tap(close.first);
   await tester.pumpAndSettle();
 }
 

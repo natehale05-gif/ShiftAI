@@ -14,9 +14,9 @@ import '../../theme/type.dart';
 /// `_closeRing` calls in `AppState`), never something to check a box on by
 /// hand.
 ///
-/// Lives in the Suite app bar rather than a full-width card above the
-/// composer: a glance at the glyph is enough most of the time, and the
-/// breakdown is one tap away in a sheet rather than permanently on screen.
+/// Lives in the Suite app bar: a glance at the glyph is enough most of the
+/// time, and the full breakdown is one tap away — the same fullscreen page
+/// the app opens with, see [showDailyRingsFullScreen].
 class DailyRingsButton extends StatelessWidget {
   const DailyRingsButton({super.key});
 
@@ -30,7 +30,7 @@ class DailyRingsButton extends StatelessWidget {
       tooltip: rings.allClosed
           ? 'All three closed today'
           : '${rings.closedCount} of 3 closed today',
-      onPressed: () => showDailyRingsSheet(context),
+      onPressed: () => showDailyRingsFullScreen(context),
       icon: SizedBox(
         width: 26,
         height: 26,
@@ -50,20 +50,22 @@ class DailyRingsButton extends StatelessWidget {
   }
 }
 
-/// Opens today's rings in a sheet. Shared by [DailyRingsButton] and by the
+/// Opens today's rings full screen. Shared by [DailyRingsButton] and by the
 /// app opening or coming back from the background — see
 /// `ShiftShell._showRings` — so tapping the glyph and reopening the app
-/// land on the exact same thing.
-Future<void> showDailyRingsSheet(BuildContext context) {
-  return showModalBottomSheet<void>(
-    context: context,
-    showDragHandle: true,
-    builder: (BuildContext sheetContext) => const _RingsSheet(),
+/// land on the exact same thing: this is what "open with the rings" means,
+/// not a sheet that leaves the rest of the screen showing underneath.
+Future<void> showDailyRingsFullScreen(BuildContext context) {
+  return Navigator.of(context).push<void>(
+    MaterialPageRoute<void>(
+      fullscreenDialog: true,
+      builder: (BuildContext routeContext) => const _RingsScreen(),
+    ),
   );
 }
 
-class _RingsSheet extends StatelessWidget {
-  const _RingsSheet();
+class _RingsScreen extends StatelessWidget {
+  const _RingsScreen();
 
   @override
   Widget build(BuildContext context) {
@@ -71,22 +73,30 @@ class _RingsSheet extends StatelessWidget {
     final ShiftColors c = ShiftColors.of(context);
     final DailyRings rings = state.rings;
 
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(Space.x5, 0, Space.x5, Space.x5),
-        // A short window (a phone in landscape, a small test surface) can
-        // leave less height than this content wants; scrolling is the
-        // fallback rather than an overflow banner nobody asked to see.
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Row(
+    return Scaffold(
+      backgroundColor: c.bg,
+      appBar: AppBar(
+        backgroundColor: c.bg,
+        elevation: 0,
+        leading: IconButton(
+          tooltip: 'Close',
+          icon: Icon(Icons.close_rounded, color: c.text),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+      ),
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: Space.x5),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 420),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: <Widget>[
                   SizedBox(
-                    width: 48,
-                    height: 48,
+                    width: 140,
+                    height: 140,
                     child: CustomPaint(
                       painter: _RingsPainter(
                         track: c.border,
@@ -98,59 +108,53 @@ class _RingsSheet extends StatelessWidget {
                       ),
                     ),
                   ),
-                  const SizedBox(width: Space.x4),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                  const SizedBox(height: Space.x6),
+                  Text(
+                    rings.allClosed
+                        ? 'All three closed today'
+                        : '${rings.closedCount} of 3 closed today',
+                    textAlign: TextAlign.center,
+                    style: ShiftType.heading(c.text),
+                  ),
+                  if (rings.streak > 0) ...<Widget>[
+                    const SizedBox(height: Space.x2),
+                    Row(
                       mainAxisSize: MainAxisSize.min,
+                      mainAxisAlignment: MainAxisAlignment.center,
                       children: <Widget>[
+                        Icon(Icons.local_fire_department_rounded,
+                            size: 18, color: c.warning),
+                        const SizedBox(width: 4),
                         Text(
-                          rings.allClosed
-                              ? 'All three closed today'
-                              : '${rings.closedCount} of 3 closed today',
-                          style: ShiftType.bodyStrong(c.text),
+                          '${rings.streak} day streak',
+                          style: ShiftType.body(c.warning),
                         ),
-                        if (rings.streak > 0) ...<Widget>[
-                          const SizedBox(height: 2),
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: <Widget>[
-                              Icon(Icons.local_fire_department_rounded,
-                                  size: 16, color: c.warning),
-                              const SizedBox(width: 2),
-                              Text(
-                                '${rings.streak} day streak',
-                                style: ShiftType.bodySm(c.warning),
-                              ),
-                            ],
-                          ),
-                        ],
                       ],
                     ),
+                  ],
+                  const SizedBox(height: Space.x7),
+                  _RingRow(
+                    label: 'Create',
+                    detail: 'Made something today',
+                    closed: rings.create,
+                    color: c.danger,
+                  ),
+                  _RingRow(
+                    label: 'Publish',
+                    detail: 'Published or hearted a piece',
+                    closed: rings.publish,
+                    color: c.success,
+                  ),
+                  _RingRow(
+                    label: 'Compete',
+                    detail: 'Checked where you stand — harder to '
+                        'close the higher you are placed',
+                    closed: rings.compete,
+                    color: c.sky,
                   ),
                 ],
               ),
-              const SizedBox(height: Space.x5),
-              _RingRow(
-                label: 'Create',
-                detail: 'Made something today',
-                closed: rings.create,
-                color: c.danger,
-              ),
-              _RingRow(
-                label: 'Publish',
-                detail: 'Published or hearted a piece',
-                closed: rings.publish,
-                color: c.success,
-              ),
-              _RingRow(
-                label: 'Compete',
-                detail: 'Checked where you stand — harder to '
-                    'close the higher you are placed',
-                closed: rings.compete,
-                color: c.sky,
-              ),
-            ],
+            ),
           ),
         ),
       ),

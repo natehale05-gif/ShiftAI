@@ -64,7 +64,7 @@ class _ShiftShellState extends State<ShiftShell> with WidgetsBindingObserver {
   }
 
   void _showRings() {
-    if (mounted) showDailyRingsSheet(context);
+    if (mounted) showDailyRingsFullScreen(context);
   }
 
   @override
