@@ -130,9 +130,6 @@ class ShiftAppBar extends StatelessWidget {
     // that it would run under the wordmark, which is worse than no title.
     const double logoHalfWidth = 82.4;
     final double roomForTitle = screenWidth / 2 - logoHalfWidth - Space.x4 - 52;
-    final bool chatScreen = state.surface == Surface.suite ||
-        state.surface == Surface.earnings ||
-        state.surface == Surface.trophies;
 
     return SafeArea(
       bottom: false,
@@ -172,7 +169,7 @@ class ShiftAppBar extends StatelessWidget {
                     ),
                   ),
                 const Spacer(),
-                if (chatScreen)
+                if (state.surface == Surface.suite)
                   IconButton(
                     tooltip: state.privateChat
                         ? 'Turn off private chat'
@@ -507,7 +504,7 @@ class _AccountRow extends StatelessWidget {
         child: Row(
           children: <Widget>[
             ShiftAvatar(
-              photo: state.avatar,
+              previewUrl: state.personalAvatar?.previewUrl,
               initials: state.creator.initials,
             ),
             const SizedBox(width: Space.x3),

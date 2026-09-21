@@ -1,10 +1,9 @@
-import 'dart:math' as math;
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../app/modes.dart';
 import '../../app/shell.dart';
+import '../../models/models.dart';
 import '../../state/app_state.dart';
 import '../../theme/tokens.dart';
 import '../../theme/type.dart';
@@ -38,7 +37,7 @@ class SettingsSurface extends StatelessWidget {
                 SizedBox(height: Space.x4),
                 _FeaturesCard(),
                 SizedBox(height: Space.x4),
-                _AvatarCard(),
+                _AvatarsCard(),
                 SizedBox(height: Space.x4),
                 _ConnectionsCard(),
                 SizedBox(height: Space.x4),
@@ -496,51 +495,286 @@ class _ConnectorRow extends StatelessWidget {
 /// Your avatar: a photo of you, framed. Pick a picture, drag it to place
 /// and zoom until it sits right in the circle, then save. The photo is kept
 /// with the framing, so it can be re-framed later without picking again.
-class _AvatarCard extends StatefulWidget {
-  const _AvatarCard();
+/// The gallery: every avatar this creator has trained, the personal one
+/// picked out, and a way to start a new one.
+class _AvatarsCard extends StatefulWidget {
+  const _AvatarsCard();
 
   @override
-  State<_AvatarCard> createState() => _AvatarCardState();
+  State<_AvatarsCard> createState() => _AvatarsCardState();
 }
 
-class _AvatarCardState extends State<_AvatarCard> {
-  static const double _preview = 200;
-
-  AvatarPhoto? _draft;
-  AvatarPhoto? _saved;
-  bool _loading = false;
+class _AvatarsCardState extends State<_AvatarsCard> {
+  bool _creating = false;
 
   @override
-  void initState() {
-    super.initState();
-    _saved = AppScope.read(context).avatar;
-    _draft = _saved;
+  Widget build(BuildContext context) {
+    final AppState state = AppScope.of(context);
+    final ShiftColors c = ShiftColors.of(context);
+    final List<Avatar> avatars = state.avatars;
+
+    return ShiftCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          const Eyebrow('Your avatars'),
+          const SizedBox(height: Space.x2),
+          Text(
+            'An animated likeness you can use as your profile picture, on '
+            'the leaderboard, and to generate with in the Suite.',
+            style: ShiftType.caption(c.textMuted),
+          ),
+          const SizedBox(height: Space.x4),
+          if (avatars.isEmpty)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: Space.x5),
+              decoration: BoxDecoration(
+                color: c.surfaceRaised,
+                borderRadius: Radii.mdAll,
+              ),
+              child: Column(
+                children: <Widget>[
+                  Icon(
+                    Icons.person_outline_rounded,
+                    size: 28,
+                    color: c.textMuted,
+                  ),
+                  const SizedBox(height: Space.x2),
+                  Text('No avatars yet', style: ShiftType.bodySm(c.textMuted)),
+                ],
+              ),
+            )
+          else
+            Wrap(
+              spacing: Space.x3,
+              runSpacing: Space.x3,
+              children:
+                  avatars.map((Avatar a) => _AvatarTile(avatar: a)).toList(),
+            ),
+          const SizedBox(height: Space.x4),
+          if (_creating)
+            _CreateAvatarFlow(onDone: () => setState(() => _creating = false))
+          else
+            OutlinedButton.icon(
+              onPressed: () => setState(() => _creating = true),
+              icon: const Icon(Icons.add_rounded, size: 18),
+              label: const Text('Create an avatar'),
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size(0, 48),
+                foregroundColor: c.text,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AvatarTile extends StatelessWidget {
+  const _AvatarTile({required this.avatar});
+
+  final Avatar avatar;
+
+  Future<void> _makePersonal(BuildContext context) async {
+    final AppState state = AppScope.read(context);
+    final ScaffoldMessengerState bar = ScaffoldMessenger.of(context);
+    if (!await state.makeAvatarPersonal(avatar.id)) {
+      bar.showSnackBar(
+        SnackBar(
+          content:
+              Text(state.lastError?.message ?? 'Could not make it personal.'),
+        ),
+      );
+    }
   }
 
-  bool get _dirty {
-    final AvatarPhoto? draft = _draft;
-    if (draft == null) return false;
-    final AvatarPhoto? saved = _saved;
-    if (saved == null) return true;
-    return !identical(saved.bytes, draft.bytes) ||
-        saved.zoom != draft.zoom ||
-        saved.offsetX != draft.offsetX ||
-        saved.offsetY != draft.offsetY;
+  @override
+  Widget build(BuildContext context) {
+    final ShiftColors c = ShiftColors.of(context);
+
+    return Container(
+      width: 148,
+      padding: const EdgeInsets.all(Space.x3),
+      decoration: BoxDecoration(
+        color: c.surfaceRaised,
+        borderRadius: Radii.mdAll,
+        border: avatar.personal ? Border.all(color: c.accent) : null,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          Center(
+            child: Container(
+              width: 64,
+              height: 64,
+              alignment: Alignment.center,
+              clipBehavior: Clip.antiAlias,
+              decoration:
+                  BoxDecoration(shape: BoxShape.circle, color: c.surface),
+              child: switch (avatar.status) {
+                AvatarStatus.ready when avatar.previewUrl != null =>
+                  Image.network(
+                    avatar.previewUrl!,
+                    fit: BoxFit.cover,
+                    width: 64,
+                    height: 64,
+                    errorBuilder:
+                        (BuildContext context, Object _, StackTrace? __) =>
+                            Icon(Icons.person_outline_rounded,
+                                color: c.textMuted),
+                  ),
+                AvatarStatus.failed =>
+                  Icon(Icons.error_outline_rounded, color: c.danger),
+                _ => SizedBox.square(
+                    dimension: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(c.accent),
+                    ),
+                  ),
+              },
+            ),
+          ),
+          const SizedBox(height: Space.x2),
+          Text(
+            avatar.name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: ShiftType.bodySm(c.text),
+          ),
+          const SizedBox(height: Space.x1),
+          Text(
+            avatar.personal
+                ? 'PERSONAL'
+                : switch (avatar.status) {
+                    AvatarStatus.training => 'TRAINING…',
+                    AvatarStatus.failed => 'FAILED',
+                    AvatarStatus.ready => 'READY',
+                  },
+            textAlign: TextAlign.center,
+            style:
+                ShiftType.labelSm(avatar.personal ? c.accent : c.textMuted),
+          ),
+          const SizedBox(height: Space.x2),
+          if (!avatar.personal && avatar.ready)
+            Center(
+              child: TextButton(
+                onPressed: () => _makePersonal(context),
+                style: TextButton.styleFrom(
+                  padding: EdgeInsets.zero,
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child:
+                    Text('MAKE PERSONAL', style: ShiftType.labelSm(c.accent)),
+              ),
+            ),
+          Align(
+            alignment: Alignment.centerRight,
+            child: IconButton(
+              tooltip: 'Delete',
+              onPressed: () => _confirmDeleteAvatar(context, avatar),
+              icon: Icon(
+                Icons.delete_outline_rounded,
+                size: 18,
+                color: c.danger,
+              ),
+              style: IconButton.styleFrom(
+                minimumSize: const Size(32, 32),
+                padding: EdgeInsets.zero,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+Future<void> _confirmDeleteAvatar(BuildContext context, Avatar avatar) async {
+  final AppState state = AppScope.read(context);
+  final bool? yes = await showDialog<bool>(
+    context: context,
+    builder: (BuildContext context) {
+      final ShiftColors c = ShiftColors.of(context);
+      return AlertDialog(
+        backgroundColor: c.surface,
+        shape: const RoundedRectangleBorder(borderRadius: Radii.lgAll),
+        title: Text('Delete this avatar?', style: ShiftType.subheading(c.text)),
+        content: Text(
+          avatar.personal
+              ? '"${avatar.name}" goes for good, and your profile picture '
+                  'and leaderboard face fall back to initials.'
+              : '"${avatar.name}" goes for good.',
+          style: ShiftType.bodySm(c.textMuted),
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: c.danger,
+              foregroundColor: c.onStatus,
+            ),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('DELETE'),
+          ),
+        ],
+      );
+    },
+  );
+  if (!(yes ?? false) || !context.mounted) return;
+  final ScaffoldMessengerState bar = ScaffoldMessenger.of(context);
+  if (!await state.deleteAvatar(avatar.id)) {
+    bar.showSnackBar(
+      SnackBar(content: Text(state.lastError?.message ?? 'Could not delete it.')),
+    );
+  }
+}
+
+/// Choose a photo or clip, name it, and hand it to the engine to train.
+/// There is nothing to preview here beyond the picture itself — the
+/// training happens server-side, so nothing this dialog could show would
+/// be the real thing.
+class _CreateAvatarFlow extends StatefulWidget {
+  const _CreateAvatarFlow({required this.onDone});
+
+  final VoidCallback onDone;
+
+  @override
+  State<_CreateAvatarFlow> createState() => _CreateAvatarFlowState();
+}
+
+class _CreateAvatarFlowState extends State<_CreateAvatarFlow> {
+  final TextEditingController _name = TextEditingController();
+  Uint8List? _bytes;
+  String _fileName = 'avatar.png';
+  bool _picking = false;
+  bool _saving = false;
+
+  @override
+  void dispose() {
+    _name.dispose();
+    super.dispose();
   }
 
   Future<void> _choosePhoto() async {
-    setState(() => _loading = true);
+    setState(() => _picking = true);
     final PickedFile? picked = await pickOneImage();
     if (!mounted) return;
     if (picked == null) {
-      setState(() => _loading = false);
+      setState(() => _picking = false);
       return;
     }
 
     final Uint8List? bytes = await prepareAvatarBytes(picked.bytes);
     if (!mounted) return;
     if (bytes == null) {
-      setState(() => _loading = false);
+      setState(() => _picking = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Could not read ${picked.name} as a picture.'),
@@ -549,227 +783,125 @@ class _AvatarCardState extends State<_AvatarCard> {
       return;
     }
 
-    // A new picture starts centred and unzoomed; the framing you had for
-    // the last one would mean nothing here.
     setState(() {
-      _loading = false;
-      _draft = AvatarPhoto(bytes: bytes);
+      _picking = false;
+      _bytes = bytes;
+      _fileName = picked.name;
     });
   }
 
-  /// Dragging moves the picture inside the circle. The offsets are kept as
-  /// a fraction of the diameter so the same framing holds at any size.
-  void _drag(DragUpdateDetails details) {
-    final AvatarPhoto? draft = _draft;
-    if (draft == null) return;
-    // Past this the picture would pull away from the edge of the circle.
-    final double limit = math.max(0, (draft.zoom - 1) / 2);
-    setState(() {
-      _draft = draft.copyWith(
-        offsetX:
-            (draft.offsetX + details.delta.dx / _preview).clamp(-limit, limit),
-        offsetY:
-            (draft.offsetY + details.delta.dy / _preview).clamp(-limit, limit),
+  Future<void> _create() async {
+    final Uint8List? bytes = _bytes;
+    if (bytes == null) return;
+    final AppState state = AppScope.read(context);
+    setState(() => _saving = true);
+    final Avatar? created = await state.createAvatar(
+      bytes,
+      name: _name.text.trim().isEmpty ? 'Avatar' : _name.text.trim(),
+      fileName: _fileName,
+    );
+    if (!mounted) return;
+    if (created == null) {
+      setState(() => _saving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content:
+              Text(state.lastError?.message ?? 'Could not create the avatar.'),
+        ),
       );
-    });
-  }
-
-  void _setZoom(double value) {
-    final AvatarPhoto? draft = _draft;
-    if (draft == null) return;
-    final double limit = math.max(0, (value - 1) / 2);
-    setState(() {
-      _draft = draft.copyWith(
-        zoom: value,
-        offsetX: draft.offsetX.clamp(-limit, limit),
-        offsetY: draft.offsetY.clamp(-limit, limit),
-      );
-    });
+      return;
+    }
+    widget.onDone();
   }
 
   @override
   Widget build(BuildContext context) {
-    final AppState state = AppScope.of(context);
     final ShiftColors c = ShiftColors.of(context);
-    final AvatarPhoto? draft = _draft;
+    final Uint8List? bytes = _bytes;
 
-    final Widget frame = Column(
-      mainAxisSize: MainAxisSize.min,
-      children: <Widget>[
-        GestureDetector(
-          onPanUpdate: draft == null ? null : _drag,
-          child: Container(
-            width: _preview,
-            height: _preview,
-            clipBehavior: Clip.antiAlias,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: c.surfaceRaised,
-              border: Border.all(color: draft == null ? c.border : c.accent),
-            ),
-            child: _loading
-                ? Center(
-                    child: SizedBox.square(
-                      dimension: 24,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(c.accent),
-                      ),
-                    ),
-                  )
-                : draft == null
-                    ? Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: <Widget>[
-                            Icon(
-                              Icons.person_outline_rounded,
-                              size: 34,
-                              color: c.textMuted,
-                            ),
-                            const SizedBox(height: Space.x2),
-                            Text(
-                              'No photo yet',
-                              style: ShiftType.bodySm(c.textMuted),
-                            ),
-                          ],
+    return Container(
+      padding: const EdgeInsets.all(Space.x4),
+      decoration:
+          BoxDecoration(color: c.surfaceRaised, borderRadius: Radii.mdAll),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              Container(
+                width: 56,
+                height: 56,
+                alignment: Alignment.center,
+                clipBehavior: Clip.antiAlias,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: c.surface,
+                  border: Border.all(color: c.border),
+                ),
+                child: _picking
+                    ? SizedBox.square(
+                        dimension: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(c.accent),
                         ),
                       )
-                    : AvatarFrame(photo: draft, diameter: _preview),
-          ),
-        ),
-        const SizedBox(height: Space.x3),
-        Text(
-          draft == null ? 'INITIALS' : 'DRAG TO PLACE',
-          style: ShiftType.labelSm(c.textMuted),
-        ),
-      ],
-    );
-
-    final Widget controls = Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      mainAxisSize: MainAxisSize.min,
-      children: <Widget>[
-        OutlinedButton.icon(
-          onPressed: _loading ? null : _choosePhoto,
-          icon: const Icon(Icons.add_photo_alternate_outlined, size: 18),
-          label: Text(draft == null ? 'Choose a photo' : 'Replace photo'),
-          style: OutlinedButton.styleFrom(
-            minimumSize: const Size(0, 48),
-            foregroundColor: c.text,
-          ),
-        ),
-        const SizedBox(height: Space.x5),
-        const Eyebrow('Zoom'),
-        Row(
-          children: <Widget>[
-            Icon(Icons.image_outlined, size: 16, color: c.textMuted),
-            Expanded(
-              child: Slider(
-                value: draft?.zoom ?? 1,
-                min: 1,
-                max: 3,
-                onChanged: draft == null ? null : _setZoom,
+                    : bytes == null
+                        ? Icon(Icons.person_outline_rounded,
+                            color: c.textMuted)
+                        : Image.memory(bytes,
+                            fit: BoxFit.cover, width: 56, height: 56),
               ),
-            ),
-            Icon(Icons.zoom_in_rounded, size: 20, color: c.textMuted),
-          ],
-        ),
-        const SizedBox(height: Space.x2),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: TextButton.icon(
-            onPressed: draft == null
-                ? null
-                : () => setState(
-                      () => _draft = AvatarPhoto(bytes: draft.bytes),
-                    ),
-            icon: const Icon(Icons.restart_alt_rounded, size: 16),
-            label: const Text('Recentre'),
-            style: TextButton.styleFrom(foregroundColor: c.accent),
+              const SizedBox(width: Space.x3),
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: _picking ? null : _choosePhoto,
+                  child: Text(
+                    bytes == null ? 'Choose a photo or clip' : 'Replace',
+                  ),
+                ),
+              ),
+            ],
           ),
-        ),
-      ],
-    );
-
-    return ShiftCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          const Eyebrow('Your avatar'),
           const SizedBox(height: Space.x4),
-          LayoutBuilder(
-            builder: (BuildContext context, BoxConstraints constraints) {
-              if (constraints.maxWidth < 560) {
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: <Widget>[
-                    Center(child: frame),
-                    const SizedBox(height: Space.x5),
-                    controls,
-                  ],
-                );
-              }
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  SizedBox(width: _preview, child: frame),
-                  const SizedBox(width: Space.x6),
-                  Expanded(child: controls),
-                ],
-              );
-            },
+          TextField(
+            controller: _name,
+            style: ShiftType.bodySm(c.text),
+            decoration: const InputDecoration(labelText: 'Name'),
           ),
-          const SizedBox(height: Space.x5),
+          const SizedBox(height: Space.x2),
+          Text(
+            'HeyGen trains from this — it takes a few minutes, and you can '
+            'keep working while it does.',
+            style: ShiftType.caption(c.textMuted),
+          ),
+          const SizedBox(height: Space.x4),
           Row(
             children: <Widget>[
               Expanded(
                 child: OutlinedButton(
-                  onPressed:
-                      _dirty ? () => setState(() => _draft = _saved) : null,
+                  onPressed: _saving ? null : widget.onDone,
                   child: const Text('Cancel'),
                 ),
               ),
               const SizedBox(width: Space.x3),
               Expanded(
                 child: FilledButton(
-                  onPressed: draft == null || !_dirty
-                      ? null
-                      : () {
-                          state.setAvatar(draft);
-                          setState(() => _saved = draft);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Avatar saved')),
-                          );
-                        },
-                  child: const Text('USE THIS'),
+                  onPressed: bytes == null || _saving ? null : _create,
+                  child: _saving
+                      ? SizedBox.square(
+                          dimension: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              ShiftColors.of(context).onAccent,
+                            ),
+                          ),
+                        )
+                      : const Text('CREATE'),
                 ),
               ),
             ],
-          ),
-          if (_saved != null) ...<Widget>[
-            const SizedBox(height: Space.x3),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: TextButton(
-                onPressed: () {
-                  state.setAvatar(null);
-                  setState(() {
-                    _saved = null;
-                    _draft = null;
-                  });
-                },
-                style: TextButton.styleFrom(foregroundColor: c.danger),
-                child: const Text('Remove photo'),
-              ),
-            ),
-          ],
-          const SizedBox(height: Space.x2),
-          Text(
-            'The photo stays on this device — it is saved with the rest of '
-            'your settings and never uploaded. It shows in the sidebar and '
-            'on your account.',
-            style: ShiftType.caption(c.textMuted),
           ),
         ],
       ),

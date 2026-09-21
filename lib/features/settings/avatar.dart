@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
@@ -8,62 +7,7 @@ import 'package:flutter/material.dart';
 import '../../theme/tokens.dart';
 import '../../theme/type.dart';
 
-/// A photo of you, plus how it is framed in the circle. The photo is kept
-/// whole and the crop is stored beside it, so the framing can be changed
-/// later without asking for the picture again.
-@immutable
-class AvatarPhoto {
-  const AvatarPhoto({
-    required this.bytes,
-    this.zoom = 1,
-    this.offsetX = 0,
-    this.offsetY = 0,
-  });
-
-  /// The picture, already scaled down to avatar size on the way in.
-  final Uint8List bytes;
-
-  /// 1 is "fit the circle"; above that crops in.
-  final double zoom;
-
-  /// Where the picture sits in the circle, as a fraction of its own size,
-  /// so the framing survives being drawn at any diameter.
-  final double offsetX;
-  final double offsetY;
-
-  AvatarPhoto copyWith({double? zoom, double? offsetX, double? offsetY}) =>
-      AvatarPhoto(
-        bytes: bytes,
-        zoom: zoom ?? this.zoom,
-        offsetX: offsetX ?? this.offsetX,
-        offsetY: offsetY ?? this.offsetY,
-      );
-
-  Map<String, dynamic> toJson() => <String, dynamic>{
-        'bytes': base64Encode(bytes),
-        'zoom': zoom,
-        'dx': offsetX,
-        'dy': offsetY,
-      };
-
-  static AvatarPhoto? fromJson(Object? raw) {
-    if (raw is! Map<String, dynamic>) return null;
-    final String? encoded = raw['bytes'] as String?;
-    if (encoded == null || encoded.isEmpty) return null;
-    try {
-      return AvatarPhoto(
-        bytes: base64Decode(encoded),
-        zoom: (raw['zoom'] as num?)?.toDouble() ?? 1,
-        offsetX: (raw['dx'] as num?)?.toDouble() ?? 0,
-        offsetY: (raw['dy'] as num?)?.toDouble() ?? 0,
-      );
-    } on FormatException {
-      return null;
-    }
-  }
-}
-
-/// The longest side a stored avatar photo is allowed. Big enough to stay
+/// The longest side a picked avatar photo is allowed. Big enough to stay
 /// sharp at every size the app draws it, small enough to keep in storage.
 const int kAvatarMaxSide = 512;
 
@@ -105,28 +49,26 @@ Future<Uint8List?> prepareAvatarBytes(Uint8List source) async {
   }
 }
 
-/// The avatar: the photo framed in a circle when there is one, initials
-/// when there is not.
+/// The avatar: the personal HeyGen avatar's preview when there is a
+/// ready one, initials otherwise. The preview is hosted by the server, so
+/// drawing it costs a network image rather than bytes on the device.
 class ShiftAvatar extends StatelessWidget {
   const ShiftAvatar({
-    required this.photo,
     required this.initials,
+    this.previewUrl,
     this.size = 36,
     this.ring = true,
     super.key,
   });
 
-  final AvatarPhoto? photo;
+  /// The personal avatar's preview URL. Null while there is none yet, or
+  /// while the personal one is still training.
+  final String? previewUrl;
   final String initials;
   final double size;
   final bool ring;
 
-  @override
-  Widget build(BuildContext context) {
-    final ShiftColors c = ShiftColors.of(context);
-
-    if (photo == null) {
-      return Container(
+  Widget _initials(ShiftColors c) => Container(
         width: size,
         height: size,
         alignment: Alignment.center,
@@ -141,7 +83,13 @@ class ShiftAvatar extends StatelessWidget {
           style: ShiftType.mono(c.accent, size: size * 0.33),
         ),
       );
-    }
+
+  @override
+  Widget build(BuildContext context) {
+    final ShiftColors c = ShiftColors.of(context);
+    final String? url = previewUrl;
+
+    if (url == null || url.isEmpty) return _initials(c);
 
     return Semantics(
       label: 'Your avatar',
@@ -154,48 +102,23 @@ class ShiftAvatar extends StatelessWidget {
           shape: BoxShape.circle,
           border: ring ? Border.all(color: c.border) : null,
         ),
-        child: AvatarFrame(photo: photo!, diameter: size),
-      ),
-    );
-  }
-}
-
-/// The photo drawn at its saved zoom and position. Used both by the small
-/// avatar and by the editor, so what you frame is exactly what you get.
-class AvatarFrame extends StatelessWidget {
-  const AvatarFrame({
-    required this.photo,
-    required this.diameter,
-    super.key,
-  });
-
-  final AvatarPhoto photo;
-  final double diameter;
-
-  @override
-  Widget build(BuildContext context) {
-    return ClipOval(
-      child: SizedBox(
-        width: diameter,
-        height: diameter,
-        child: Transform.translate(
-          offset: Offset(
-            photo.offsetX * diameter,
-            photo.offsetY * diameter,
-          ),
-          child: Transform.scale(
-            scale: photo.zoom,
-            child: Image.memory(
-              photo.bytes,
-              fit: BoxFit.cover,
-              width: diameter,
-              height: diameter,
-              filterQuality: FilterQuality.medium,
-              gaplessPlayback: true,
-              errorBuilder: (BuildContext context, Object _, StackTrace? __) =>
-                  ColoredBox(color: ShiftColors.of(context).surfaceRaised),
-            ),
-          ),
+        child: Image.network(
+          url,
+          fit: BoxFit.cover,
+          width: size,
+          height: size,
+          filterQuality: FilterQuality.medium,
+          gaplessPlayback: true,
+          // A broken or slow link reads as no avatar yet, not a hole in
+          // the circle.
+          errorBuilder: (BuildContext context, Object _, StackTrace? __) =>
+              _initials(c),
+          loadingBuilder: (
+            BuildContext context,
+            Widget child,
+            ImageChunkEvent? progress,
+          ) =>
+              progress == null ? child : _initials(c),
         ),
       ),
     );

@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -11,7 +10,6 @@ import 'package:shift_ai/models/models.dart';
 import 'package:shift_ai/data/auth/token_store.dart';
 import 'package:shift_ai/state/app_state.dart';
 import 'package:shift_ai/theme/tokens.dart';
-import 'package:shift_ai/features/settings/avatar.dart';
 import 'package:shift_ai/util/file_pick.dart';
 import 'package:shift_ai/util/prompt.dart';
 
@@ -219,6 +217,40 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets(
+      'the avatars gallery shows what the engine has, and creating one '
+      'needs a photo first', (WidgetTester tester) async {
+    final AppState state = await _freshState();
+    await tester.pumpWidget(ShiftApp(state: state));
+    await tester.pump();
+
+    // Not pumpAndSettle: the training tile's spinner never settles. Pump
+    // past the surface-switch fade (180ms) instead, so the old surface's
+    // widgets are actually gone rather than mid-transition. A kick pump
+    // first, then the jump — a single big jump does not reliably run the
+    // AnimatedSwitcher's exit callback that unmounts the old child.
+    state.setSurface(Surface.settings);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.text('Everyday'), findsOneWidget);
+    expect(find.text('PERSONAL'), findsOneWidget);
+    expect(find.text('Studio lighting'), findsOneWidget);
+    expect(find.text('TRAINING…'), findsOneWidget);
+
+    await tester.ensureVisible(find.text('Create an avatar'));
+    await tester.pump();
+    await tester.tap(find.text('Create an avatar'));
+    await tester.pump();
+
+    expect(find.text('Choose a photo or clip'), findsOneWidget);
+    final FilledButton create = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, 'CREATE'),
+    );
+    expect(create.onPressed, isNull, reason: 'nothing to upload yet');
+    expect(tester.takeException(), isNull);
+  });
+
   test('polishing is idempotent and leaves nothing to polish alone', () {
     const String ask = 'write a launch post';
     final String once = Prompt.polish(ask);
@@ -294,40 +326,6 @@ void main() {
     expect(state.lastAsk, 'Cut a 20 second vertical promo');
     state.clearThread();
     expect(state.lastAsk, isNull);
-  });
-
-  test('an avatar photo is kept with its framing and survives a reload',
-      () async {
-    SharedPreferences.setMockInitialValues(<String, Object>{});
-    final AppState state = await AppState.load(tokenStore: MemoryTokenStore());
-    expect(state.avatar, isNull);
-
-    // A one-pixel PNG: enough to check the bytes and the framing round-trip.
-    final Uint8List bytes = base64Decode(
-      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQ'
-      'DwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
-    );
-    final AvatarPhoto photo = AvatarPhoto(
-      bytes: bytes,
-      zoom: 1.8,
-      offsetX: 0.12,
-      offsetY: -0.05,
-    );
-    state.setAvatar(photo);
-
-    final AppState reloaded =
-        await AppState.load(tokenStore: MemoryTokenStore());
-    expect(reloaded.avatar, isNotNull);
-    expect(reloaded.avatar!.bytes, bytes);
-    expect(reloaded.avatar!.zoom, closeTo(1.8, 0.0001));
-    expect(reloaded.avatar!.offsetX, closeTo(0.12, 0.0001));
-    expect(reloaded.avatar!.offsetY, closeTo(-0.05, 0.0001));
-
-    reloaded.setAvatar(null);
-    expect(reloaded.avatar, isNull);
-    final AppState cleared =
-        await AppState.load(tokenStore: MemoryTokenStore());
-    expect(cleared.avatar, isNull);
   });
 
   testWidgets('the composer controls sit on the centre of the pill',

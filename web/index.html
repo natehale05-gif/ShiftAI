@@ -20,6 +20,19 @@
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
   <meta name="description" content="A new Flutter project.">
 
+  <!--
+    The default Flutter web template ships with no viewport meta tag at
+    all. iOS Safari infers a sane one anyway for a page this shape, which
+    is why "Add to Home Screen" already looked right there — but Chrome on
+    Android has no such fallback for an installed standalone PWA, so it
+    was rendering at a default desktop-ish width instead of the device's
+    actual width. This is the fix for that; it is the same tag on both
+    platforms, and matches what iOS Safari was already assuming, so it
+    should not change anything there.
+  -->
+  <meta name="viewport"
+        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
@@ -31,6 +44,20 @@
 
   <title>shift_ai</title>
   <link rel="manifest" href="manifest.json">
+
+  <style>
+    /* Flutter's engine sizes its own canvas absolutely, but on some
+       Android/Chrome combinations an installed standalone PWA still
+       inherits the browser's default body sizing underneath it, leaving
+       a gap at the edge instead of filling the display. html/body having
+       no explicit height is the same class of bug as the viewport tag
+       above — belt and braces for the same symptom. */
+    html, body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+    }
+  </style>
 </head>
 <body>
   <script src="flutter_bootstrap.js" async></script>

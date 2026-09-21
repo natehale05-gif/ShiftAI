@@ -23,7 +23,7 @@ class AccountCard extends StatelessWidget {
         crossAxisAlignment: WrapCrossAlignment.center,
         children: <Widget>[
           ShiftAvatar(
-            photo: state.avatar,
+            previewUrl: state.personalAvatar?.previewUrl,
             initials: state.creator.initials,
             size: 48,
           ),

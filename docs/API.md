@@ -38,10 +38,10 @@ document.
 
 ## Reads
 
-The client fetches these ten in parallel on start and on refresh. If you
-would rather answer once, add `GET /v1/snapshot` returning an object with
-these ten under their names and change `load()` to call it — the rest of
-the app does not care.
+The client fetches these eleven in parallel on start and on refresh. If
+you would rather answer once, add `GET /v1/snapshot` returning an object
+with these eleven under their names and change `load()` to call it — the
+rest of the app does not care.
 
 | Method | Path | Returns |
 |---|---|---|
@@ -56,6 +56,7 @@ the app does not care.
 | GET | `/v1/designs` | saved designs |
 | GET | `/v1/connections` | the connector catalogue and which are live |
 | GET | `/v1/week` | the pool and the payout line |
+| GET | `/v1/avatars` | this creator's animated avatars |
 
 ### `/v1/me`
 
@@ -67,6 +68,28 @@ the app does not care.
 `handle`, `name` and `email` are required. `initials` is derived from the
 name when absent.
 
+### `/v1/avatars`
+
+```json
+[{ "id": "a1", "name": "Everyday", "status": "ready", "personal": true,
+   "previewUrl": "https://cdn.example.com/avatars/a1.mp4" },
+ { "id": "a2", "name": "Studio lighting", "status": "training",
+   "personal": false }]
+```
+
+`id` and `name` are required. `status` is one of `training`, `ready` or
+`failed`, and falls back to `training` if it is anything else — a status
+the client does not recognise should not read as ready. `personal` marks
+the one shown as the profile picture and on the leaderboard; the server
+is the one enforcing that exactly one is ever true, the client just
+reflects it. `previewUrl` is the still or looping clip HeyGen rendered;
+send it once `status` is `ready`, omit it otherwise.
+
+The same `previewUrl`, for whichever avatar is personal, belongs on the
+signed-in creator's own row in `/v1/standings` as `avatarUrl` — that is
+the one place someone else's face is worth the request, because it is
+hosted by you rather than carried in bytes on every viewer's device.
+
 ### `/v1/standings`
 
 ```json
@@ -77,6 +100,10 @@ name when absent.
 `rank`, `name` and `earnings` are required. `tier` is one of `bronze`,
 `silver`, `gold`, `platinum`, or null. Exactly one row should carry
 `"isYou": true`; the app falls back to the last row if none does.
+`avatarUrl` only makes sense on that one row: showing it is worth a
+network image because it is your own account's, hosted by you; the rest
+of the board still goes by initials rather than asking the client to
+carry or fetch a stranger's photo.
 
 ### `/v1/vault` and `/v1/ecovault`
 
@@ -243,7 +270,7 @@ row optimistically and puts the list back if the call is refused, so a
 
 | Method | Path | Body | Returns |
 |---|---|---|---|
-| POST | `/v1/messages` | `{prompt, private}` | the answer, as messages |
+| POST | `/v1/messages` | `{prompt, private, avatarId?}` | the answer, as messages |
 | POST | `/v1/polish` | `{prompt}` | `{prompt}` |
 | PATCH | `/v1/me` | `{handle}` | the creator |
 | PATCH | `/v1/vault/{id}` | `{title}` | the item |
@@ -255,12 +282,21 @@ row optimistically and puts the list back if the call is refused, so a
 | POST | `/v1/designs/{id}/duplicate` | — | the new design |
 | DELETE | `/v1/designs/{id}` | — | — |
 | POST | `/v1/uploads` | multipart, field `file` | `{id}` |
+| POST | `/v1/avatars` | `{uploadId, name}` | the avatar, `training` |
+| POST | `/v1/avatars/{id}/personal` | — | the avatar, now `personal` |
+| DELETE | `/v1/avatars/{id}` | — | — |
 
 ### `POST /v1/messages`
 
 ```json
-{ "prompt": "Cut a 20 second vertical promo", "private": false }
+{ "prompt": "Cut a 20 second vertical promo", "private": false,
+  "avatarId": "a1" }
 ```
+
+`avatarId` is optional and names one of this creator's own avatars —
+generate as that likeness rather than in whatever voice the engine
+answers in by default. An id that is not theirs, not found, or not yet
+`ready` is a `badRequest`, with a sentence for it.
 
 Answer with one or more messages, in the order they should appear:
 
@@ -294,6 +330,28 @@ whether that is what was sent or a server-side normalisation of it.
 A handle already taken is a `badRequest`, with a sentence for it in
 `message`.
 
+### `POST /v1/avatars`
+
+```json
+{ "uploadId": "u1", "name": "Studio lighting" }
+```
+
+`uploadId` is the id `POST /v1/uploads` handed back for a photo or clip
+of this creator. Kick off training with HeyGen (or whatever renders it)
+and answer immediately with the new avatar at `status: "training"` —
+this does not wait for the render. `GET /v1/avatars` on a later `load`
+or `refresh` is how the client learns it finished; there is no push for
+this yet, see "Not built yet".
+
+`POST /v1/avatars/{id}/personal` takes no body and answers with that
+avatar at `personal: true`. Every other avatar this creator has should
+come back `personal: false` on the next read — the server owns "exactly
+one," the client only asks for a specific one to be it.
+
+`DELETE /v1/avatars/{id}` removes one. Deleting the personal avatar is
+a decision for you to make (fall back to initials, or refuse it) —
+either is a valid answer, the client handles both.
+
 ### Writes and the UI
 
 Every write is applied on screen first and rolled back if you refuse it,
@@ -303,6 +361,8 @@ the id you assign is what later edits are addressed to:
 
 - `POST /v1/notes` — the row appears only once you have given it an id.
 - `POST /v1/designs/{id}/duplicate` — likewise.
+- `POST /v1/avatars` — likewise; there is also nothing sensible to show
+  optimistically for a render that has not started.
 
 ## Errors
 
@@ -422,3 +482,9 @@ you before it can be written:
   want a socket or SSE to feel live.
 - **Upload progress.** `POST /v1/uploads` is one shot with no progress
   reporting and no resume.
+- **Avatar training status is poll-only.** A creator has to reopen or
+  refresh to learn a `training` avatar became `ready`; there is no push
+  for it. Realtime, above, would cover this too if it gets built.
+- **Which provider renders an avatar.** This document assumes HeyGen
+  because that is the plan, but nothing in the contract names it — the
+  client only ever sees `training` / `ready` / `failed` and a URL.

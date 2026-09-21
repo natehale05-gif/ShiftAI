@@ -83,6 +83,7 @@ class _SuiteSurfaceState extends State<SuiteSurface> {
                   ),
                 ),
         ),
+        const _AvatarPicker(),
         PillComposer(
           hint: state.privateChat
               ? 'Private chat — nothing here is saved'
@@ -91,6 +92,68 @@ class _SuiteSurfaceState extends State<SuiteSurface> {
           onSend: state.sendMessage,
         ),
       ],
+    );
+  }
+}
+
+/// Which of your ready avatars, if any, the next ask should be generated
+/// as. Nothing here at all until you have at least one — a picker with
+/// one disabled-looking option is worse than no picker.
+class _AvatarPicker extends StatelessWidget {
+  const _AvatarPicker();
+
+  @override
+  Widget build(BuildContext context) {
+    final AppState state = AppScope.of(context);
+    final ShiftColors c = ShiftColors.of(context);
+    final List<Avatar> ready =
+        state.avatars.where((Avatar a) => a.ready).toList();
+    if (ready.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(Space.x5, 0, Space.x5, Space.x2),
+      child: SizedBox(
+        height: 36,
+        child: ListView.separated(
+          scrollDirection: Axis.horizontal,
+          itemCount: ready.length,
+          separatorBuilder: (_, __) => const SizedBox(width: Space.x2),
+          itemBuilder: (BuildContext context, int index) {
+            final Avatar avatar = ready[index];
+            final bool selected = state.activeAvatarId == avatar.id;
+            final String? previewUrl = avatar.previewUrl;
+            return ChoiceChip(
+              avatar: Container(
+                width: 20,
+                height: 20,
+                alignment: Alignment.center,
+                clipBehavior: Clip.antiAlias,
+                decoration: const BoxDecoration(shape: BoxShape.circle),
+                child: previewUrl == null
+                    ? Icon(Icons.face_rounded, size: 14, color: c.textMuted)
+                    : Image.network(
+                        previewUrl,
+                        fit: BoxFit.cover,
+                        width: 20,
+                        height: 20,
+                        errorBuilder:
+                            (BuildContext context, Object _, StackTrace? __) =>
+                                Icon(Icons.face_rounded,
+                                    size: 14, color: c.textMuted),
+                      ),
+              ),
+              label: Text(avatar.name),
+              labelStyle: ShiftType.labelSm(selected ? c.onAccent : c.text),
+              selected: selected,
+              onSelected: (_) =>
+                  state.setActiveAvatar(selected ? null : avatar.id),
+              selectedColor: c.accent,
+              backgroundColor: c.surfaceRaised,
+              side: BorderSide(color: c.border),
+            );
+          },
+        ),
+      ),
     );
   }
 }
@@ -162,6 +225,49 @@ class _EmptyState extends StatelessWidget {
   }
 }
 
+/// What a plan-check failure becomes when nobody is signed in to a plan:
+/// one line and a way to fix it, not a details disclosure about an outage
+/// that was never real.
+class _SignInBubble extends StatelessWidget {
+  const _SignInBubble();
+
+  @override
+  Widget build(BuildContext context) {
+    final AppState state = AppScope.of(context);
+    final ShiftColors c = ShiftColors.of(context);
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: Space.x4,
+          vertical: Space.x3,
+        ),
+        decoration: BoxDecoration(
+          color: c.surfaceRaised,
+          borderRadius: Radii.lgAll,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Text('Sign in to run this for real.',
+                style: ShiftType.bodySm(c.textMuted)),
+            const SizedBox(width: Space.x3),
+            TextButton(
+              onPressed: () => state.setSurface(Surface.settings),
+              style: TextButton.styleFrom(
+                padding: EdgeInsets.zero,
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: Text('SIGN IN', style: ShiftType.labelSm(c.accent)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _MessageTile extends StatelessWidget {
   const _MessageTile({required this.message});
 
@@ -169,10 +275,17 @@ class _MessageTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final AppState state = AppScope.of(context);
     final ShiftColors c = ShiftColors.of(context);
 
     if (message.failure != null) {
-      return FailureCard(failure: message.failure!);
+      // The full card names a real backend failure (a plan check that
+      // could not be reached). Nobody is signed in to a plan yet in the
+      // demo, so that reads as a scary, made-up outage — a short nudge to
+      // sign in says the true thing instead.
+      return state.seededDemo
+          ? const _SignInBubble()
+          : FailureCard(failure: message.failure!);
     }
 
     if (message.author == MessageAuthor.you) {

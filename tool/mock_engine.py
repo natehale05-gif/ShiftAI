@@ -9,6 +9,8 @@ import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 USER = {"handle": "rae", "name": "Rae Okonkwo", "email": "rae@example.com"}
+AVATARS = []
+_next_id = [1]
 
 EMPTY = {
     "/v1/me": USER,
@@ -22,6 +24,9 @@ EMPTY = {
     "/v1/designs": [],
     "/v1/connections": [],
     "/v1/week": {"pool": 0, "payoutLine": "Nothing paid out yet."},
+    # Same list object POST/DELETE below mutate, so a GET always sees
+    # whatever this run has been asked to create.
+    "/v1/avatars": AVATARS,
 }
 
 
@@ -67,6 +72,42 @@ class Handler(BaseHTTPRequestHandler):
             })
         if path == "/v1/auth/sign-out":
             return self._send(204)
+        if path == "/v1/uploads":
+            length = int(self.headers.get("Content-Length", 0))
+            self.rfile.read(length)  # discarded — nothing here stores files
+            n = _next_id[0]
+            _next_id[0] += 1
+            return self._send(200, {"id": f"u{n}"})
+        if path == "/v1/avatars":
+            length = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(length) or b"{}")
+            avatar = {
+                "id": f"avatar-{len(AVATARS) + 1}",
+                "name": body.get("name") or "Avatar",
+                "status": "training",
+                "personal": False,
+            }
+            AVATARS.append(avatar)
+            return self._send(200, avatar)
+        if path.startswith("/v1/avatars/") and path.endswith("/personal"):
+            avatar_id = path.split("/")[3]
+            made_personal = None
+            for avatar in AVATARS:
+                avatar["personal"] = avatar["id"] == avatar_id
+                if avatar["personal"]:
+                    made_personal = avatar
+            if made_personal is None:
+                return self._send(404, {"message": f"No avatar {avatar_id}."})
+            return self._send(200, made_personal)
+        self._send(404, {"message": f"No route {path}."})
+
+    def do_PATCH(self):
+        path = self.path.split("?")[0]
+        if path == "/v1/me":
+            length = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(length) or b"{}")
+            USER.update({k: v for k, v in body.items() if k in USER})
+            return self._send(200, USER)
         self._send(404, {"message": f"No route {path}."})
 
     def do_PATCH(self):
@@ -82,6 +123,9 @@ class Handler(BaseHTTPRequestHandler):
         path = self.path.split("?")[0]
         if path.startswith("/v1/ecovault/") and path.endswith("/save"):
             return self._send(200, {"id": path.split("/")[3], "saved": False})
+        if path.startswith("/v1/avatars/"):
+            avatar_id = path.split("/")[3]
+            AVATARS[:] = [a for a in AVATARS if a["id"] != avatar_id]
         self._send(204)
 
     def log_message(self, *args):

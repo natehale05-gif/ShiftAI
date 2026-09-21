@@ -153,6 +153,7 @@ class StandingRow {
     required this.movement,
     this.tier,
     this.isYou = false,
+    this.avatarUrl,
   });
 
   final int rank;
@@ -165,6 +166,11 @@ class StandingRow {
   /// The payout band this creator is in this week, when they are in one.
   final TrophyTier? tier;
   final bool isYou;
+
+  /// The personal avatar HeyGen rendered for this creator, when they have
+  /// one. Hosted by the server, not carried in bytes, so a stranger's face
+  /// showing up here costs nothing on your device.
+  final String? avatarUrl;
 
   String get initials {
     final List<String> words =
@@ -182,6 +188,7 @@ class StandingRow {
         'movement': movement,
         'tier': tier?.name,
         'isYou': isYou,
+        'avatarUrl': avatarUrl,
       };
 
   factory StandingRow.fromJson(Map<String, dynamic> json) => StandingRow(
@@ -196,6 +203,55 @@ class StandingRow {
                 orElse: () => TrophyTier.bronze,
               ),
         isYou: json['isYou'] as bool? ?? false,
+        avatarUrl: json['avatarUrl'] as String?,
+      );
+}
+
+/// Where a HeyGen avatar is in its lifecycle. Training is not instant, so
+/// a freshly created one sits here until the render is ready to watch.
+enum AvatarStatus { training, ready, failed }
+
+/// An animated likeness a creator can use as their profile picture, on the
+/// leaderboard, and to generate with in the Suite.
+///
+/// Everyone starts with none. Exactly one — the personal one — stands in
+/// for the static photo everywhere the app used to draw one; the rest sit
+/// in the gallery for the Suite to call on.
+@immutable
+class Avatar {
+  const Avatar({
+    required this.id,
+    required this.name,
+    required this.status,
+    this.personal = false,
+    this.previewUrl,
+  });
+
+  final String id;
+  final String name;
+  final AvatarStatus status;
+
+  /// The server enforces that only one avatar is personal at a time; this
+  /// just reflects whichever one it last said was.
+  final bool personal;
+
+  /// A still or looping clip HeyGen rendered for it. Null while [status]
+  /// is `training`.
+  final String? previewUrl;
+
+  bool get ready => status == AvatarStatus.ready;
+
+  Avatar copyWith({
+    AvatarStatus? status,
+    bool? personal,
+    String? previewUrl,
+  }) =>
+      Avatar(
+        id: id,
+        name: name,
+        status: status ?? this.status,
+        personal: personal ?? this.personal,
+        previewUrl: previewUrl ?? this.previewUrl,
       );
 }
 
