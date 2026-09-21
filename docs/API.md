@@ -245,6 +245,7 @@ row optimistically and puts the list back if the call is refused, so a
 |---|---|---|---|
 | POST | `/v1/messages` | `{prompt, private}` | the answer, as messages |
 | POST | `/v1/polish` | `{prompt}` | `{prompt}` |
+| PATCH | `/v1/me` | `{handle}` | the creator |
 | PATCH | `/v1/vault/{id}` | `{title}` | the item |
 | POST | `/v1/vault/{id}/publish` | — | the item |
 | DELETE | `/v1/vault/{id}` | — | — |
@@ -280,6 +281,18 @@ notice, or any combination.
 keeps private threads out of its own storage; honouring this server-side is
 the other half of that promise, and the claim is made to the person in the
 composer's hint text.
+
+### `PATCH /v1/me`
+
+```json
+{ "handle": "nate2" }
+```
+
+Changes the signed-in creator's username. Answer with the same shape as
+`GET /v1/me`, handle included, so the client has the settled value —
+whether that is what was sent or a server-side normalisation of it.
+A handle already taken is a `badRequest`, with a sentence for it in
+`message`.
 
 ### Writes and the UI
 

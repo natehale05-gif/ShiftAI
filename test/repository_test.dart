@@ -314,6 +314,31 @@ void main() {
       expect(server.seen.last.method, 'PATCH');
       expect(server.seen.last.url.path, '/v1/notes/n9');
     });
+
+    test('changing the handle patches /v1/me', () async {
+      final _FakeServer server = _FakeServer(
+        (http.BaseRequest r) => http.Response(
+          _json(<String, dynamic>{
+            'handle': 'nate2',
+            'name': 'Nate Hale',
+            'email': 'nate@example.com',
+          }),
+          200,
+        ),
+      );
+      final ShiftRepository repo = HttpRepository(
+        ApiClient(baseUrl: 'https://api.example.com', client: server),
+      );
+
+      final Creator next = await repo.updateHandle('nate2');
+      expect(next.handle, 'nate2');
+      expect(server.seen.single.method, 'PATCH');
+      expect(server.seen.single.url.path, '/v1/me');
+      expect(
+        jsonDecode((server.seen.single as http.Request).body),
+        <String, dynamic>{'handle': 'nate2'},
+      );
+    });
   });
 
   group('the seeded repository stands in for a server', () {
@@ -340,6 +365,16 @@ void main() {
       final List<ChatMessage> answer = await repo.send('make me a promo');
       expect(answer, isNotEmpty);
       expect(answer.any((ChatMessage m) => m.attachment != null), isTrue);
+    });
+
+    test('changing the handle carries over to the next load', () async {
+      final SeedRepository repo = SeedRepository(replyDelay: Duration.zero);
+      final Creator before = (await repo.load()).creator;
+
+      final Creator next = await repo.updateHandle('newhandle');
+      expect(next.handle, 'newhandle');
+      expect(next.name, before.name, reason: 'only the handle changed');
+      expect((await repo.load()).creator.handle, 'newhandle');
     });
   });
 }

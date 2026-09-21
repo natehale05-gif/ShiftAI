@@ -188,4 +188,14 @@ class AuthController {
     _session = null;
     await _store.clear();
   }
+
+  /// Folds a profile change into the held session, so the tokens survive it
+  /// and a restart still shows the new handle. A no-op if signed out.
+  Future<void> updateCreator(Creator next) async {
+    final Session? held = _session;
+    if (held == null) return;
+    final Session updated = held.copyWith(creator: next);
+    _session = updated;
+    await _store.write(updated);
+  }
 }

@@ -735,6 +735,44 @@ class AppState extends ChangeNotifier {
   /// is the catalogue's creator.
   Creator get creator => _auth.creator ?? _snap.creator;
 
+  /// Writes a creator wherever [creator] reads it from: the session when
+  /// signed in against a real backend, the snapshot otherwise. Fire-and-
+  /// forget on the session side — the session field updates synchronously,
+  /// only the keychain write trails behind.
+  void _applyCreator(Creator next) {
+    if (_auth.creator != null) {
+      unawaited(_auth.updateCreator(next));
+    } else {
+      _snap = ShiftSnapshot(
+        creator: next,
+        standings: _snap.standings,
+        trophies: _snap.trophies,
+        vault: _snap.vault,
+        ecoVault: _snap.ecoVault,
+        notes: _snap.notes,
+        agentRuns: _snap.agentRuns,
+        jobs: _snap.jobs,
+        designs: _snap.designs,
+        connectors: _snap.connectors,
+        weekPool: _snap.weekPool,
+        payoutLine: _snap.payoutLine,
+      );
+    }
+  }
+
+  /// Changes the username shown on the account card. Optimistic like every
+  /// other write here: rolled back if the server refuses it.
+  Future<bool> updateHandle(String handle) async {
+    final Creator before = creator;
+    final String trimmed = handle.trim();
+    _applyCreator(before.copyWith(handle: trimmed));
+    _changed();
+    return _push(
+      () async => _applyCreator(await _repo.updateHandle(trimmed)),
+      () => _applyCreator(before),
+    );
+  }
+
   /// True while a sign-in is in flight, so the gate can say so.
   bool signingIn = false;
 

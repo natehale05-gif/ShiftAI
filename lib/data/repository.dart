@@ -79,6 +79,11 @@ abstract interface class ShiftRepository {
   /// is a valid answer for a backend that does not do this.
   Future<String> polish(String prompt);
 
+  // Profile ----------------------------------------------------------------
+  /// Changes the signed-in creator's username. Whether it is taken is the
+  /// server's call, reported back as [ShiftApiErrorKind.badRequest].
+  Future<Creator> updateHandle(String handle);
+
   // Vault ----------------------------------------------------------------
   /// Hearts a piece in EcoVault, which is what puts it in the person's own
   /// vault. Saving someone else's work copies nothing and changes nothing

@@ -17,6 +17,13 @@ class Session {
   final DateTime expiresAt;
   final Creator creator;
 
+  Session copyWith({Creator? creator}) => Session(
+        accessToken: accessToken,
+        refreshToken: refreshToken,
+        expiresAt: expiresAt,
+        creator: creator ?? this.creator,
+      );
+
   /// Treated as spent a minute early, so a request never leaves with a
   /// token that expires while it is in flight.
   bool get expired =>

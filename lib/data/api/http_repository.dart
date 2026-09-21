@@ -109,6 +109,12 @@ class HttpRepository implements ShiftRepository {
   }
 
   @override
+  Future<Creator> updateHandle(String handle) async => Decode.creator(
+        await _api.patch(_me, body: <String, dynamic>{'handle': handle})
+            as Map<String, dynamic>,
+      );
+
+  @override
   Future<VaultItem> saveVaultItem(String id) async => VaultItem.fromJson(
         await _api.post('$_eco/$id/save') as Map<String, dynamic>,
       );
