@@ -162,6 +162,49 @@ class _EmptyState extends StatelessWidget {
   }
 }
 
+/// What a plan-check failure becomes when nobody is signed in to a plan:
+/// one line and a way to fix it, not a details disclosure about an outage
+/// that was never real.
+class _SignInBubble extends StatelessWidget {
+  const _SignInBubble();
+
+  @override
+  Widget build(BuildContext context) {
+    final AppState state = AppScope.of(context);
+    final ShiftColors c = ShiftColors.of(context);
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: Space.x4,
+          vertical: Space.x3,
+        ),
+        decoration: BoxDecoration(
+          color: c.surfaceRaised,
+          borderRadius: Radii.lgAll,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Text('Sign in to run this for real.',
+                style: ShiftType.bodySm(c.textMuted)),
+            const SizedBox(width: Space.x3),
+            TextButton(
+              onPressed: () => state.setSurface(Surface.settings),
+              style: TextButton.styleFrom(
+                padding: EdgeInsets.zero,
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: Text('SIGN IN', style: ShiftType.labelSm(c.accent)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _MessageTile extends StatelessWidget {
   const _MessageTile({required this.message});
 
@@ -169,10 +212,17 @@ class _MessageTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final AppState state = AppScope.of(context);
     final ShiftColors c = ShiftColors.of(context);
 
     if (message.failure != null) {
-      return FailureCard(failure: message.failure!);
+      // The full card names a real backend failure (a plan check that
+      // could not be reached). Nobody is signed in to a plan yet in the
+      // demo, so that reads as a scary, made-up outage — a short nudge to
+      // sign in says the true thing instead.
+      return state.seededDemo
+          ? const _SignInBubble()
+          : FailureCard(failure: message.failure!);
     }
 
     if (message.author == MessageAuthor.you) {
