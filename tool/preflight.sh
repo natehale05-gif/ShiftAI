@@ -40,6 +40,9 @@ python3 -c "import plistlib;plistlib.load(open('ios/Runner/PrivacyInfo.xcprivacy
   && ok "PrivacyInfo.xcprivacy parses" || bad "PrivacyInfo.xcprivacy is not valid"
 grep -q "club.shiftai.app" ios/Runner.xcodeproj/project.pbxproj \
   && ok "bundle id set" || bad "bundle id not set"
+grep -q "NSLocationWhenInUseUsageDescription" ios/Runner/Info.plist \
+  && ok "location usage string set (the local league needs it)" \
+  || bad "no NSLocationWhenInUseUsageDescription: asking for location crashes"
 
 echo
 echo "Home screen widgets"
@@ -62,6 +65,10 @@ grep -q 'applicationId = "club.shiftai.app"' android/app/build.gradle.kts \
 grep -q "android.permission.INTERNET" android/app/src/main/AndroidManifest.xml \
   && ok "INTERNET permission (release builds have none without it)" \
   || bad "no INTERNET permission"
+grep -q "android.permission.ACCESS_COARSE_LOCATION" \
+  android/app/src/main/AndroidManifest.xml \
+  && ok "coarse location permission (the local league needs it)" \
+  || bad "no ACCESS_COARSE_LOCATION: sharing a location will silently fail"
 for k in fluttersecurestorage filepicker home_widget; do
   grep -q "$k" android/app/proguard-rules.pro \
     && ok "R8 keeps $k" || bad "R8 will strip $k in release"

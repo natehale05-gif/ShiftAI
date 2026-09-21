@@ -21,6 +21,7 @@ class ShiftSnapshot {
     required this.weekPool,
     required this.payoutLine,
     required this.avatars,
+    this.league,
   });
 
   final Creator creator;
@@ -41,6 +42,10 @@ class ShiftSnapshot {
 
   /// Every avatar this creator has trained, personal one included.
   final List<Avatar> avatars;
+
+  /// This account's local league placement, or null before it has shared a
+  /// location. Never falls back to the global board — see `League.fromJson`.
+  final League? league;
 }
 
 /// An empty snapshot: what a brand new account looks like before it has
@@ -107,6 +112,13 @@ abstract interface class ShiftRepository {
   Future<Avatar> makeAvatarPersonal(String id);
 
   Future<void> deleteAvatar(String id);
+
+  // Local league -----------------------------------------------------------
+  /// Tells the engine where this device is, coarse enough for a metro area.
+  /// Answers with the resulting placement, or null if the engine has not
+  /// placed this account yet — a first call may need a moment to land in a
+  /// cohort.
+  Future<League?> shareLocation({required double lat, required double lng});
 
   // Vault ----------------------------------------------------------------
   /// Hearts a piece in EcoVault, which is what puts it in the person's own

@@ -126,6 +126,48 @@ void main() {
     });
   });
 
+  group("the day's three rings close on the actions they track", () {
+    test('publishing closes the publish ring', () async {
+      final AppState state = await _state();
+      expect(state.rings.publish, isFalse);
+      expect(await state.publishVaultItem(state.vault.first.id), isTrue);
+      expect(state.rings.publish, isTrue);
+    });
+
+    test('a refused publish leaves the ring open', () async {
+      final AppState state = await _state(repo: _RefusingRepository());
+      expect(await state.publishVaultItem(state.vault.first.id), isFalse);
+      expect(state.rings.publish, isFalse);
+    });
+
+    test('hearting someone else\'s work closes the publish ring too',
+        () async {
+      final AppState state = await _state();
+      final VaultItem theirs = state.ecoVault
+          .firstWhere((VaultItem v) => !v.mine && !v.saved);
+      expect(state.rings.publish, isFalse);
+      expect(await state.toggleSaved(theirs.id), isTrue);
+      expect(state.rings.publish, isTrue);
+    });
+
+    test('taking a heart back does not reopen the ring', () async {
+      final AppState state = await _state();
+      final VaultItem theirs = state.ecoVault
+          .firstWhere((VaultItem v) => !v.mine && !v.saved);
+      await state.toggleSaved(theirs.id);
+      expect(state.rings.publish, isTrue);
+      expect(await state.toggleSaved(theirs.id), isTrue);
+      expect(state.rings.publish, isTrue);
+    });
+
+    test('opening the leaderboard closes the compete ring', () async {
+      final AppState state = await _state();
+      expect(state.rings.compete, isFalse);
+      state.setSurface(Surface.earnings);
+      expect(state.rings.compete, isTrue);
+    });
+  });
+
   group('the Agents scope is real, not decoration', () {
     test('picking a scope moves the lists with it', () async {
       final AppState state = await _state();

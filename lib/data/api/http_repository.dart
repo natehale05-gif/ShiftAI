@@ -32,6 +32,8 @@ class HttpRepository implements ShiftRepository {
   static const String _polish = '/v1/polish';
   static const String _uploads = '/v1/uploads';
   static const String _avatars = '/v1/avatars';
+  static const String _league = '/v1/league';
+  static const String _location = '/v1/me/location';
 
   @override
   Future<ShiftSnapshot> load() async {
@@ -50,6 +52,7 @@ class HttpRepository implements ShiftRepository {
       _api.get(_week),
       _api.get(_eco),
       _api.get(_avatars),
+      _api.get(_league),
     ]);
 
     final Map<String, dynamic> week = parts[9] is Map<String, dynamic>
@@ -85,6 +88,9 @@ class HttpRepository implements ShiftRepository {
       avatars: Decode.rows(parts[11], 'avatars')
           .map(Decode.avatar)
           .toList(growable: false),
+      league: parts[12] is Map<String, dynamic>
+          ? League.fromJson(parts[12] as Map<String, dynamic>)
+          : null,
     );
   }
 
@@ -146,6 +152,18 @@ class HttpRepository implements ShiftRepository {
 
   @override
   Future<void> deleteAvatar(String id) => _api.delete('$_avatars/$id');
+
+  @override
+  Future<League?> shareLocation({
+    required double lat,
+    required double lng,
+  }) async {
+    final dynamic body = await _api.patch(
+      _location,
+      body: <String, dynamic>{'lat': lat, 'lng': lng},
+    );
+    return body is Map<String, dynamic> ? League.fromJson(body) : null;
+  }
 
   @override
   Future<VaultItem> saveVaultItem(String id) async => VaultItem.fromJson(

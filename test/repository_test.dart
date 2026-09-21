@@ -172,6 +172,8 @@ http.Response _snapshotRoute(http.BaseRequest request) {
         ]),
         200,
       ),
+    // Not placed yet, same as a brand new account — see `League.fromJson`.
+    '/v1/league' => http.Response(_json(<String, dynamic>{}), 200),
     _ => http.Response('{"message":"no route"}', 404),
   };
 }

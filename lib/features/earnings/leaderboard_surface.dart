@@ -9,20 +9,31 @@ import '../../state/app_state.dart';
 import '../../theme/tokens.dart';
 import '../../theme/type.dart';
 import '../../util/format.dart';
+import '../../util/geo.dart';
 import '../../util/week.dart';
 import '../../widgets/common.dart';
 
+/// Local defaults to on: a fair fight against people near you in both rank
+/// and location beats the whole board for most people, most weeks. Global
+/// is one tap away for whoever still wants to see the very top.
+enum _Board { local, global }
+
 /// The weekly board: what is left on the clock, who is on the podium, where
-/// you are, who you can catch and who is catching you.
-class LeaderboardSurface extends StatelessWidget {
+/// you are, who you can catch and who is catching you — or, on the Local
+/// tab, the smaller cohort the engine matched you into.
+class LeaderboardSurface extends StatefulWidget {
   const LeaderboardSurface({super.key});
+
+  @override
+  State<LeaderboardSurface> createState() => _LeaderboardSurfaceState();
+}
+
+class _LeaderboardSurfaceState extends State<LeaderboardSurface> {
+  _Board _board = _Board.local;
 
   @override
   Widget build(BuildContext context) {
     final AppState state = AppScope.of(context);
-    final StandingRow? you = state.you;
-    final StandingRow? target = state.target;
-    final StandingRow? chaser = state.chaser;
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(
@@ -45,25 +56,119 @@ class LeaderboardSurface extends StatelessWidget {
                 ),
                 const SizedBox(height: Space.x5),
                 const _ClockRow(),
+                const SizedBox(height: Space.x5),
+                _BoardToggle(
+                  board: _board,
+                  onChanged: (_Board next) => setState(() => _board = next),
+                ),
                 const SizedBox(height: Space.x6),
-                // A board arrives from the engine, so before the first
-                // week scores there is nothing to rank. Saying that is
-                // better than a podium of three blanks.
-                if (you == null)
-                  const _NoBoardYet()
-                else ...<Widget>[
-                  _Podium(rows: state.podium),
-                  const SizedBox(height: Space.x5),
-                  _YouCard(you: you),
-                  const SizedBox(height: Space.x4),
-                  _RivalRow(target: target, chaser: chaser, you: you),
-                  const SizedBox(height: Space.x5),
-                  ...state.rest.map((StandingRow row) => _Row(row: row)),
-                ],
+                if (_board == _Board.local)
+                  const _LocalLeagueSection()
+                else
+                  const _GlobalBoard(),
               ],
             ),
           ),
         ),
+      ],
+    );
+  }
+}
+
+class _BoardToggle extends StatelessWidget {
+  const _BoardToggle({required this.board, required this.onChanged});
+
+  final _Board board;
+  final ValueChanged<_Board> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final ShiftColors c = ShiftColors.of(context);
+    return Container(
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: c.surfaceRaised,
+        borderRadius: Radii.pillAll,
+        border: Border.all(color: c.border),
+      ),
+      child: Row(
+        children: <Widget>[
+          Expanded(child: _BoardTab(
+            label: 'Local',
+            selected: board == _Board.local,
+            onTap: () => onChanged(_Board.local),
+          )),
+          Expanded(child: _BoardTab(
+            label: 'Global',
+            selected: board == _Board.global,
+            onTap: () => onChanged(_Board.global),
+          )),
+        ],
+      ),
+    );
+  }
+}
+
+class _BoardTab extends StatelessWidget {
+  const _BoardTab({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final ShiftColors c = ShiftColors.of(context);
+    return InkWell(
+      onTap: onTap,
+      borderRadius: Radii.pillAll,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        padding: const EdgeInsets.symmetric(vertical: Space.x2),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: selected ? c.accent : Colors.transparent,
+          borderRadius: Radii.pillAll,
+        ),
+        child: Text(
+          label.toUpperCase(),
+          style: ShiftType.labelSm(selected ? c.onAccent : c.textMuted),
+        ),
+      ),
+    );
+  }
+}
+
+/// The global weekly board — everyone, ranked by earnings. What
+/// `LeaderboardSurface` showed before Local existed.
+class _GlobalBoard extends StatelessWidget {
+  const _GlobalBoard();
+
+  @override
+  Widget build(BuildContext context) {
+    final AppState state = AppScope.of(context);
+    final StandingRow? you = state.you;
+    final StandingRow? target = state.target;
+    final StandingRow? chaser = state.chaser;
+
+    // A board arrives from the engine, so before the first week scores
+    // there is nothing to rank. Saying that is better than a podium of
+    // three blanks.
+    if (you == null) return const _NoBoardYet();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        _Podium(rows: state.podium),
+        const SizedBox(height: Space.x5),
+        _YouCard(you: you),
+        const SizedBox(height: Space.x4),
+        _RivalRow(target: target, chaser: chaser, you: you),
+        const SizedBox(height: Space.x5),
+        ...state.rest.map((StandingRow row) => _Row(row: row)),
       ],
     );
   }
@@ -112,6 +217,284 @@ class _NoBoardYet extends StatelessWidget {
               child: const Text('Try again'),
             ),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Turns a device fix into a placement, and carries whichever of the two
+/// failure states (permission refused, or the engine refused the write)
+/// the last attempt landed on.
+class _LocalLeagueSection extends StatefulWidget {
+  const _LocalLeagueSection();
+
+  @override
+  State<_LocalLeagueSection> createState() => _LocalLeagueSectionState();
+}
+
+class _LocalLeagueSectionState extends State<_LocalLeagueSection> {
+  bool _requesting = false;
+  String? _problem;
+
+  Future<void> _share(AppState state) async {
+    setState(() {
+      _requesting = true;
+      _problem = null;
+    });
+    final GeoFix? fix = await Geo.currentFix();
+    if (fix == null) {
+      if (!mounted) return;
+      setState(() {
+        _requesting = false;
+        _problem = 'Turn on location access for SHIFT AI to see who is '
+            'near you.';
+      });
+      return;
+    }
+    final bool ok = await state.shareLocation(fix.lat, fix.lng);
+    if (!mounted) return;
+    setState(() {
+      _requesting = false;
+      _problem = ok ? null : (state.lastError?.message ?? 'Could not place '
+          'you locally right now.');
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final AppState state = AppScope.of(context);
+    final League? league = state.league;
+    if (league == null) {
+      return _NoLeagueYet(
+        requesting: _requesting,
+        problem: _problem,
+        onShare: () => _share(state),
+      );
+    }
+    return _LeagueBoard(league: league);
+  }
+}
+
+class _NoLeagueYet extends StatelessWidget {
+  const _NoLeagueYet({
+    required this.requesting,
+    required this.problem,
+    required this.onShare,
+  });
+
+  final bool requesting;
+  final String? problem;
+  final VoidCallback onShare;
+
+  @override
+  Widget build(BuildContext context) {
+    final ShiftColors c = ShiftColors.of(context);
+    return ShiftCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Icon(Icons.near_me_outlined, size: 28, color: c.textMuted),
+          const SizedBox(height: Space.x4),
+          Text('See how you stack up locally', style: ShiftType.subheading(c.text)),
+          const SizedBox(height: Space.x2),
+          Text(
+            'A smaller board of people near you in both rank and location — '
+            'a fairer fight than the whole board, and one you can actually '
+            'move up in.',
+            style: ShiftType.bodySm(c.textMuted),
+          ),
+          if (problem != null) ...<Widget>[
+            const SizedBox(height: Space.x3),
+            Text(problem!, style: ShiftType.bodySm(c.danger)),
+          ],
+          const SizedBox(height: Space.x4),
+          FilledButton(
+            onPressed: requesting ? null : onShare,
+            child: Text(requesting ? 'Finding you…' : 'Use my location'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LeagueBoard extends StatelessWidget {
+  const _LeagueBoard({required this.league});
+
+  final League league;
+
+  @override
+  Widget build(BuildContext context) {
+    final StandingRow? you = league.you;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        _LeagueHeader(league: league),
+        const SizedBox(height: Space.x5),
+        if (you != null) ...<Widget>[
+          _LeagueYouCard(you: you, zone: league.zoneFor(you)),
+          const SizedBox(height: Space.x4),
+        ],
+        ...league.rows
+            .where((StandingRow r) => !r.isYou)
+            .map((StandingRow r) => _LeagueRow(row: r, zone: league.zoneFor(r))),
+      ],
+    );
+  }
+}
+
+class _LeagueHeader extends StatelessWidget {
+  const _LeagueHeader({required this.league});
+
+  final League league;
+
+  @override
+  Widget build(BuildContext context) {
+    final ShiftColors c = ShiftColors.of(context);
+    return Row(
+      children: <Widget>[
+        Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: Space.x3,
+            vertical: Space.x1,
+          ),
+          decoration: BoxDecoration(
+            color: c.surfaceRaised,
+            borderRadius: Radii.pillAll,
+            border: Border.all(color: league.division.colorOn(c)),
+          ),
+          child: Text(
+            league.division.label.toUpperCase(),
+            style: ShiftType.labelSm(league.division.colorOn(c)),
+          ),
+        ),
+        const SizedBox(width: Space.x3),
+        Expanded(
+          child: Text(
+            league.regionLabel,
+            style: ShiftType.subheading(c.text),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// The colour a zone reads as, wherever a league row needs one.
+extension on LeagueZone {
+  Color tone(ShiftColors c) => switch (this) {
+        LeagueZone.promotion => c.success,
+        LeagueZone.relegation => c.danger,
+        LeagueZone.safe => c.border,
+      };
+
+  String? get caption => switch (this) {
+        LeagueZone.promotion => 'PROMOTING',
+        LeagueZone.relegation => 'RELEGATING',
+        LeagueZone.safe => null,
+      };
+}
+
+class _LeagueYouCard extends StatelessWidget {
+  const _LeagueYouCard({required this.you, required this.zone});
+
+  final StandingRow you;
+  final LeagueZone zone;
+
+  @override
+  Widget build(BuildContext context) {
+    final ShiftColors c = ShiftColors.of(context);
+    final Color tone = zone.tone(c);
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: Space.x5,
+        vertical: Space.x4,
+      ),
+      decoration: BoxDecoration(
+        color: c.accentSoft,
+        borderRadius: Radii.lgAll,
+        border: Border.all(color: c.accent),
+      ),
+      child: Row(
+        children: <Widget>[
+          Text(
+            '${you.rank}',
+            style:
+                ShiftType.displayL(c.text).copyWith(fontWeight: FontWeight.w500),
+          ),
+          const SizedBox(width: Space.x5),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text('You', style: ShiftType.bodyStrong(c.text)),
+                if (zone.caption != null) ...<Widget>[
+                  const SizedBox(height: 2),
+                  Text(zone.caption!, style: ShiftType.labelSm(tone)),
+                ],
+              ],
+            ),
+          ),
+          Text(
+            Fmt.money(you.earnings),
+            style: ShiftType.mono(c.success, size: 24),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LeagueRow extends StatelessWidget {
+  const _LeagueRow({required this.row, required this.zone});
+
+  final StandingRow row;
+  final LeagueZone zone;
+
+  @override
+  Widget build(BuildContext context) {
+    final ShiftColors c = ShiftColors.of(context);
+    final Color tone = zone.tone(c);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: Space.x1),
+      child: Column(
+        children: <Widget>[
+          SizedBox(
+            height: 56,
+            child: Row(
+              children: <Widget>[
+                Container(width: 3, height: 32, color: tone),
+                const SizedBox(width: Space.x3),
+                SizedBox(
+                  width: 26,
+                  child: Text(
+                    '${row.rank}',
+                    textAlign: TextAlign.right,
+                    style: ShiftType.body(c.text),
+                  ),
+                ),
+                const SizedBox(width: Space.x3),
+                _Face(row: row, size: 30),
+                const SizedBox(width: Space.x3),
+                Expanded(
+                  child: Text(
+                    row.name,
+                    style: ShiftType.body(c.text),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                Text(
+                  Fmt.money(row.earnings),
+                  style: ShiftType.mono(c.success, size: 16),
+                ),
+              ],
+            ),
+          ),
+          Divider(height: 1, color: c.border),
         ],
       ),
     );

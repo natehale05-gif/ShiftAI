@@ -15,6 +15,7 @@ import '../features/settings/connectors.dart';
 import '../features/widgets/widget_sync.dart';
 import '../models/models.dart';
 import '../theme/tokens.dart';
+import 'daily_rings.dart';
 
 /// Storage keys. Everything money related persists so a reload never resets
 /// the account. Nothing else writes these keys, and a key this app did not
@@ -86,7 +87,16 @@ class AppState extends ChangeNotifier {
     jobs = List<JobRow>.of(_snap.jobs);
     designs = List<DesignDoc>.of(_snap.designs);
     avatars = List<Avatar>.of(_snap.avatars);
+    league = _snap.league;
     messages = <ChatMessage>[];
+
+    // Rolled to today on every read, so a streak from three days ago that
+    // was never checked back in on settles the moment it is finally read
+    // rather than looking alive until then.
+    rings = DailyRings.fromJson(
+      blob['rings'] as Map<String, dynamic>?,
+      DateTime.now(),
+    ).rolledTo(DateTime.now());
 
     // Which scope each Agents tab was left pointed at. An unknown one
     // (a repo since disconnected) falls back to the default.
@@ -136,6 +146,7 @@ class AppState extends ChangeNotifier {
       jobs = List<JobRow>.of(_snap.jobs);
       designs = List<DesignDoc>.of(_snap.designs);
       avatars = List<Avatar>.of(_snap.avatars);
+      league = _snap.league;
     } on ShiftApiException catch (error) {
       // Keep what is on screen. An empty list would read as "you have
       // nothing", which is a different and wrong statement.
@@ -161,6 +172,30 @@ class AppState extends ChangeNotifier {
     } on ShiftApiException catch (error) {
       lastError = error;
       rollback();
+      _changed();
+      return false;
+    }
+  }
+
+  /// Marks today's [kind] done. Rolls the day over first, so a ring closed
+  /// right after midnight lands on the new day rather than a stale one.
+  /// Callers are responsible for their own [_changed] — this can run in the
+  /// middle of a write that already has one coming.
+  void _closeRing(RingKind kind) {
+    rings = rings.rolledTo(DateTime.now()).close(kind);
+  }
+
+  /// Tells the engine roughly where this device is and applies whatever
+  /// cohort it places the account in. There is nothing local to roll back
+  /// on refusal — this only ever replaces [league] with the engine's word.
+  Future<bool> shareLocation(double lat, double lng) async {
+    try {
+      league = await _repo.shareLocation(lat: lat, lng: lng);
+      lastError = null;
+      _changed();
+      return true;
+    } on ShiftApiException catch (error) {
+      lastError = error;
       _changed();
       return false;
     }
@@ -230,7 +265,8 @@ class AppState extends ChangeNotifier {
           ..remove('ecoVault')
           ..remove('notes')
           ..remove('standings')
-          ..remove('trophies');
+          ..remove('trophies')
+          ..remove('rings');
       }
     }
 
@@ -277,6 +313,15 @@ class AppState extends ChangeNotifier {
   late List<DesignDoc> designs;
   late List<Avatar> avatars;
   late List<ChatMessage> messages;
+
+  /// This account's local league placement, or null before it has shared a
+  /// location. Never the seeded/global board in disguise — see
+  /// `League.fromJson`.
+  League? league;
+
+  /// Today's three rings and the streak behind them. Local-only: there is
+  /// no server concept of "today" for this to disagree with.
+  late DailyRings rings;
 
   /// The one avatar shown as the profile picture and on the leaderboard,
   /// when there is one.
@@ -413,6 +458,7 @@ class AppState extends ChangeNotifier {
     final Surface target = isEnabled(next.feature) ? next : Surface.suite;
     if (surface == target) return;
     surface = target;
+    if (target == Surface.earnings) _closeRing(RingKind.compete);
     _changed();
   }
 
@@ -483,13 +529,21 @@ class AppState extends ChangeNotifier {
     vault = vault.map(apply).toList();
     _changed();
 
-    return _push(
+    final bool ok = await _push(
       () => next ? _repo.saveVaultItem(id) : _repo.unsaveVaultItem(id),
       () {
         ecoVault = beforeEco;
         vault = beforeMine;
       },
     );
+    // Hearting someone else's work counts the same as publishing your own —
+    // both are putting work in front of people, which is the ring. Taking
+    // a heart back does not undo the day's credit for having given one.
+    if (ok && next) {
+      _closeRing(RingKind.publish);
+      _changed();
+    }
+    return ok;
   }
 
   Future<bool> renameVaultItem(String id, String title) async {
@@ -510,7 +564,13 @@ class AppState extends ChangeNotifier {
         .map((VaultItem v) => v.id == id ? v.copyWith(published: true) : v)
         .toList();
     _changed();
-    return _push(() => _repo.publishVaultItem(id), () => vault = before);
+    final bool ok =
+        await _push(() => _repo.publishVaultItem(id), () => vault = before);
+    if (ok) {
+      _closeRing(RingKind.publish);
+      _changed();
+    }
+    return ok;
   }
 
   Future<bool> deleteVaultItem(String id) async {
@@ -802,6 +862,7 @@ class AppState extends ChangeNotifier {
         weekPool: _snap.weekPool,
         payoutLine: _snap.payoutLine,
         avatars: _snap.avatars,
+        league: _snap.league,
       );
     }
   }
@@ -863,6 +924,11 @@ class AppState extends ChangeNotifier {
       jobs = <JobRow>[];
       designs = <DesignDoc>[];
       avatars = <Avatar>[];
+      league = null;
+      // A streak is this account's, same as the vault above — the next
+      // person to sign in on this device starts at zero, not partway
+      // through someone else's week.
+      rings = DailyRings(day: DailyRings.keyFor(DateTime.now()));
       _snap = emptySnapshot();
     }
     activeAvatarId = null;
@@ -931,6 +997,11 @@ class AppState extends ChangeNotifier {
         );
         messages = <ChatMessage>[...messages, ...answer];
         lastError = null;
+        // Coming back with something made is the ring, whether or not it
+        // ever lands in the vault — a private ask still counts.
+        if (answer.any((ChatMessage m) => m.attachment != null)) {
+          _closeRing(RingKind.create);
+        }
       } on ShiftApiException catch (error) {
         lastError = error;
         messages = <ChatMessage>[
@@ -1008,6 +1079,7 @@ class AppState extends ChangeNotifier {
       'vault': vault.map((VaultItem v) => v.toJson()).toList(),
       'ecoVault': ecoVault.map((VaultItem v) => v.toJson()).toList(),
       'notes': notes.map((Note n) => n.toJson()).toList(),
+      'rings': rings.toJson(),
     };
     await _prefs.setString(StoreKeys.app, jsonEncode(blob));
   }

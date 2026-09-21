@@ -2,6 +2,9 @@
     <!-- The app talks to the SHIFT engine. Without this the release build
          has no network at all: Flutter only adds it to debug and profile. -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- The local league: one coarse fix taken when the person asks to see
+         it, never continuous tracking, so coarse is all this asks for. -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
 
     <application
         android:label="SHIFT AI"

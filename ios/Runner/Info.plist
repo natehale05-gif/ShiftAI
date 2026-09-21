@@ -49,5 +49,7 @@
 	<string>SHIFT AI needs access to your photos so you can choose one as your avatar and attach pictures to what you are making.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>SHIFT AI uses the camera when you take a new photo for your avatar.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>SHIFT AI uses your rough location to place you in a local leaderboard against people near you.</string>
 </dict>
 </plist>

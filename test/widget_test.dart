@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shift_ai/app/app.dart';
 import 'package:shift_ai/app/modes.dart';
 import 'package:shift_ai/app/shell.dart';
+import 'package:shift_ai/data/seed.dart';
 import 'package:shift_ai/models/models.dart';
 import 'package:shift_ai/data/auth/token_store.dart';
 import 'package:shift_ai/state/app_state.dart';
@@ -170,6 +171,33 @@ void main() {
     expect(state.target!.rank, state.you!.rank - 1);
     expect(state.chaser!.rank, state.you!.rank + 1);
     expect(state.podium.length, 3);
+  });
+
+  testWidgets(
+      'the leaderboard opens on Local, and Global switches to the whole board',
+      (WidgetTester tester) async {
+    final AppState state = await _freshState();
+    await tester.pumpWidget(ShiftApp(state: state));
+    await tester.pump();
+    state.setSurface(Surface.earnings);
+    await tester.pump();
+
+    // Local by default: the seeded league's own region shows.
+    expect(find.text(Seed.league.regionLabel), findsOneWidget);
+
+    await tester.tap(find.text('GLOBAL'));
+    await tester.pump();
+    expect(find.text(Seed.league.regionLabel), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  test('the local league arrives already placed in the seeded demo',
+      () async {
+    final AppState state = await _freshState();
+    expect(state.league, isNotNull);
+    expect(state.league!.regionLabel, Seed.league.regionLabel);
+    expect(state.league!.you, isNotNull);
+    expect(state.league!.you!.isYou, isTrue);
   });
 
   test('the trophy shelf adds up', () async {

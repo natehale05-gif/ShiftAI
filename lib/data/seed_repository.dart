@@ -46,6 +46,7 @@ class SeedRepository implements ShiftRepository {
         weekPool: Seed.weekPool,
         payoutLine: Seed.payoutLine,
         avatars: List<Avatar>.of(_avatars),
+        league: Seed.league,
       );
 
   @override
@@ -131,6 +132,13 @@ class SeedRepository implements ShiftRepository {
   Future<void> deleteAvatar(String id) async {
     _avatars = _avatars.where((Avatar a) => a.id != id).toList();
   }
+
+  @override
+  Future<League?> shareLocation({
+    required double lat,
+    required double lng,
+  }) async =>
+      Seed.league;
 
   VaultItem _setSaved(String id, bool saved) {
     final VaultItem target = _find<VaultItem>(
