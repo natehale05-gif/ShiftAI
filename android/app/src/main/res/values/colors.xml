@@ -2,4 +2,16 @@
 <resources>
     <!-- ShiftColors.dark.bg -->
     <color name="launch_background">#FF0E1628</color>
+
+    <!-- ShiftColors.retro, the theme the app opens on by default. Widgets
+         are native views drawn with no Flutter runtime behind them, so
+         they cannot follow an in-app theme switch — this is a fixed
+         look, same as the app icon. -->
+    <color name="widget_bg">#FF0A0A0F</color>
+    <color name="widget_surface">#FF15151D</color>
+    <color name="widget_text">#FFF5F5F7</color>
+    <color name="widget_text_muted">#FFBFBFBF</color>
+    <color name="widget_accent">#FFFF1A8C</color>
+    <color name="widget_success">#FF34D399</color>
+    <color name="widget_danger">#FFF87171</color>
 </resources>

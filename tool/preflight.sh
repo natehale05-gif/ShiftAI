@@ -42,13 +42,27 @@ grep -q "club.shiftai.app" ios/Runner.xcodeproj/project.pbxproj \
   && ok "bundle id set" || bad "bundle id not set"
 
 echo
+echo "Home screen widgets"
+grep -q "CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements" ios/Runner.xcodeproj/project.pbxproj \
+  && ok "Runner is wired to its entitlements file" \
+  || bad "Runner.entitlements is on disk but not wired into project.pbxproj"
+python3 -c "import plistlib;plistlib.load(open('ios/Runner/Runner.entitlements','rb'))" 2>/dev/null \
+  && ok "Runner.entitlements parses" || bad "Runner.entitlements is not valid"
+for f in ios/ShiftLeaderboardWidgets/ShiftLeaderboardWidgetsBundle.swift \
+         ios/ShiftLeaderboardWidgets/Info.plist \
+         ios/ShiftLeaderboardWidgets/ShiftLeaderboardWidgets.entitlements; do
+  [ -f "$f" ] && ok "$(basename "$f") ready for the Xcode target — see docs/WIDGETS.md" \
+    || bad "missing $f"
+done
+
+echo
 echo "Android"
 grep -q 'applicationId = "club.shiftai.app"' android/app/build.gradle.kts \
   && ok "applicationId set" || bad "applicationId not set"
 grep -q "android.permission.INTERNET" android/app/src/main/AndroidManifest.xml \
   && ok "INTERNET permission (release builds have none without it)" \
   || bad "no INTERNET permission"
-for k in fluttersecurestorage filepicker; do
+for k in fluttersecurestorage filepicker home_widget; do
   grep -q "$k" android/app/proguard-rules.pro \
     && ok "R8 keeps $k" || bad "R8 will strip $k in release"
 done

@@ -34,6 +34,44 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+
+        <!-- Home screen widgets. Each reads whatever lib/features/widgets/
+             widget_sync.dart last wrote and redraws on that — there is no
+             periodic OS-driven refresh (updatePeriodMillis is 0 in each
+             widget's own info.xml), only what opening the app pushes. -->
+        <receiver
+            android:name=".RankWidgetProvider"
+            android:exported="false"
+            android:label="@string/rank_widget_description">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/rank_widget_info" />
+        </receiver>
+        <receiver
+            android:name=".PodiumWidgetProvider"
+            android:exported="false"
+            android:label="@string/podium_widget_description">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/podium_widget_info" />
+        </receiver>
+        <receiver
+            android:name=".RivalsWidgetProvider"
+            android:exported="false"
+            android:label="@string/rivals_widget_description">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/rivals_widget_info" />
+        </receiver>
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

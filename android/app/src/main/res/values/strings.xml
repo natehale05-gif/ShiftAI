@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="rank_widget_description">Your rank and this week\'s earnings</string>
+    <string name="podium_widget_description">This week\'s top 3</string>
+    <string name="rivals_widget_description">Who you\'re catching and who\'s catching you</string>
+</resources>
