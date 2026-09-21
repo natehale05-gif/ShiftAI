@@ -11,12 +11,22 @@
 #   - AssetManifest.bin is copied to a .wasm name and a small shim in
 #     index.html points the engine at it, because hosts that allow-list
 #     extensions do not serve .bin.
+#   - A build id (the git commit, so it is unique per deploy) is baked
+#     into the page and polled for while the app is open, since without a
+#     service worker nothing else notices a new build has shipped — an
+#     installed PWA that is only ever resumed, never fully reloaded,
+#     would otherwise run whatever it first loaded forever.
 #
 # Usage: tool/build_web_hosted.sh   (from the project root)
 
 set -euo pipefail
 
 OUT="build/web"
+
+# version.json's build_number comes straight from pubspec.yaml and does
+# not change from one deploy to the next, so it cannot serve as this
+# signal — the git commit does.
+BUILD_ID="$(git rev-parse HEAD 2>/dev/null || date +%s)"
 
 flutter build web --release --no-web-resources-cdn
 
@@ -45,6 +55,10 @@ p.write_text(s2)
 PY
 
 cp assets/AssetManifest.bin assets/AssetManifest.bin.wasm
+
+# Rewritten on every build with a fresh value; the page polls this while
+# open and reloads itself when it no longer matches what it booted with.
+printf '%s' "$BUILD_ID" > build_id.txt
 
 cat > index.html <<'HTML'
 <!DOCTYPE html>
@@ -102,8 +116,39 @@ cat > index.html <<'HTML'
       if (boot) { boot.remove(); }
     });
   </script>
+  <script>
+    // There is no service worker (see the build script), so nothing else
+    // notices a new build has shipped. An installed PWA that is only ever
+    // resumed from the home screen, never fully reloaded, would otherwise
+    // keep running whatever it first loaded, forever — reload it whenever
+    // the id this page booted with no longer matches the one on the
+    // server, which a fresh build always rewrites.
+    (function () {
+      var BUILD_ID = '__BUILD_ID__';
+      function checkForUpdate() {
+        fetch('build_id.txt', { cache: 'no-store' })
+          .then(function (r) { return r.text(); })
+          .then(function (id) {
+            if (id.trim() && id.trim() !== BUILD_ID) { window.location.reload(); }
+          })
+          .catch(function () { /* offline, or unreachable — try again next time */ });
+      }
+      document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'visible') checkForUpdate();
+      });
+      window.addEventListener('focus', checkForUpdate);
+      // Belt and braces for a platform that resumes a frozen PWA without
+      // firing either event above.
+      setInterval(checkForUpdate, 5 * 60 * 1000);
+    })();
+  </script>
 </body>
 </html>
 HTML
+
+# The heredoc above is single-quoted (no shell interpolation, deliberately
+# — the page's own JavaScript uses '$'-free code, but there is no reason
+# to trust that forever), so the build id is spliced in afterwards.
+sed -i.bak "s/__BUILD_ID__/$BUILD_ID/" index.html && rm -f index.html.bak
 
 echo "built $(find . -type f | wc -l) files, $(du -sh . | cut -f1)"
