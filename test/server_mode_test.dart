@@ -97,6 +97,13 @@ class _RefusingAvatarRepo implements ShiftRepository {
   Future<void> deleteAvatar(String id) async => _refuse();
 
   @override
+  Future<League?> shareLocation({
+    required double lat,
+    required double lng,
+  }) async =>
+      _refuse();
+
+  @override
   Future<String> upload({
     required String fileName,
     required String mimeType,
@@ -459,6 +466,37 @@ void main() {
       final List<Avatar> before = refused.avatars;
       expect(await refused.deleteAvatar(before.first.id), isFalse);
       expect(refused.avatars.length, before.length);
+    });
+  });
+
+  group('the local league', () {
+    test('is null before anything has placed this account', () async {
+      final AppState state = await _server(repo: _RefusingAvatarRepo(), signedIn: true);
+      expect(state.league, isNull);
+    });
+
+    test('sharing a location applies whatever the engine places you in',
+        () async {
+      // The seeded demo shows the league already placed, same as every
+      // other list in it — sharing a location here just re-asks and gets
+      // the same answer back, which is what matters: the write reaches the
+      // repository and applies its result rather than being a no-op.
+      final AppState state =
+          await _server(repo: SeedRepository(replyDelay: Duration.zero), signedIn: true);
+      expect(state.league, isNotNull);
+
+      expect(await state.shareLocation(30.2672, -97.7431), isTrue);
+      expect(state.league, isNotNull);
+      expect(state.league!.regionLabel, Seed.league.regionLabel);
+      expect(state.league!.rows, Seed.league.rows);
+      expect(state.lastError, isNull);
+    });
+
+    test('a refusal reports why and never invents a placement', () async {
+      final AppState state = await _server(repo: _RefusingAvatarRepo(), signedIn: true);
+      expect(await state.shareLocation(30.2672, -97.7431), isFalse);
+      expect(state.league, isNull);
+      expect(state.lastError?.message, 'Refused.');
     });
   });
 }

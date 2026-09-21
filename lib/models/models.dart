@@ -255,6 +255,74 @@ class Avatar {
       );
 }
 
+/// Where a row on a [League] board sits relative to the week's cutoffs.
+/// Computed from rank rather than sent by the server: the same fact
+/// ["top 3 of 15"] the server already sent as `promoteCount`/`rows.length`,
+/// read once instead of asked for twice.
+enum LeagueZone { promotion, safe, relegation }
+
+/// A small board of people near this account in both rank and location —
+/// a fair fight instead of the whole board, the same idea as Duolingo's
+/// weekly leagues. Division is a rung on a ladder, promoted or relegated
+/// week to week; reusing [TrophyTier] for it is a second, unrelated use
+/// of the same four names and colours, not the same thing as a payout
+/// band.
+@immutable
+class League {
+  const League({
+    required this.division,
+    required this.regionLabel,
+    required this.rows,
+    required this.promoteCount,
+    required this.relegateCount,
+  });
+
+  final TrophyTier division;
+
+  /// Wherever the server resolved this account's location to — a metro
+  /// area, not a street address.
+  final String regionLabel;
+
+  /// Same row shape as the global board, scoped to this cohort.
+  final List<StandingRow> rows;
+
+  /// How many of the top and bottom ranks move divisions when the week
+  /// closes.
+  final int promoteCount;
+  final int relegateCount;
+
+  StandingRow? get you =>
+      rows.where((StandingRow r) => r.isYou).firstOrNull;
+
+  LeagueZone zoneFor(StandingRow row) {
+    if (row.rank <= promoteCount) return LeagueZone.promotion;
+    if (row.rank > rows.length - relegateCount) return LeagueZone.relegation;
+    return LeagueZone.safe;
+  }
+
+  static League? fromJson(Map<String, dynamic> json) {
+    final Object? divisionRaw = json['division'];
+    final Object? rowsRaw = json['rows'];
+    // An account with nowhere placed yet is `{}`, not an error — same
+    // reasoning as an empty list everywhere else in this contract. Reading
+    // that as a league with no rows would draw an empty board instead of
+    // the "share your location" prompt the person actually needs to see.
+    if (divisionRaw is! String || rowsRaw is! List) return null;
+    return League(
+      division: TrophyTier.values.firstWhere(
+        (TrophyTier t) => t.name == divisionRaw,
+        orElse: () => TrophyTier.bronze,
+      ),
+      regionLabel: json['regionLabel'] as String? ?? '',
+      rows: rowsRaw
+          .map((Object? r) => StandingRow.fromJson(r! as Map<String, dynamic>))
+          .toList(),
+      promoteCount: (json['promoteCount'] as num?)?.toInt() ?? 0,
+      relegateCount: (json['relegateCount'] as num?)?.toInt() ?? 0,
+    );
+  }
+}
+
 enum MediaKind { image, video }
 
 enum VaultScope {

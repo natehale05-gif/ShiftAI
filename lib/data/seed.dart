@@ -149,6 +149,36 @@ abstract final class Seed {
     ),
   ];
 
+  // Local league ----------------------------------------------------------
+
+  /// A demo cohort: not the same fifteen faces as the global board, on
+  /// purpose — a local league is a different, smaller fight, and showing
+  /// the same names in both would read as the same board twice.
+  static const League league = League(
+    division: TrophyTier.silver,
+    regionLabel: 'Austin Metro',
+    promoteCount: 3,
+    relegateCount: 3,
+    rows: <StandingRow>[
+      StandingRow(rank: 1, name: 'Jodie Marsh', earnings: 412.80, movement: 1),
+      StandingRow(rank: 2, name: 'Reese Cantu', earnings: 388.15, movement: -1),
+      StandingRow(rank: 3, name: 'Wyatt Okafor', earnings: 355.60, movement: 0),
+      StandingRow(
+        rank: 4,
+        name: 'You',
+        earnings: 301.25,
+        movement: 2,
+        isYou: true,
+      ),
+      StandingRow(rank: 5, name: 'Priya Nair', earnings: 288.90, movement: -1),
+      StandingRow(rank: 6, name: 'Leo Fontaine', earnings: 240.05, movement: 0),
+      StandingRow(rank: 7, name: 'Ama Boateng', earnings: 199.70, movement: 3),
+      StandingRow(rank: 8, name: 'Sana Malik', earnings: 176.40, movement: -2),
+      StandingRow(rank: 9, name: 'Cole Petrov', earnings: 154.15, movement: 1),
+      StandingRow(rank: 10, name: 'Iris Delgado', earnings: 121.60, movement: 0),
+    ],
+  );
+
   // Trophies ------------------------------------------------------------
 
   static final List<Trophy> trophies = <Trophy>[

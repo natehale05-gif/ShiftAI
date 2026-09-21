@@ -11,6 +11,23 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 USER = {"handle": "rae", "name": "Rae Okonkwo", "email": "rae@example.com"}
 AVATARS = []
 _next_id = [1]
+# None until PATCH /v1/me/location sets it. A brand new account has shared
+# no location, so GET /v1/league must answer "not placed yet" until then —
+# never the global board in a league's clothing.
+LOCATION = {"set": False}
+
+
+def league_placement():
+    return {
+        "division": "bronze",
+        "regionLabel": "Local area",
+        "promoteCount": 1,
+        "relegateCount": 0,
+        "rows": [
+            {"rank": 1, "name": USER["name"], "earnings": 0, "movement": 0,
+             "isYou": True},
+        ],
+    }
 
 EMPTY = {
     "/v1/me": USER,
@@ -48,6 +65,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = self.path.split("?")[0]
+        if path == "/v1/league":
+            return self._send(200, league_placement() if LOCATION["set"] else {})
         if path in EMPTY:
             return self._send(200, EMPTY[path])
         self._send(404, {"message": f"No route {path}."})
@@ -108,15 +127,13 @@ class Handler(BaseHTTPRequestHandler):
             body = json.loads(self.rfile.read(length) or b"{}")
             USER.update({k: v for k, v in body.items() if k in USER})
             return self._send(200, USER)
-        self._send(404, {"message": f"No route {path}."})
-
-    def do_PATCH(self):
-        path = self.path.split("?")[0]
-        if path == "/v1/me":
+        if path == "/v1/me/location":
             length = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(length) or b"{}")
-            USER.update({k: v for k, v in body.items() if k in USER})
-            return self._send(200, USER)
+            if "lat" not in body or "lng" not in body:
+                return self._send(400, {"message": "lat and lng are required."})
+            LOCATION["set"] = True
+            return self._send(200, league_placement())
         self._send(404, {"message": f"No route {path}."})
 
     def do_DELETE(self):

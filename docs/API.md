@@ -266,6 +266,34 @@ row optimistically and puts the list back if the call is refused, so a
 { "pool": 53497, "payoutLine": "TOP EARNERS CASH OUT FRIDAY" }
 ```
 
+### `/v1/league`
+
+```json
+{ "division": "silver", "regionLabel": "Austin Metro", "promoteCount": 3,
+  "relegateCount": 3,
+  "rows": [{ "rank": 1, "name": "Jodie Marsh", "earnings": 412.80,
+             "movement": 1, "isYou": false }] }
+```
+
+A small board — the same row shape as `/v1/standings` — scoped to people
+near this account in both **rank and location**, rather than the whole
+board. It is a different, smaller competition, not a filtered view of the
+global one, so its rows do not need to be a subset of `/v1/standings`'s.
+
+`division` is one of `bronze`, `silver`, `gold`, `platinum`: which rung of
+the ladder this cohort is on. `promoteCount` and `relegateCount` are how
+many of the top and bottom ranks move divisions when the week closes; the
+client colours those rows itself from `rank` and `rows.length`, so send
+accurate ranks and nothing else. Exactly one row should carry
+`"isYou": true`, same rule as `/v1/standings`.
+
+**Before this account has shared a location, answer `{}`.** An empty
+object means "not placed yet," not an error — the client shows a prompt
+to turn location on rather than a board. Never answer with
+`/v1/standings` in a league's clothing: a global row standing in for a
+local one is the same leak as the seeded catalogue standing in for an
+account, just on a smaller board.
+
 ## Writes
 
 | Method | Path | Body | Returns |
@@ -285,6 +313,7 @@ row optimistically and puts the list back if the call is refused, so a
 | POST | `/v1/avatars` | `{uploadId, name}` | the avatar, `training` |
 | POST | `/v1/avatars/{id}/personal` | — | the avatar, now `personal` |
 | DELETE | `/v1/avatars/{id}` | — | — |
+| PATCH | `/v1/me/location` | `{lat, lng}` | the league placement |
 
 ### `POST /v1/messages`
 
@@ -351,6 +380,23 @@ one," the client only asks for a specific one to be it.
 `DELETE /v1/avatars/{id}` removes one. Deleting the personal avatar is
 a decision for you to make (fall back to initials, or refuse it) —
 either is a valid answer, the client handles both.
+
+### `PATCH /v1/me/location`
+
+```json
+{ "lat": 30.2672, "lng": -97.7431 }
+```
+
+Resolve this into whatever region bucket you use for matching — a metro
+area is granular enough, and the client only ever asks for this much:
+there is no continuous tracking, no background updates, just a fix taken
+when the person opens the local board or asks to update it. Answer with
+the same shape as `GET /v1/league`.
+
+Whether a new location moves the account into a different cohort right
+away or only once the current week closes is your call and is invisible
+to the client either way — it draws whatever `division` and `rows` come
+back.
 
 ### Writes and the UI
 
