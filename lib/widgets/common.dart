@@ -711,7 +711,16 @@ class _PillComposerState extends State<PillComposer> {
                             ? 'Choose an avatar to generate as'
                             : 'Generating as ${active.name}',
                         onPressed: () => _pickAvatar(state),
-                        icon: _AvatarGlyph(avatar: active, size: 22),
+                        // A plain glyph, same family as the "+" beside it —
+                        // just tinted the accent once an avatar is active,
+                        // never a photo or a ring around this one.
+                        icon: Icon(
+                          active == null
+                              ? Icons.face_outlined
+                              : Icons.face_rounded,
+                          size: 22,
+                          color: active == null ? c.textMuted : c.accent,
+                        ),
                         style: IconButton.styleFrom(
                           minimumSize:
                               const Size(_controlSize, _controlSize),

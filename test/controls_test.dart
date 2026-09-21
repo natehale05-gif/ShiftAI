@@ -10,6 +10,15 @@ import 'package:shift_ai/models/models.dart';
 import 'package:shift_ai/data/auth/token_store.dart';
 import 'package:shift_ai/state/app_state.dart';
 
+/// The rings sheet opens on its own the moment `ShiftShell` mounts — see
+/// `ShiftShell._showRings` — so a test that then taps something underneath
+/// dismisses it first, the same way a person would.
+Future<void> _dismissRingsSheet(WidgetTester tester) async {
+  if (find.byType(BottomSheet).evaluate().isEmpty) return;
+  await tester.tapAt(const Offset(5, 5));
+  await tester.pumpAndSettle();
+}
+
 /// A repository that takes reads and refuses every write, which is what a
 /// server does when the token has expired or the row has moved on.
 class _RefusingRepository extends SeedRepository {
@@ -459,6 +468,7 @@ void main() {
       state.reusePrompt(item.prompt);
       await tester.pumpWidget(ShiftApp(state: state));
       await tester.pumpAndSettle();
+      await _dismissRingsSheet(tester);
 
       expect(find.text(item.prompt), findsOneWidget);
     });
@@ -474,6 +484,7 @@ void main() {
 
       await tester.tap(find.text('SIGN IN'));
       await tester.pumpAndSettle();
+      await _dismissRingsSheet(tester);
 
       expect(state.signedIn, isFalse);
       expect(
@@ -493,6 +504,7 @@ void main() {
       await tester.enterText(find.byType(TextField).last, 'a-password');
       await tester.tap(find.text('SIGN IN'));
       await tester.pumpAndSettle();
+      await _dismissRingsSheet(tester);
 
       expect(state.signedIn, isTrue);
     });
@@ -508,6 +520,7 @@ void main() {
     state.setSurface(Surface.trophies);
     await tester.pumpWidget(ShiftApp(state: state));
     await tester.pumpAndSettle();
+    await _dismissRingsSheet(tester);
 
     final Trophy trophy = state.trophies.first;
     await tester.tap(find.text(trophy.name).first);

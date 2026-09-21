@@ -151,24 +151,51 @@ class _GlobalBoard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final AppState state = AppScope.of(context);
-    final StandingRow? you = state.you;
-    final StandingRow? target = state.target;
-    final StandingRow? chaser = state.chaser;
+    return _StandingsBoard(rows: state.standings);
+  }
+}
 
-    // A board arrives from the engine, so before the first week scores
-    // there is nothing to rank. Saying that is better than a podium of
-    // three blanks.
+/// Podium, your row, the rival on either side of it, then the rest — the
+/// same handful of pieces on both boards, because a second, differently
+/// shaped board would just be a second thing to learn. Local and Global
+/// differ in whose rows these are, never in how they are shown.
+class _StandingsBoard extends StatelessWidget {
+  const _StandingsBoard({required this.rows});
+
+  final List<StandingRow> rows;
+
+  @override
+  Widget build(BuildContext context) {
+    final StandingRow? you =
+        rows.where((StandingRow r) => r.isYou).firstOrNull;
+
+    // A board arrives from the engine, so before the first week scores —
+    // or before a league has placed this account — there is nothing to
+    // rank. Saying that is better than a podium of three blanks.
     if (you == null) return const _NoBoardYet();
+
+    final List<StandingRow> podium =
+        rows.where((StandingRow r) => r.rank <= 3).toList();
+    final List<StandingRow> rest =
+        rows.where((StandingRow r) => r.rank > 3).toList();
+    final StandingRow? target = you.rank <= 1
+        ? null
+        : rows.where((StandingRow r) => r.rank == you.rank - 1).firstOrNull;
+    final StandingRow? chaser =
+        rows.where((StandingRow r) => r.rank == you.rank + 1).firstOrNull;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        _Podium(rows: state.podium),
-        const SizedBox(height: Space.x5),
+        if (podium.length == 3) ...<Widget>[
+          _Podium(rows: podium),
+          const SizedBox(height: Space.x5),
+        ],
         _YouCard(you: you),
         const SizedBox(height: Space.x4),
         _RivalRow(target: target, chaser: chaser, you: you),
         const SizedBox(height: Space.x5),
-        ...state.rest.map((StandingRow row) => _Row(row: row)),
+        ...rest.map((StandingRow row) => _Row(row: row)),
       ],
     );
   }
@@ -272,7 +299,14 @@ class _LocalLeagueSectionState extends State<_LocalLeagueSection> {
         onShare: () => _share(state),
       );
     }
-    return _LeagueBoard(league: league);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        _LeagueHeader(league: league),
+        const SizedBox(height: Space.x5),
+        _StandingsBoard(rows: league.rows),
+      ],
+    );
   }
 }
 
@@ -319,42 +353,6 @@ class _NoLeagueYet extends StatelessWidget {
   }
 }
 
-class _LeagueBoard extends StatelessWidget {
-  const _LeagueBoard({required this.league});
-
-  final League league;
-
-  @override
-  Widget build(BuildContext context) {
-    final StandingRow? you = league.you;
-    // Same podium as the global board — it is the same StandingRow shape,
-    // just a smaller cohort behind it.
-    final List<StandingRow> podium =
-        league.rows.where((StandingRow r) => r.rank <= 3).toList();
-    final List<StandingRow> rest = league.rows
-        .where((StandingRow r) => r.rank > 3 && !r.isYou)
-        .toList();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: <Widget>[
-        _LeagueHeader(league: league),
-        const SizedBox(height: Space.x5),
-        if (podium.length == 3) ...<Widget>[
-          _Podium(rows: podium),
-          const SizedBox(height: Space.x5),
-        ],
-        // Already on the podium: the you-card would just repeat that row.
-        if (you != null && you.rank > 3) ...<Widget>[
-          _LeagueYouCard(you: you, zone: league.zoneFor(you)),
-          const SizedBox(height: Space.x4),
-        ],
-        ...rest.map((StandingRow r) => _LeagueRow(row: r, zone: league.zoneFor(r))),
-      ],
-    );
-  }
-}
-
 class _LeagueHeader extends StatelessWidget {
   const _LeagueHeader({required this.league});
 
@@ -390,124 +388,6 @@ class _LeagueHeader extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-/// The colour a zone reads as, wherever a league row needs one.
-extension on LeagueZone {
-  Color tone(ShiftColors c) => switch (this) {
-        LeagueZone.promotion => c.success,
-        LeagueZone.relegation => c.danger,
-        LeagueZone.safe => c.border,
-      };
-
-  String? get caption => switch (this) {
-        LeagueZone.promotion => 'PROMOTING',
-        LeagueZone.relegation => 'RELEGATING',
-        LeagueZone.safe => null,
-      };
-}
-
-class _LeagueYouCard extends StatelessWidget {
-  const _LeagueYouCard({required this.you, required this.zone});
-
-  final StandingRow you;
-  final LeagueZone zone;
-
-  @override
-  Widget build(BuildContext context) {
-    final ShiftColors c = ShiftColors.of(context);
-    final Color tone = zone.tone(c);
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: Space.x5,
-        vertical: Space.x4,
-      ),
-      decoration: BoxDecoration(
-        color: c.accentSoft,
-        borderRadius: Radii.lgAll,
-        border: Border.all(color: c.accent),
-      ),
-      child: Row(
-        children: <Widget>[
-          Text(
-            '${you.rank}',
-            style:
-                ShiftType.displayL(c.text).copyWith(fontWeight: FontWeight.w500),
-          ),
-          const SizedBox(width: Space.x5),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Text('You', style: ShiftType.bodyStrong(c.text)),
-                if (zone.caption != null) ...<Widget>[
-                  const SizedBox(height: 2),
-                  Text(zone.caption!, style: ShiftType.labelSm(tone)),
-                ],
-              ],
-            ),
-          ),
-          Text(
-            Fmt.money(you.earnings),
-            style: ShiftType.mono(c.success, size: 24),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _LeagueRow extends StatelessWidget {
-  const _LeagueRow({required this.row, required this.zone});
-
-  final StandingRow row;
-  final LeagueZone zone;
-
-  @override
-  Widget build(BuildContext context) {
-    final ShiftColors c = ShiftColors.of(context);
-    final Color tone = zone.tone(c);
-    return Padding(
-      padding: const EdgeInsets.only(bottom: Space.x1),
-      child: Column(
-        children: <Widget>[
-          SizedBox(
-            height: 56,
-            child: Row(
-              children: <Widget>[
-                Container(width: 3, height: 32, color: tone),
-                const SizedBox(width: Space.x3),
-                SizedBox(
-                  width: 26,
-                  child: Text(
-                    '${row.rank}',
-                    textAlign: TextAlign.right,
-                    style: ShiftType.body(c.text),
-                  ),
-                ),
-                const SizedBox(width: Space.x3),
-                _Face(row: row, size: 30),
-                const SizedBox(width: Space.x3),
-                Expanded(
-                  child: Text(
-                    row.name,
-                    style: ShiftType.body(c.text),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                Text(
-                  Fmt.money(row.earnings),
-                  style: ShiftType.mono(c.success, size: 16),
-                ),
-              ],
-            ),
-          ),
-          Divider(height: 1, color: c.border),
-        ],
-      ),
     );
   }
 }
