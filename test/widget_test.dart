@@ -21,12 +21,17 @@ Future<AppState> _freshState() async {
   return AppState.load(tokenStore: MemoryTokenStore());
 }
 
-/// The rings sheet opens on its own the moment `ShiftShell` mounts — see
+/// The rings screen opens on its own the moment `ShiftShell` mounts — see
 /// `ShiftShell._showRings` — so every test that then wants to tap
-/// something underneath dismisses it first, the same way a person would.
+/// something underneath closes it first, the same way a person would.
+/// Settling first is what actually lets the pushed route finish
+/// building — the push is requested from a post-frame callback, so it
+/// needs a frame of its own before its close button exists to find.
 Future<void> _dismissRingsSheet(WidgetTester tester) async {
-  if (find.byType(BottomSheet).evaluate().isEmpty) return;
-  await tester.tapAt(const Offset(5, 5));
+  await tester.pumpAndSettle();
+  final Finder close = find.byTooltip('Close');
+  if (close.evaluate().isEmpty) return;
+  await tester.tap(close.first);
   await tester.pumpAndSettle();
 }
 
@@ -121,6 +126,7 @@ void main() {
       (WidgetTester tester) async {
     final AppState state = await _freshState();
     await tester.pumpWidget(ShiftApp(state: state));
+    await _dismissRingsSheet(tester);
 
     for (final ShiftThemeId id in ShiftThemeId.values) {
       state.setTheme(id);
@@ -382,6 +388,7 @@ void main() {
     final AppState state = await _freshState();
     await tester.pumpWidget(ShiftApp(state: state));
     await tester.pumpAndSettle();
+    await _dismissRingsSheet(tester);
 
     final Rect pill = tester.getRect(
       find.byKey(const ValueKey<String>('composer-pill')),
