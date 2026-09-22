@@ -33,8 +33,10 @@ class _ShiftAppState extends State<ShiftApp> {
     super.dispose();
   }
 
-  void _syncBrowserChrome() =>
-      applyBrowserChrome(ShiftColors.forTheme(widget.state.themeId).bg);
+  void _syncBrowserChrome() => applyBrowserChrome(
+        ShiftColors.forTheme(widget.state.themeId).bg,
+        theme: widget.state.themeId.name,
+      );
 
   @override
   Widget build(BuildContext context) {
