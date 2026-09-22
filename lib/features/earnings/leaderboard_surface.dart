@@ -472,15 +472,18 @@ class _ClockRowState extends State<_ClockRow> {
 /// [StandingRow.avatarUrl] — your personal avatar, hosted by the server —
 /// and that is worth drawing.
 class _Face extends StatelessWidget {
-  const _Face({required this.row, required this.size});
+  const _Face({required this.row, required this.size, this.ring});
 
   final StandingRow row;
   final double size;
 
+  /// Overrides the tier ring — the podium rings each face in its medal.
+  final Color? ring;
+
   @override
   Widget build(BuildContext context) {
     final ShiftColors c = ShiftColors.of(context);
-    final Color ring = row.tier?.colorOn(c) ?? c.border;
+    final Color ring = this.ring ?? row.tier?.colorOn(c) ?? c.border;
     final String? url = row.avatarUrl;
 
     Widget initials() => Container(
@@ -562,24 +565,35 @@ class _PodiumSpot extends StatelessWidget {
   /// The pedestal, not the whole spot. First is tallest.
   final double height;
 
+  /// Gold, silver, bronze — the tier colours, which already know how to
+  /// darken for a light ground. First place used to be the accent pink
+  /// and the other two plain grey, so nothing on the podium said which
+  /// step was which except the height.
+  Color _medal(ShiftColors c) => switch (row.rank) {
+        1 => TrophyTier.gold.colorOn(c),
+        2 => TrophyTier.silver.colorOn(c),
+        _ => TrophyTier.bronze.colorOn(c),
+      };
+
   @override
   Widget build(BuildContext context) {
     final ShiftColors c = ShiftColors.of(context);
     final bool lead = row.rank == 1;
+    final Color medal = _medal(c);
 
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        // The cup is the one piece of gold on the board, and it is the
-        // only thing marking first place besides the extra height.
         SizedBox(
           height: 22,
           child: lead
-              ? Icon(Icons.emoji_events_rounded, size: 20, color: c.warning)
+              ? Icon(Icons.emoji_events_rounded, size: 20, color: medal)
               : null,
         ),
-        Center(child: _Face(row: row, size: lead ? 64 : 52)),
+        Center(
+          child: _Face(row: row, size: lead ? 64 : 52, ring: medal),
+        ),
         const SizedBox(height: Space.x3),
         Text(
           row.name,
@@ -596,19 +610,46 @@ class _PodiumSpot extends StatelessWidget {
         ),
         const SizedBox(height: Space.x3),
         // Pedestals meet in the middle with no gap, so the three read as
-        // one block of steps rather than three floating tiles.
-        Container(
-          height: height,
-          alignment: Alignment.topCenter,
-          padding: const EdgeInsets.only(top: Space.x2),
-          decoration: BoxDecoration(
-            color: lead ? c.accentSoft : c.surfaceRaised,
-            borderRadius: const BorderRadius.vertical(top: Radii.sm),
-          ),
-          child: Text(
-            '${row.rank}',
-            style: ShiftType.subheading(lead ? c.accent : c.textMuted)
-                .copyWith(fontSize: lead ? 22 : 18),
+        // one block of steps rather than three floating tiles. Each is its
+        // medal washed thin, lit along the top edge like a step catching
+        // the light.
+        //
+        // The lit edge is its own strip rather than a top-only Border: a
+        // borderRadius on a border that is not the same on every side is
+        // an assertion in Flutter, not a style.
+        ClipRRect(
+          borderRadius: const BorderRadius.vertical(top: Radii.sm),
+          child: SizedBox(
+            height: height,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                ColoredBox(color: medal, child: const SizedBox(height: 2)),
+                Expanded(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: <Color>[
+                          medal.withValues(alpha: 0.30),
+                          medal.withValues(alpha: 0.06),
+                        ],
+                      ),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: Space.x2 - 2),
+                      child: Text(
+                        '${row.rank}',
+                        textAlign: TextAlign.center,
+                        style: ShiftType.subheading(medal)
+                            .copyWith(fontSize: lead ? 22 : 18),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ],
