@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -250,6 +252,7 @@ class MediaPlaceholder extends StatelessWidget {
   const MediaPlaceholder({
     required this.label,
     required this.tag,
+    this.seed,
     this.caption,
     this.selected = false,
     this.labelMaxLines = 1,
@@ -258,6 +261,11 @@ class MediaPlaceholder extends StatelessWidget {
 
   final String label;
   final String tag;
+
+  /// What the poster's art is drawn from. The piece's id, so it looks the
+  /// same here as in its detail panel; the label when there is no id.
+  final String? seed;
+
   final String? caption;
   final bool selected;
 
@@ -268,75 +276,251 @@ class MediaPlaceholder extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ShiftColors c = ShiftColors.of(context);
-    return Container(
-      padding: const EdgeInsets.all(Space.x3),
-      decoration: BoxDecoration(
-        color: selected ? c.surfaceRaised : c.surface,
-        borderRadius: Radii.lgAll,
-        border: Border.all(color: selected ? c.accent : c.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Container(
-            padding: const EdgeInsets.symmetric(
-              horizontal: Space.x2,
-              vertical: 3,
-            ),
-            decoration: BoxDecoration(
-              color: selected ? c.bg : c.surfaceRaised,
-              borderRadius: Radii.smAll,
-            ),
-            child: Text(
-              tag.toUpperCase(),
-              style: ShiftType.labelSm(tag == 'video' ? c.sky : c.textMuted),
-            ),
-          ),
-          // The text sits on the floor of the tile and takes only the
-          // lines that actually fit. Splitting the leftover space with a
-          // Spacer used to cut the second line of a title in half on a
-          // narrow tile; here a line is either drawn whole or dropped for
-          // an ellipsis.
-          Expanded(
-            child: LayoutBuilder(
-              builder: (BuildContext context, BoxConstraints box) {
-                const double labelLine = 24;
-                const double captionLine = 20;
-                final double forLabel = caption == null
-                    ? box.maxHeight
-                    : box.maxHeight - captionLine;
-                final int lines =
-                    (forLabel / labelLine).floor().clamp(1, labelMaxLines);
+    final bool video = tag == 'video';
+    // Type on the poster is always white on a scrim, whatever the theme:
+    // the art is content, like a photograph, so it is dark in every theme
+    // and the text over it has to be light in every theme too.
+    const Color ink = Colors.white;
+    final Color inkSoft = Colors.white.withValues(alpha: 0.72);
 
-                return Align(
-                  alignment: Alignment.bottomLeft,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Text(
-                        label,
-                        maxLines: lines,
-                        overflow: TextOverflow.ellipsis,
-                        style: ShiftType.bodyStrong(c.text),
-                      ),
-                      if (caption != null)
-                        Text(
-                          caption!,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: ShiftType.caption(c.textMuted),
-                        ),
-                    ],
-                  ),
-                );
-              },
+    return Container(
+      foregroundDecoration: BoxDecoration(
+        borderRadius: Radii.lgAll,
+        border: Border.all(
+          color: selected ? c.accent : Colors.white.withValues(alpha: 0.08),
+          width: selected ? 2 : 1,
+        ),
+      ),
+      child: ClipRRect(
+        borderRadius: Radii.lgAll,
+        child: Stack(
+          fit: StackFit.expand,
+          children: <Widget>[
+            PosterArt(seed: seed ?? label),
+            DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  stops: const <double>[0.3, 1],
+                  colors: <Color>[
+                    Colors.transparent,
+                    Colors.black.withValues(alpha: 0.72),
+                  ],
+                ),
+              ),
             ),
-          ),
-        ],
+            // Only where there is room for it. On a short tile the title
+            // and its caption already fill the lower half, and a disc placed
+            // anywhere central lands on them — the chip carries the play
+            // mark there instead.
+            if (video)
+              LayoutBuilder(
+                builder: (BuildContext context, BoxConstraints box) =>
+                    box.maxHeight >= 230
+                        ? const Align(
+                            alignment: Alignment(0, -0.2),
+                            child: PlayDisc(size: 44),
+                          )
+                        : const SizedBox.shrink(),
+              ),
+            Padding(
+              padding: const EdgeInsets.all(Space.x3),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: Space.x2,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.38),
+                      borderRadius: Radii.smAll,
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        if (video) ...<Widget>[
+                          Icon(Icons.play_arrow_rounded,
+                              size: 12, color: inkSoft),
+                          const SizedBox(width: 2),
+                        ],
+                        Text(
+                          tag.toUpperCase(),
+                          style: ShiftType.labelSm(inkSoft),
+                        ),
+                      ],
+                    ),
+                  ),
+                  // The text sits on the floor of the tile and takes only
+                  // the lines that actually fit. Splitting the leftover
+                  // space with a Spacer used to cut the second line of a
+                  // title in half on a narrow tile; here a line is either
+                  // drawn whole or dropped for an ellipsis.
+                  Expanded(
+                    child: LayoutBuilder(
+                      builder: (BuildContext context, BoxConstraints box) {
+                        const double labelLine = 24;
+                        const double captionLine = 20;
+                        final double forLabel = caption == null
+                            ? box.maxHeight
+                            : box.maxHeight - captionLine;
+                        final int lines = (forLabel / labelLine)
+                            .floor()
+                            .clamp(1, labelMaxLines);
+
+                        return Align(
+                          alignment: Alignment.bottomLeft,
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: <Widget>[
+                              Text(
+                                label,
+                                maxLines: lines,
+                                overflow: TextOverflow.ellipsis,
+                                style: ShiftType.bodyStrong(ink),
+                              ),
+                              if (caption != null)
+                                Text(
+                                  caption!,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: ShiftType.caption(inkSoft),
+                                ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
+}
+
+/// Art for a piece with no thumbnail — which is every piece, until the
+/// engine sends previews.
+///
+/// It was an empty dark box with a type chip, and a masonry grid of those
+/// is a wall of identical rectangles that makes the vault look empty when
+/// it is not. This draws from the brand's neon sweep and is seeded by the
+/// piece, so the vault reads as one gallery and each piece keeps its own
+/// look: the same colours in the grid, in its detail panel, and every
+/// time the app opens.
+class PosterArt extends StatelessWidget {
+  const PosterArt({required this.seed, super.key});
+
+  final String seed;
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      painter: _PosterPainter(_stableHash(seed)),
+      child: const SizedBox.expand(),
+    );
+  }
+}
+
+/// The play affordance over a video's poster.
+class PlayDisc extends StatelessWidget {
+  const PlayDisc({this.size = 44, super.key});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: Colors.black.withValues(alpha: 0.35),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.55)),
+      ),
+      child: Icon(
+        Icons.play_arrow_rounded,
+        color: Colors.white,
+        size: size * 0.6,
+      ),
+    );
+  }
+}
+
+/// String.hashCode is not promised to be stable between runs, and a piece
+/// that changed colour on every launch would read as a different piece.
+/// Kept inside 30 bits so the multiply stays exact on the web, where an
+/// int is a double and anything past 2^53 quietly loses its low bits.
+int _stableHash(String s) {
+  int h = 17;
+  for (final int unit in s.codeUnits) {
+    h = (h * 31 + unit) & 0x3FFFFFFF;
+  }
+  return h;
+}
+
+class _PosterPainter extends CustomPainter {
+  const _PosterPainter(this.seed);
+
+  final int seed;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final math.Random rnd = math.Random(seed);
+    final Rect bounds = Offset.zero & size;
+
+    // Two points on the sweep, far enough apart that the pair has some
+    // contrast in it, near enough that it still reads as the brand.
+    final double t1 = rnd.nextDouble();
+    final double t2 = (t1 + 0.35 + rnd.nextDouble() * 0.3) % 1.0;
+    final Color lead = ShiftBrand.neonAt(t1);
+    final Color glow = ShiftBrand.neonAt(t2);
+    // A night ground tinted toward the lead, dark enough for white type.
+    final Color night = Color.lerp(Colors.black, lead, 0.14)!;
+
+    final double angle = rnd.nextDouble() * math.pi * 2;
+    final double dx = math.cos(angle), dy = math.sin(angle);
+    canvas.drawRect(
+      bounds,
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment(-dx, -dy),
+          end: Alignment(dx, dy),
+          colors: <Color>[night, Color.lerp(night, lead, 0.5)!],
+        ).createShader(bounds),
+    );
+
+    void orb(Color colour, double reach, double strength) {
+      final Offset centre = Offset(
+        size.width * (0.15 + rnd.nextDouble() * 0.7),
+        size.height * (0.1 + rnd.nextDouble() * 0.55),
+      );
+      final double radius = size.longestSide * reach;
+      canvas.drawCircle(
+        centre,
+        radius,
+        Paint()
+          ..shader = RadialGradient(
+            colors: <Color>[
+              colour.withValues(alpha: strength),
+              colour.withValues(alpha: 0),
+            ],
+          ).createShader(Rect.fromCircle(center: centre, radius: radius)),
+      );
+    }
+
+    orb(glow, 0.55 + rnd.nextDouble() * 0.25, 0.75);
+    orb(lead, 0.28 + rnd.nextDouble() * 0.2, 0.55);
+  }
+
+  @override
+  bool shouldRepaint(_PosterPainter old) => old.seed != seed;
 }
 
 /// Says the engine refused, on a screen whose contents come from it. Only

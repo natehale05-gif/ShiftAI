@@ -267,6 +267,7 @@ class _VaultTile extends StatelessWidget {
               child: MediaPlaceholder(
                 label: item.title,
                 tag: item.kind.name,
+                seed: item.id,
                 selected: selected,
                 labelMaxLines: 2,
                 // Someone else's piece says whose it is, on the tile, so
@@ -462,18 +463,16 @@ class _DetailPanel extends StatelessWidget {
                 ),
                 child: AspectRatio(
                   aspectRatio: item.aspect,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: c.surfaceRaised,
-                      borderRadius: Radii.lgAll,
-                      border: Border.all(color: c.borderStrong),
-                    ),
-                    child: Icon(
-                      video
-                          ? Icons.play_circle_outline_rounded
-                          : Icons.image_outlined,
-                      size: 40,
-                      color: c.sky,
+                  // The same art as the piece's tile, so opening it lands
+                  // on the thing you tapped rather than on a blank box.
+                  child: ClipRRect(
+                    borderRadius: Radii.lgAll,
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: <Widget>[
+                        PosterArt(seed: item.id),
+                        if (video) const Center(child: PlayDisc(size: 56)),
+                      ],
                     ),
                   ),
                 ),
