@@ -11,8 +11,13 @@ import 'package:web/web.dart' as web;
 /// leaving both of them on the dark theme's near-black, which is the black
 /// band above and below the app on a Pixel.
 ///
-/// The `<html>` background goes with it, so the overscroll gutter behind a
-/// rubber-banded scroll is the same colour rather than a flash of white.
+/// The document's own background goes with it, on `<body>` as well as
+/// `<html>`. Both are hard-coded to the dark theme by the hosted shell's
+/// stylesheet, and both matter: Chrome paints the strip behind the gesture
+/// pill from the document background, not from the tag above, which is why
+/// fixing only the tag left a black bar along the bottom of a cream theme.
+/// The overscroll gutter behind a rubber-banded scroll comes from the same
+/// place, so it stops flashing the wrong colour too.
 void applyBrowserChrome(Color background) {
   final String colour = _css(background);
 
@@ -30,6 +35,7 @@ void applyBrowserChrome(Color background) {
 
   (web.document.documentElement as web.HTMLElement?)?.style.backgroundColor =
       colour;
+  web.document.body?.style.backgroundColor = colour;
 }
 
 String _css(Color colour) {
