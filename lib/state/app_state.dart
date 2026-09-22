@@ -16,6 +16,7 @@ import '../features/widgets/widget_sync.dart';
 import '../models/models.dart';
 import '../theme/tokens.dart';
 import 'daily_rings.dart';
+import 'greetings.dart';
 
 /// Storage keys. Everything money related persists so a reload never resets
 /// the account. Nothing else writes these keys, and a key this app did not
@@ -313,6 +314,12 @@ class AppState extends ChangeNotifier {
   late List<DesignDoc> designs;
   late List<Avatar> avatars;
   late List<ChatMessage> messages;
+
+  /// The line the Suite shows over an empty thread. Held on the state
+  /// rather than picked where it is drawn: the empty state rebuilds on
+  /// every keystroke in the composer, and a line picked in `build` would
+  /// change under the person as they typed.
+  String greeting = Greetings.next();
 
   /// This account's local league placement, or null before it has shared a
   /// location. Never the seeded/global board in disguise — see
@@ -1064,6 +1071,16 @@ class AppState extends ChangeNotifier {
     thinking = false;
     messages = <ChatMessage>[];
     lastAsk = null;
+    greeting = Greetings.next(avoid: greeting);
+    _changed();
+  }
+
+  /// A fresh line for a fresh look at the app, so coming back to it after
+  /// a while is not the screen you walked away from. Called from
+  /// `ShiftShell` on resume, alongside the rings.
+  void freshenGreeting() {
+    if (messages.isNotEmpty) return;
+    greeting = Greetings.next(avoid: greeting);
     _changed();
   }
 

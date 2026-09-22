@@ -149,12 +149,15 @@ class _EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final AppState state = AppScope.of(context);
     final ShiftColors c = ShiftColors.of(context);
     return Center(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: Space.x5),
         child: Text(
-          'What are we making today?',
+          // Rotates — a new line per thread and per return to the app.
+          // See `Greetings` for why it is not one fixed sentence.
+          state.greeting,
           textAlign: TextAlign.center,
           style: ShiftType.heading(c.textMuted),
         ),

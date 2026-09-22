@@ -59,6 +59,9 @@ class _ShiftShellState extends State<ShiftShell> with WidgetsBindingObserver {
         (_lifecycle == AppLifecycleState.paused ||
             _lifecycle == AppLifecycleState.hidden)) {
       _showRings();
+      // Behind the rings, so the Suite is already showing a different
+      // line by the time they are swiped away.
+      AppScope.read(context).freshenGreeting();
     }
     _lifecycle = next;
   }
