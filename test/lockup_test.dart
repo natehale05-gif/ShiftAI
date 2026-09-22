@@ -42,16 +42,27 @@ void main() {
   });
 
   test('the neon gradient is the brand and no theme overwrites it', () async {
-    // That magenta-to-blue is the mark. It is not a token, and a theme
-    // getting to repaint it is the bug this guards.
+    // That magenta-to-blue is the mark. A theme getting to repaint it is
+    // the bug this guards.
     await ShiftLockup.preload();
+
+    String hex(Color x) {
+      String ch(double v) =>
+          (v * 255).round().clamp(0, 255).toRadixString(16).padLeft(2, '0');
+      return '#${ch(x.r)}${ch(x.g)}${ch(x.b)}'.toUpperCase();
+    }
 
     for (final ShiftThemeId id in ShiftThemeId.values) {
       final ShiftColors c = ShiftColors.forTheme(id);
       final String svg = ShiftLockup.forInk(c.text)!;
-      // Sampled off the brand artwork's own glow, not chosen here.
-      expect(svg, contains('#EC01E7'), reason: '${id.name} lost the magenta');
-      expect(svg, contains('#0061F1'), reason: '${id.name} lost the blue');
+      // Sampled off the brand artwork's own glow, not chosen here — and
+      // asserted through ShiftBrand rather than as literals, so the
+      // tokens and the artwork cannot drift apart. The daily rings are
+      // drawn from the same pair.
+      expect(svg, contains(hex(ShiftBrand.neonStart)),
+          reason: '${id.name} lost the magenta');
+      expect(svg, contains(hex(ShiftBrand.neonEnd)),
+          reason: '${id.name} lost the blue');
     }
   });
 

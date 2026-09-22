@@ -179,6 +179,11 @@ class ShiftAppBar extends StatelessWidget {
       child: SizedBox(
         height: 60,
         child: Stack(
+          // Centred, because a Stack aligns to topStart by default and the
+          // row of controls only takes its own 44 of the bar's 60 — so the
+          // hamburger, the title and the icons on the right all sat 8
+          // above the logo, which fills the bar and centres itself.
+          alignment: Alignment.center,
           children: <Widget>[
             const Center(child: ShiftLogo(height: 20)),
             Row(

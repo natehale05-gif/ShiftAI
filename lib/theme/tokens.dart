@@ -239,6 +239,26 @@ class ShiftColors extends ThemeExtension<ShiftColors> {
 
 /// The `space-*` and `radius-*` scales. Layout code uses these, not bare
 /// numbers, so a change to the system lands everywhere at once.
+/// The brand's own colours: the ones that are the mark rather than a
+/// theme's choice.
+///
+/// The neon sweep is the logo badge's gradient, sampled off the brand
+/// artwork, and it is the same in all four themes for the same reason the
+/// badge is — repainting it would be repainting the logo. Everything that
+/// is a theme's to choose lives in [ShiftColors] instead.
+abstract final class ShiftBrand {
+  const ShiftBrand._();
+
+  /// The two ends of the badge's tube, and of anything else drawn to
+  /// carry the mark. `assets/brand/shift-ai-lockup.svg` holds the same
+  /// pair; `test/lockup_test.dart` fails if the two drift apart.
+  static const Color neonStart = Color(0xFFEC01E7);
+  static const Color neonEnd = Color(0xFF0061F1);
+
+  /// A point along the sweep: 0 is [neonStart], 1 is [neonEnd].
+  static Color neonAt(double t) => Color.lerp(neonStart, neonEnd, t)!;
+}
+
 abstract final class Space {
   static const double x1 = 4;
   static const double x2 = 8;
