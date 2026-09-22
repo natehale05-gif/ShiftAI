@@ -158,7 +158,7 @@ only how far along each one is:
 
 ```json
 [{ "id": "out_loud", "earnedOn": "2026-09-01T00:00:00Z",
-   "progress": 1.0, "progressLabel": "1 OF 1", "memberPercent": 44 }]
+   "progress": 1.0, "progressLabel": "1 of 1", "memberPercent": 44 }]
 ```
 
 Ids the client does not know are ignored; ids it knows but you omit keep
@@ -193,11 +193,14 @@ send. A trophy you say nothing about is shown unearned, at zero.
 
 ```json
 [{ "id": "first_light", "earnedOn": "2026-09-01T00:00:00Z",
-   "progress": 1.0, "progressLabel": "1 OF 1", "memberPercent": 91 }]
+   "progress": 1.0, "progressLabel": "1 of 1", "memberPercent": 91 }]
 ```
 
-`progress` is 0 to 1 and drives the bar. `progressLabel` is the mono line
-under it — "3 OF 10", "BEST #13", whatever reads right for that trophy.
+`progress` is 0 to 1 and drives the bar. `progressLabel` is the short line
+under it — "3 of 10", "Best #13", whatever reads right for that trophy.
+Send it in ordinary sentence case: the client decides how to set it, and
+a string that arrives shouted cannot be reliably unshouted ("Friday" would
+come back as "friday").
 `memberPercent` is how many members hold it; omit it or send 0 and the
 rarity is simply not shown rather than shown as 0%.
 
@@ -263,7 +266,7 @@ row optimistically and puts the list back if the call is refused, so a
 ### `/v1/week`
 
 ```json
-{ "pool": 53497, "payoutLine": "TOP EARNERS CASH OUT FRIDAY" }
+{ "pool": 53497, "payoutLine": "Top earners cash out Friday" }
 ```
 
 ### `/v1/league`

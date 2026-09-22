@@ -83,8 +83,9 @@ class Trophy {
   final IconData glyph;
   final TrophyTier tier;
 
-  /// The left half of the mono line under the bar: "1 OF 1", "BEST #13", or
-  /// what is missing before the trophy can be scored at all.
+  /// The short line under the bar: "1 of 1", "Best #13", or what is
+  /// missing before the trophy can be scored at all. Sentence case, as
+  /// sent — the client decides how to set it.
   final String progressLabel;
 
   /// How many members hold it.
@@ -106,8 +107,8 @@ class Trophy {
         requirement: requirement,
         glyph: glyph,
         tier: tier,
-        // "8 OF 10" becomes "0 OF 10": the target is part of the trophy,
-        // the count is not. Anything else (a "BEST #13") is the server's
+        // "8 of 10" becomes "0 of 10": the target is part of the trophy,
+        // the count is not. Anything else (a "Best #13") is the server's
         // sentence and there is nothing to keep.
         progressLabel: _zeroed(progressLabel),
         // How many members hold it is a fact about everyone else, which
@@ -120,7 +121,9 @@ class Trophy {
 
   static String _zeroed(String label) {
     final RegExpMatch? m = _outOf.firstMatch(label.toUpperCase());
-    return m == null ? '' : '0 OF ${m.group(1)}';
+    // Matched case-blind, so a server that still shouts is understood,
+    // but written back in the case everything else on the shelf is in.
+    return m == null ? '' : '0 of ${m.group(1)}';
   }
 
   /// The catalogue — name, glyph, tier — is the client's; how far along

@@ -272,8 +272,18 @@ void main() {
     test('the target in a progress label is kept, the count is not', () {
       final Trophy prolific =
           Seed.trophies.firstWhere((Trophy t) => t.id == 'prolific');
-      expect(prolific.progressLabel, '8 OF 10');
-      expect(prolific.unearned().progressLabel, '0 OF 10');
+      expect(prolific.progressLabel, '8 of 10');
+      expect(prolific.unearned().progressLabel, '0 of 10');
+    });
+
+    test('a label sent shouted is still understood, and written calmly', () {
+      // The contract asks for sentence case, but an engine that sends
+      // "8 OF 10" must not lose its target on the way to a new account's
+      // shelf — nor bring the capitals with it.
+      final Trophy prolific =
+          Seed.trophies.firstWhere((Trophy t) => t.id == 'prolific');
+      final Trophy shouted = prolific.copyWith(progressLabel: '8 OF 10');
+      expect(shouted.unearned().progressLabel, '0 of 10');
     });
 
     test("what the server does say is what shows", () {
@@ -282,7 +292,7 @@ void main() {
           'id': 'first_light',
           'earnedOn': '2026-09-01T00:00:00Z',
           'progress': 1.0,
-          'progressLabel': '1 OF 1',
+          'progressLabel': '1 of 1',
           'memberPercent': 91,
         },
       ]);
