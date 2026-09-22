@@ -248,7 +248,7 @@ void main() {
     // Local by default: the seeded league's own region shows.
     expect(find.text(Seed.league.regionLabel), findsOneWidget);
 
-    await tester.tap(find.text('GLOBAL'));
+    await tester.tap(find.text('Global'));
     await tester.pump();
     expect(find.text(Seed.league.regionLabel), findsNothing);
     expect(tester.takeException(), isNull);

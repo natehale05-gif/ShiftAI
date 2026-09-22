@@ -126,10 +126,11 @@ class _ScopeBar extends StatelessWidget {
           // what you saved from other people.
           Text(
             state.vaultScope == VaultScope.mine && state.savedFromEco.isNotEmpty
-                ? '${state.vault.length} MADE · '
-                    '${state.savedFromEco.length} SAVED'
-                : '${state.visibleVault.length} ITEMS',
-            style: ShiftType.labelSm(c.textMuted),
+                ? '${state.vault.length} made · '
+                    '${state.savedFromEco.length} saved'
+                : '${state.visibleVault.length} '
+                    '${state.visibleVault.length == 1 ? 'item' : 'items'}',
+            style: ShiftType.bodySm(c.textMuted),
           ),
         ],
       ),
@@ -191,8 +192,9 @@ class _MasonryGrid extends StatelessWidget {
           buckets[shortest].add(item);
           // The tile clamps its height, so the bookkeeping has to clamp too
           // or the columns come out ragged.
-          heights[shortest] +=
-              (columnWidth / item.aspect).clamp(150, 420) + Space.x4;
+          heights[shortest] += (columnWidth / item.aspect).clamp(150, 420) +
+              _VaultTile.captionHeight +
+              Space.x5;
         }
 
         return Scrollbar(
@@ -214,7 +216,7 @@ class _MasonryGrid extends StatelessWidget {
                       children: buckets[i]
                           .map(
                             (VaultItem item) => Padding(
-                              padding: const EdgeInsets.only(bottom: Space.x4),
+                              padding: const EdgeInsets.only(bottom: Space.x5),
                               child: _VaultTile(
                                 item: item,
                                 height: columnWidth / item.aspect,
@@ -249,47 +251,92 @@ class _VaultTile extends StatelessWidget {
   final bool selected;
   final VoidCallback onTap;
 
+  /// The caption under the art: a gap, one line of title, one of detail.
+  /// Fixed, so the masonry's arithmetic and the tile agree on how tall a
+  /// tile is and the columns come out level.
+  static const double captionHeight = Space.x2 + 22 + 18;
+
   @override
   Widget build(BuildContext context) {
+    final ShiftColors c = ShiftColors.of(context);
     final bool video = item.kind == MediaKind.video;
-    final double tileHeight = height.clamp(150, 420);
+    final double artHeight = height.clamp(150, 420);
+    final String kind = video ? 'Video' : 'Image';
+    // Someone else's piece says whose it is, so it is never mistaken for
+    // your own further down the page.
+    final String detail = item.mine
+        ? <String>[kind, if (item.dimensions.isNotEmpty) item.dimensions]
+            .join(' · ')
+        : 'By ${item.byName}';
+
     return Semantics(
       button: true,
       selected: selected,
       label: '${item.title}, ${item.kind.name}',
-      child: Stack(
-        children: <Widget>[
-          InkWell(
-            borderRadius: Radii.lgAll,
-            onTap: onTap,
-            child: SizedBox(
-              height: tileHeight,
-              child: MediaPlaceholder(
-                label: item.title,
-                tag: item.kind.name,
-                seed: item.id,
-                selected: selected,
-                labelMaxLines: 2,
-                // Someone else's piece says whose it is, on the tile, so
-                // it is never mistaken for your own further down the page.
-                caption: item.mine
-                    ? (video
-                        ? '${Fmt.seconds(item.durationSeconds)} · '
-                            '${item.dimensions}'
-                        : item.dimensions)
-                    : 'By ${item.byName}',
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            SizedBox(
+              height: artHeight,
+              child: Stack(
+                fit: StackFit.expand,
+                children: <Widget>[
+                  MediaThumbnail(
+                    seed: item.id,
+                    video: video,
+                    durationSeconds: item.durationSeconds,
+                    selected: selected,
+                  ),
+                  // The heart sits on the corner of the art rather than
+                  // behind a tap into the detail: saving while browsing is
+                  // the whole ask.
+                  if (!item.mine)
+                    Positioned(
+                      top: 4,
+                      right: 4,
+                      child: HeartButton(item: item),
+                    ),
+                ],
               ),
             ),
-          ),
-          // The heart sits on the corner of the tile rather than behind a
-          // tap into the detail: saving while browsing is the whole ask.
-          if (!item.mine)
-            Positioned(
-              top: 4,
-              right: 4,
-              child: HeartButton(item: item),
+            SizedBox(
+              height: captionHeight,
+              child: Padding(
+                padding: const EdgeInsets.only(top: Space.x2),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      item.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: ShiftType.copy(
+                        c.text,
+                        size: 15,
+                        weight: 600,
+                        lineHeight: 22,
+                      ),
+                    ),
+                    Text(
+                      detail,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: ShiftType.copy(
+                        c.textMuted,
+                        size: 13,
+                        weight: 500,
+                        lineHeight: 18,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
-        ],
+          ],
+        ),
       ),
     );
   }

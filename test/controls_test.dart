@@ -531,11 +531,11 @@ void main() {
     await tester.tap(find.text(trophy.name).first);
     await tester.pumpAndSettle();
 
-    expect(find.text('CLOSE'), findsOneWidget);
+    expect(find.text('Done'), findsOneWidget);
     expect(find.text(trophy.requirement), findsWidgets);
 
-    await tester.tap(find.text('CLOSE'));
+    await tester.tap(find.text('Done'));
     await tester.pumpAndSettle();
-    expect(find.text('CLOSE'), findsNothing);
+    expect(find.text('Done'), findsNothing);
   });
 }

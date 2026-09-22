@@ -57,9 +57,13 @@ class _LeaderboardSurfaceState extends State<LeaderboardSurface> {
                 const SizedBox(height: Space.x5),
                 const _ClockRow(),
                 const SizedBox(height: Space.x5),
-                _BoardToggle(
-                  board: _board,
+                SegmentedPills<_Board>(
+                  options: _Board.values,
+                  labelOf: (_Board b) =>
+                      b == _Board.local ? 'Local' : 'Global',
+                  selected: _board,
                   onChanged: (_Board next) => setState(() => _board = next),
+                  expand: true,
                 ),
                 const SizedBox(height: Space.x6),
                 if (_board == _Board.local)
@@ -71,74 +75,6 @@ class _LeaderboardSurfaceState extends State<LeaderboardSurface> {
           ),
         ),
       ],
-    );
-  }
-}
-
-class _BoardToggle extends StatelessWidget {
-  const _BoardToggle({required this.board, required this.onChanged});
-
-  final _Board board;
-  final ValueChanged<_Board> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final ShiftColors c = ShiftColors.of(context);
-    return Container(
-      padding: const EdgeInsets.all(3),
-      decoration: BoxDecoration(
-        color: c.surfaceRaised,
-        borderRadius: Radii.pillAll,
-        border: Border.all(color: c.border),
-      ),
-      child: Row(
-        children: <Widget>[
-          Expanded(child: _BoardTab(
-            label: 'Local',
-            selected: board == _Board.local,
-            onTap: () => onChanged(_Board.local),
-          )),
-          Expanded(child: _BoardTab(
-            label: 'Global',
-            selected: board == _Board.global,
-            onTap: () => onChanged(_Board.global),
-          )),
-        ],
-      ),
-    );
-  }
-}
-
-class _BoardTab extends StatelessWidget {
-  const _BoardTab({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final ShiftColors c = ShiftColors.of(context);
-    return InkWell(
-      onTap: onTap,
-      borderRadius: Radii.pillAll,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 160),
-        padding: const EdgeInsets.symmetric(vertical: Space.x2),
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: selected ? c.accent : Colors.transparent,
-          borderRadius: Radii.pillAll,
-        ),
-        child: Text(
-          label.toUpperCase(),
-          style: ShiftType.labelSm(selected ? c.onAccent : c.textMuted),
-        ),
-      ),
     );
   }
 }
@@ -166,6 +102,7 @@ class _StandingsBoard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final ShiftColors c = ShiftColors.of(context);
     final StandingRow? you =
         rows.where((StandingRow r) => r.isYou).firstOrNull;
 
@@ -199,9 +136,30 @@ class _StandingsBoard extends StatelessWidget {
         // the cards above are the highlights, this is the board itself,
         // and a board with a hole where you should be is a worse thing to
         // read. Saying which is which is what the heading is for.
-        const Eyebrow('THE BOARD'),
+        Text('Standings', style: ShiftType.sectionTitle(c.text)),
         const SizedBox(height: Space.x3),
-        ...rest.map((StandingRow row) => _Row(row: row)),
+        // One grouped list rather than loose rows, hairlines inset to the
+        // names so the ranks and faces read as a single column.
+        Container(
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(
+            color: c.surface,
+            borderRadius: Radii.lgAll,
+          ),
+          child: Column(
+            children: <Widget>[
+              for (int i = 0; i < rest.length; i++) ...<Widget>[
+                if (i > 0)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 104),
+                    child:
+                        Divider(height: 1, thickness: 0.5, color: c.border),
+                  ),
+                _Row(row: rest[i]),
+              ],
+            ],
+          ),
+        ),
       ],
     );
   }
@@ -367,31 +325,23 @@ class _LeagueHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ShiftColors c = ShiftColors.of(context);
-    return Row(
+    final String rule = league.promoteCount > 0
+        ? ' · top ${league.promoteCount} move up'
+        : '';
+    // Where, and what it is, in words — the division is named in the line
+    // under the region, so it needs no coloured dot beside it.
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        Container(
-          padding: const EdgeInsets.symmetric(
-            horizontal: Space.x3,
-            vertical: Space.x1,
-          ),
-          decoration: BoxDecoration(
-            color: c.surfaceRaised,
-            borderRadius: Radii.pillAll,
-            border: Border.all(color: league.division.colorOn(c)),
-          ),
-          child: Text(
-            league.division.label.toUpperCase(),
-            style: ShiftType.labelSm(league.division.colorOn(c)),
-          ),
+        Text(
+          league.regionLabel,
+          style: ShiftType.sectionTitle(c.text),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
         ),
-        const SizedBox(width: Space.x3),
-        Expanded(
-          child: Text(
-            league.regionLabel,
-            style: ShiftType.subheading(c.text),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
+        Text(
+          '${league.division.label} league$rule',
+          style: ShiftType.bodySm(c.textMuted),
         ),
       ],
     );
@@ -428,40 +378,45 @@ class _ClockRowState extends State<_ClockRow> {
     final AppState state = AppScope.of(context);
     final WeekClock clock = WeekClock();
 
-    return Wrap(
-      spacing: Space.x5,
-      runSpacing: Space.x2,
-      alignment: WrapAlignment.spaceBetween,
-      crossAxisAlignment: WrapCrossAlignment.center,
+    final Duration left = clock.remaining;
+    String two(int v) => v.toString().padLeft(2, '0');
+    // Days unpadded, the clock padded: "5d 09:36:49", not a "05d" that
+    // reads like a register being dumped.
+    final String countdown = '${left.inDays}d '
+        '${two(left.inHours % 24)}:${two(left.inMinutes % 60)}:'
+        '${two(left.inSeconds % 60)}';
+
+    // The pool and the payout line are the engine's, not the catalogue's.
+    // A week with nothing in it says nothing rather than announcing a pool
+    // of zero.
+    final String detail = state.weekPool > 0
+        ? '\$${Fmt.grouped(state.weekPool)} prize pool'
+            '${state.payoutLine.isEmpty ? '' : ' · ${state.payoutLine}'}'
+        : state.payoutLine;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         Row(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.baseline,
+          textBaseline: TextBaseline.alphabetic,
           children: <Widget>[
             Text(
-              'WEEK ${clock.weekNumber} LOCKS IN',
-              style: ShiftType.labelSm(c.accent),
+              'Week ${clock.weekNumber}',
+              style: ShiftType.sectionTitle(c.text),
             ),
-            const SizedBox(width: Space.x3),
+            const Spacer(),
+            Text('Ends in ', style: ShiftType.caption(c.textMuted)),
             Text(
-              Fmt.countdown(clock.remaining),
-              style: ShiftType.mono(c.text, size: 19),
+              countdown,
+              style: ShiftType.figures(c.text, size: 15),
             ),
           ],
         ),
-        // The pool and the payout line are the engine's, not the
-        // catalogue's. A week with nothing in it says nothing rather than
-        // announcing a pool of zero.
-        if (state.weekPool > 0)
-          Text(
-            '\$${Fmt.grouped(state.weekPool)} POOL · ${state.payoutLine}',
-            style: ShiftType.labelSm(c.textMuted),
-          )
-        else if (state.payoutLine.isNotEmpty)
-          Text(
-            state.payoutLine.toUpperCase(),
-            style: ShiftType.labelSm(c.textMuted),
-          ),
+        if (detail.isNotEmpty) ...<Widget>[
+          const SizedBox(height: 2),
+          Text(detail, style: ShiftType.bodySm(c.textMuted)),
+        ],
       ],
     );
   }
@@ -497,7 +452,11 @@ class _Face extends StatelessWidget {
           ),
           child: Text(
             row.initials,
-            style: ShiftType.mono(c.textMuted, size: size >= 56 ? 16 : 12),
+            style: ShiftType.copy(
+              c.textMuted,
+              size: size >= 56 ? 17 : 12,
+              weight: 600,
+            ),
           ),
         );
 
@@ -606,7 +565,7 @@ class _PodiumSpot extends StatelessWidget {
         Text(
           Fmt.money(row.earnings),
           textAlign: TextAlign.center,
-          style: ShiftType.mono(c.textMuted, size: 13),
+          style: ShiftType.figures(c.textMuted, size: 13, weight: 500),
         ),
         const SizedBox(height: Space.x3),
         // Pedestals meet in the middle with no gap, so the three read as
@@ -685,6 +644,11 @@ class _YouCard extends StatelessWidget {
     required bool flat,
     required bool week,
   }) {
+    // A soft fill and nothing else. It was a pink wash inside a pink
+    // border with the money in green: three signals for one thing, and
+    // the loudest object on the screen for the row that least needs
+    // pointing out.
+    final Color move = up ? c.success : c.danger;
     return Container(
       padding: const EdgeInsets.symmetric(
         horizontal: Space.x5,
@@ -693,52 +657,49 @@ class _YouCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: c.accentSoft,
         borderRadius: Radii.lgAll,
-        border: Border.all(color: c.accent),
       ),
       child: Row(
         children: <Widget>[
           Text(
             '${you.rank}',
-            style: ShiftType.displayL(c.text).copyWith(
-              fontWeight: FontWeight.w500,
-            ),
+            style: ShiftType.displayL(c.accent),
           ),
-          const SizedBox(width: Space.x5),
+          const SizedBox(width: Space.x4),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
                 Text('You', style: ShiftType.bodyStrong(c.text)),
-                if (!flat) ...<Widget>[
-                  const SizedBox(height: 2),
+                if (!flat)
                   Row(
                     children: <Widget>[
                       Icon(
                         up
-                            ? Icons.arrow_drop_up_rounded
-                            : Icons.arrow_drop_down_rounded,
-                        size: 18,
-                        color: up ? c.success : c.danger,
+                            ? Icons.arrow_upward_rounded
+                            : Icons.arrow_downward_rounded,
+                        size: 14,
+                        color: move,
                       ),
+                      const SizedBox(width: 2),
                       Flexible(
                         child: Text(
-                          '${you.movement.abs()} ${up ? 'UP' : 'DOWN'}'
-                          '${week ? ' THIS WEEK' : ''}',
-                          style: ShiftType.labelSm(up ? c.success : c.danger),
+                          '${you.movement.abs()} '
+                          '${up ? 'up' : 'down'}'
+                          '${week ? ' this week' : ''}',
+                          style: ShiftType.caption(move),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ],
                   ),
-                ],
               ],
             ),
           ),
           const SizedBox(width: Space.x3),
           Text(
             Fmt.money(you.earnings),
-            style: ShiftType.mono(c.success, size: 24),
+            style: ShiftType.figures(c.text, size: 22, weight: 700),
           ),
         ],
       ),
@@ -771,7 +732,7 @@ class _RivalRow extends StatelessWidget {
       if (target != null)
         _GapLine(
           row: target!,
-          label: 'TO CATCH #${target!.rank}',
+          label: 'To catch · #${target!.rank}',
           gap: '${Fmt.money(target!.earnings - you.earnings)} ahead',
           tone: c.success,
           icon: Icons.arrow_upward_rounded,
@@ -779,7 +740,7 @@ class _RivalRow extends StatelessWidget {
       if (chaser != null)
         _GapLine(
           row: chaser!,
-          label: '#${chaser!.rank} ON YOUR TAIL',
+          label: 'On your tail · #${chaser!.rank}',
           gap: '${Fmt.money(you.earnings - chaser!.earnings)} behind',
           tone: c.danger,
           icon: Icons.arrow_downward_rounded,
@@ -788,15 +749,21 @@ class _RivalRow extends StatelessWidget {
 
     if (halves.isEmpty) return const SizedBox.shrink();
 
+    // Filled and borderless, with the hairline inset to where the text
+    // starts — the grouped-list shape, not a box drawn round two lines.
     return Container(
       decoration: BoxDecoration(
+        color: c.surface,
         borderRadius: Radii.lgAll,
-        border: Border.all(color: c.border),
       ),
       child: Column(
         children: <Widget>[
           for (int i = 0; i < halves.length; i++) ...<Widget>[
-            if (i > 0) Divider(height: 1, color: c.border),
+            if (i > 0)
+              Padding(
+                padding: const EdgeInsets.only(left: 88),
+                child: Divider(height: 1, thickness: 0.5, color: c.border),
+              ),
             halves[i],
           ],
         ],
@@ -839,19 +806,18 @@ class _GapLine extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                Text(label, style: ShiftType.labelSm(c.textMuted)),
-                const SizedBox(height: 1),
                 Text(
                   row.name,
-                  style: ShiftType.bodySm(c.text),
+                  style: ShiftType.bodyStrong(c.text),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
+                Text(label, style: ShiftType.caption(c.textMuted)),
               ],
             ),
           ),
           const SizedBox(width: Space.x3),
-          Text(gap, style: ShiftType.mono(tone, size: 13)),
+          Text(gap, style: ShiftType.figures(tone, size: 14)),
         ],
       ),
     );
@@ -880,17 +846,13 @@ class _Row extends StatelessWidget {
       builder: (BuildContext context, BoxConstraints constraints) {
         final bool roomForTier = constraints.maxWidth >= 520;
         return Container(
-          margin: const EdgeInsets.only(bottom: 2),
           padding: const EdgeInsets.symmetric(
-            horizontal: Space.x3,
-            vertical: Space.x2,
+            horizontal: Space.x4,
+            vertical: 10,
           ),
-          decoration: BoxDecoration(
-            // Your own row is tinted rather than ruled off, so scrolling
-            // the board lands on it without hunting for the number.
-            color: mine ? c.accentSoft : null,
-            borderRadius: Radii.mdAll,
-          ),
+          // Your own row is tinted rather than ruled off, so scrolling the
+          // board lands on it without hunting for the number.
+          color: mine ? c.accentSoft : null,
           child: Row(
             children: <Widget>[
               SizedBox(
@@ -898,9 +860,10 @@ class _Row extends StatelessWidget {
                 child: Text(
                   '${row.rank}',
                   textAlign: TextAlign.right,
-                  style: ShiftType.mono(
+                  style: ShiftType.figures(
                     mine ? c.accent : c.textMuted,
-                    size: 14,
+                    size: 15,
+                    weight: mine ? 700 : 500,
                   ),
                 ),
               ),
@@ -928,9 +891,15 @@ class _Row extends StatelessWidget {
               Expanded(
                 child: Text(
                   mine ? 'You' : row.name,
-                  style: mine
-                      ? ShiftType.bodyStrong(c.text)
-                      : ShiftType.body(c.text),
+                  // One size for every name, you included — the weight is
+                  // the only difference. "You" was 15 against everyone
+                  // else's 17, so the row meant to stand out looked
+                  // smaller than its neighbours.
+                  style: ShiftType.copy(
+                    c.text,
+                    size: 16,
+                    weight: mine ? 600 : 400,
+                  ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -947,15 +916,19 @@ class _Row extends StatelessWidget {
                     borderRadius: Radii.smAll,
                   ),
                   child: Text(
-                    row.tier!.label.toUpperCase(),
-                    style: ShiftType.labelSm(row.tier!.colorOn(c)),
+                    row.tier!.label,
+                    style: ShiftType.copy(
+                      row.tier!.colorOn(c),
+                      size: 12,
+                      weight: 600,
+                    ),
                   ),
                 ),
               ],
               const SizedBox(width: Space.x3),
               Text(
                 Fmt.money(row.earnings),
-                style: ShiftType.mono(c.text, size: 14),
+                style: ShiftType.figures(c.text, size: 15),
               ),
             ],
           ),

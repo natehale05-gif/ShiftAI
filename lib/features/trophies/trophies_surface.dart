@@ -126,7 +126,12 @@ class _PointsCard extends StatelessWidget {
       return best;
     });
 
-    return ShiftCard(
+    return Container(
+      padding: const EdgeInsets.all(Space.x5),
+      decoration: BoxDecoration(
+        color: c.surface,
+        borderRadius: Radii.lgAll,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
@@ -136,8 +141,8 @@ class _PointsCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: <Widget>[
-                  const Eyebrow('Trophy points'),
-                  const SizedBox(height: Space.x2),
+                  Text('Trophy points', style: ShiftType.bodySm(c.textMuted)),
+                  const SizedBox(height: Space.x1),
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.baseline,
                     textBaseline: TextBaseline.alphabetic,
@@ -145,15 +150,19 @@ class _PointsCard extends StatelessWidget {
                       Text('$points', style: ShiftType.displayXl(c.accent)),
                       const SizedBox(width: Space.x3),
                       Text(
-                        'of $total',
-                        style: ShiftType.mono(c.textMuted, size: 17),
+                        'of ${Fmt.grouped(total)}',
+                        style: ShiftType.figures(
+                          c.textMuted,
+                          size: 17,
+                          weight: 500,
+                        ),
                       ),
                     ],
                   ),
                   const SizedBox(height: Space.x1),
                   Text(
-                    '${earned.length} OF ${all.length} EARNED · $percent%',
-                    style: ShiftType.labelSm(c.textMuted),
+                    '${earned.length} of ${all.length} earned · $percent%',
+                    style: ShiftType.bodySm(c.textMuted),
                   ),
                 ],
               );
@@ -207,7 +216,6 @@ class _TierShelf extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ShiftColors c = ShiftColors.of(context);
-    final Color tint = tier.colorOn(c);
     final int won = trophies.where((Trophy t) => t.earned).length;
 
     return Padding(
@@ -216,20 +224,17 @@ class _TierShelf extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
           Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
             children: <Widget>[
-              Container(
-                width: 10,
-                height: 10,
-                decoration: BoxDecoration(color: tint, shape: BoxShape.circle),
-              ),
-              const SizedBox(width: Space.x2),
-              Text(tier.label.toUpperCase(), style: ShiftType.label(tint)),
-              const SizedBox(width: Space.x3),
-              Expanded(child: Divider(height: 1, color: c.border)),
-              const SizedBox(width: Space.x3),
+              // A plain title. The tier's colour is in its medals; a swatch
+              // beside the word sat on the baseline in a baseline-aligned
+              // row and read as a notification badge.
+              Text(tier.label, style: ShiftType.sectionTitle(c.text)),
+              const Spacer(),
               Text(
-                '$won / ${trophies.length}',
-                style: ShiftType.mono(c.textMuted, size: 12),
+                '$won of ${trophies.length}',
+                style: ShiftType.bodySm(c.textMuted),
               ),
             ],
           ),
@@ -290,25 +295,31 @@ class _Medallion extends StatelessWidget {
           children: <Widget>[
             _Medal(trophy: trophy, size: 64),
             const SizedBox(height: Space.x3),
+            // Weight through the copy style, not copyWith: these faces
+            // are variable and the wght axis would override a fontWeight.
             Text(
               trophy.name,
               textAlign: TextAlign.center,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: ShiftType.bodySm(won ? c.text : c.textMuted)
-                  .copyWith(fontWeight: FontWeight.w600, height: 1.2),
+              style: ShiftType.copy(
+                won ? c.text : c.textMuted,
+                size: 14,
+                weight: won ? 600 : 500,
+                lineHeight: 18,
+              ),
             ),
             const SizedBox(height: 2),
             Text(
               won
-                  ? '${trophy.points} PTS'
+                  ? '${trophy.points} pts'
                   : (trophy.progressLabel.isNotEmpty
                       ? trophy.progressLabel
-                      : '${trophy.points} PTS'),
+                      : '${trophy.points} pts'),
               textAlign: TextAlign.center,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: ShiftType.labelSm(won ? tint : c.textMuted),
+              style: ShiftType.caption(won ? tint : c.textMuted),
             ),
           ],
         ),
@@ -480,7 +491,7 @@ Future<void> _showTrophy(BuildContext context, Trophy trophy) {
                   ),
                   Text(
                     '${trophy.points} pts',
-                    style: ShiftType.mono(tint, size: 13),
+                    style: ShiftType.figures(tint, size: 15),
                   ),
                 ],
               ),
@@ -501,21 +512,34 @@ Future<void> _showTrophy(BuildContext context, Trophy trophy) {
               const SizedBox(height: Space.x3),
               Text(
                 <String>[
-                  trophy.tier.label.toUpperCase(),
+                  trophy.tier.label,
                   if (trophy.progressLabel.isNotEmpty) trophy.progressLabel,
                   if (trophy.memberPercent > 0)
-                    '${Fmt.grouped(trophy.memberPercent)}% OF MEMBERS',
-                  if (earnedOn != null)
-                    'EARNED ${Fmt.date(earnedOn).toUpperCase()}',
+                    '${Fmt.grouped(trophy.memberPercent)}% of members',
+                  if (earnedOn != null) 'Earned ${Fmt.date(earnedOn)}',
                 ].join(' \u00b7 '),
-                style: ShiftType.labelSm(c.textMuted),
+                style: ShiftType.bodySm(c.textMuted),
               ),
               const SizedBox(height: Space.x5),
               SizedBox(
                 width: double.infinity,
-                child: OutlinedButton(
+                // Set here rather than inherited: the app's button theme
+                // is uppercase mono, which was right for "CLOSE" and turns
+                // a sentence-case "Done" into tiny spaced-out letters.
+                child: FilledButton(
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size.fromHeight(50),
+                    shape: const RoundedRectangleBorder(
+                      borderRadius: Radii.mdAll,
+                    ),
+                    textStyle: ShiftType.copy(
+                      c.onAccent,
+                      size: 17,
+                      weight: 600,
+                    ),
+                  ),
                   onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('CLOSE'),
+                  child: const Text('Done'),
                 ),
               ),
             ],

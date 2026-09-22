@@ -188,6 +188,14 @@ class ShiftCard extends StatelessWidget {
 }
 
 /// The two-way scope toggle the vault uses.
+/// A segmented control: a recessed track, and a raised thumb that slides
+/// to whichever segment is chosen.
+///
+/// It was a pill of uppercase mono tabs with the chosen one flooded in the
+/// accent — loud for something whose whole job is to be a quiet switch,
+/// and a second, different control lived in the leaderboard beside it.
+/// Segments are equal widths so the thumb can slide rather than jump, as
+/// wide as the widest label when [expand] is off.
 class SegmentedPills<T> extends StatelessWidget {
   const SegmentedPills({
     required this.options,
@@ -207,88 +215,132 @@ class SegmentedPills<T> extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ShiftColors c = ShiftColors.of(context);
-    return Container(
-      padding: const EdgeInsets.all(Space.x1),
+    final int n = options.length;
+    final int at = options.indexOf(selected).clamp(0, n - 1);
+    // On a dark ground the thumb is a step lighter than its track; on a
+    // light one it is the card white, lifted by a shadow.
+    final Color thumb = c.isDarkGround
+        ? Color.lerp(c.surfaceRaised, c.text, 0.14)!
+        : c.surface;
+
+    final Widget control = Container(
+      height: 36,
+      padding: const EdgeInsets.all(2),
       decoration: BoxDecoration(
-        color: c.surface,
-        borderRadius: Radii.pillAll,
-        border: Border.all(color: c.border),
+        color: c.surfaceRaised,
+        borderRadius: Radii.mdAll,
       ),
-      child: Row(
-        mainAxisSize: expand ? MainAxisSize.max : MainAxisSize.min,
-        children: options.map((T option) {
-          final bool on = option == selected;
-          final Widget button = Semantics(
-            selected: on,
-            button: true,
-            child: InkWell(
-              borderRadius: Radii.pillAll,
-              onTap: () => onChanged(option),
-              child: Container(
-                height: 36,
-                alignment: Alignment.center,
-                padding: const EdgeInsets.symmetric(horizontal: Space.x4),
-                decoration: BoxDecoration(
-                  color: on ? c.accent : Colors.transparent,
-                  borderRadius: Radii.pillAll,
-                ),
-                child: Text(
-                  labelOf(option).toUpperCase(),
-                  style: ShiftType.labelSm(on ? c.onAccent : c.textMuted),
+      child: Stack(
+        children: <Widget>[
+          Positioned.fill(
+            child: AnimatedAlign(
+              alignment: Alignment(n == 1 ? 0 : -1 + 2 * at / (n - 1), 0),
+              duration: const Duration(milliseconds: 240),
+              curve: Curves.easeOutCubic,
+              child: FractionallySizedBox(
+                widthFactor: 1 / n,
+                heightFactor: 1,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: thumb,
+                    borderRadius: BorderRadius.circular(Radii.md.x - 2),
+                    boxShadow: <BoxShadow>[
+                      BoxShadow(
+                        color: Colors.black.withValues(
+                          alpha: c.isDarkGround ? 0.35 : 0.12,
+                        ),
+                        blurRadius: 4,
+                        offset: const Offset(0, 1),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
-          );
-          return expand ? Expanded(child: button) : button;
-        }).toList(),
+          ),
+          Row(
+            children: options.map((T option) {
+              final bool on = option == selected;
+              return Expanded(
+                child: Semantics(
+                  selected: on,
+                  button: true,
+                  label: labelOf(option),
+                  excludeSemantics: true,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => onChanged(option),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: Space.x4,
+                      ),
+                      child: Center(
+                        child: Text(
+                          labelOf(option),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: ShiftType.copy(
+                            on ? c.text : c.textMuted,
+                            size: 14,
+                            weight: on ? 600 : 500,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ],
       ),
     );
+
+    // Off, the control is as wide as its widest label times the count:
+    // equal Expanded children report exactly that as their intrinsic width.
+    return expand ? control : IntrinsicWidth(child: control);
   }
 }
 
 /// A placeholder for media that has no bytes on device. Better an honest
 /// labelled block than a bad guess at the real thing.
-class MediaPlaceholder extends StatelessWidget {
-  const MediaPlaceholder({
-    required this.label,
-    required this.tag,
-    this.seed,
-    this.caption,
+/// A piece's artwork, and only its artwork.
+///
+/// The title used to be set over the art on a scrim, with an uppercase
+/// type chip in the corner and a play disc in the middle — three layers of
+/// chrome on every tile. The media grids people already know put the title
+/// under the picture and mark a video with its running time alone, in the
+/// corner; the caption lives in the tile beneath this now.
+class MediaThumbnail extends StatelessWidget {
+  const MediaThumbnail({
+    required this.seed,
+    this.video = false,
+    this.durationSeconds,
     this.selected = false,
-    this.labelMaxLines = 1,
     super.key,
   });
 
-  final String label;
-  final String tag;
-
-  /// What the poster's art is drawn from. The piece's id, so it looks the
-  /// same here as in its detail panel; the label when there is no id.
-  final String? seed;
-
-  final String? caption;
+  /// What the art is drawn from — the piece's id, so it looks the same in
+  /// the grid and in its detail panel.
+  final String seed;
+  final bool video;
+  final int? durationSeconds;
   final bool selected;
 
-  /// A tall tile can give a long title a second line; a short one cannot,
-  /// so the caller decides rather than the text overflowing.
-  final int labelMaxLines;
+  static String _clock(int seconds) =>
+      '${seconds ~/ 60}:${(seconds % 60).toString().padLeft(2, '0')}';
 
   @override
   Widget build(BuildContext context) {
     final ShiftColors c = ShiftColors.of(context);
-    final bool video = tag == 'video';
-    // Type on the poster is always white on a scrim, whatever the theme:
-    // the art is content, like a photograph, so it is dark in every theme
-    // and the text over it has to be light in every theme too.
-    const Color ink = Colors.white;
-    final Color inkSoft = Colors.white.withValues(alpha: 0.72);
+    final int? d = durationSeconds;
 
     return Container(
       foregroundDecoration: BoxDecoration(
         borderRadius: Radii.lgAll,
         border: Border.all(
-          color: selected ? c.accent : Colors.white.withValues(alpha: 0.08),
-          width: selected ? 2 : 1,
+          color: selected ? c.accent : Colors.white.withValues(alpha: 0.06),
+          width: selected ? 2.5 : 1,
         ),
       ),
       child: ClipRRect(
@@ -296,108 +348,36 @@ class MediaPlaceholder extends StatelessWidget {
         child: Stack(
           fit: StackFit.expand,
           children: <Widget>[
-            PosterArt(seed: seed ?? label),
-            DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  stops: const <double>[0.3, 1],
-                  colors: <Color>[
-                    Colors.transparent,
-                    Colors.black.withValues(alpha: 0.72),
-                  ],
+            PosterArt(seed: seed),
+            if (video)
+              Positioned(
+                right: Space.x2,
+                bottom: Space.x2,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.45),
+                    borderRadius: Radii.smAll,
+                  ),
+                  child: d == null
+                      ? const Icon(
+                          Icons.play_arrow_rounded,
+                          size: 14,
+                          color: Colors.white,
+                        )
+                      : Text(
+                          _clock(d),
+                          style: ShiftType.figures(
+                            Colors.white,
+                            size: 12,
+                            weight: 600,
+                          ),
+                        ),
                 ),
               ),
-            ),
-            // Only where there is room for it. On a short tile the title
-            // and its caption already fill the lower half, and a disc placed
-            // anywhere central lands on them — the chip carries the play
-            // mark there instead.
-            if (video)
-              LayoutBuilder(
-                builder: (BuildContext context, BoxConstraints box) =>
-                    box.maxHeight >= 230
-                        ? const Align(
-                            alignment: Alignment(0, -0.2),
-                            child: PlayDisc(size: 44),
-                          )
-                        : const SizedBox.shrink(),
-              ),
-            Padding(
-              padding: const EdgeInsets.all(Space.x3),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: Space.x2,
-                      vertical: 3,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.38),
-                      borderRadius: Radii.smAll,
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: <Widget>[
-                        if (video) ...<Widget>[
-                          Icon(Icons.play_arrow_rounded,
-                              size: 12, color: inkSoft),
-                          const SizedBox(width: 2),
-                        ],
-                        Text(
-                          tag.toUpperCase(),
-                          style: ShiftType.labelSm(inkSoft),
-                        ),
-                      ],
-                    ),
-                  ),
-                  // The text sits on the floor of the tile and takes only
-                  // the lines that actually fit. Splitting the leftover
-                  // space with a Spacer used to cut the second line of a
-                  // title in half on a narrow tile; here a line is either
-                  // drawn whole or dropped for an ellipsis.
-                  Expanded(
-                    child: LayoutBuilder(
-                      builder: (BuildContext context, BoxConstraints box) {
-                        const double labelLine = 24;
-                        const double captionLine = 20;
-                        final double forLabel = caption == null
-                            ? box.maxHeight
-                            : box.maxHeight - captionLine;
-                        final int lines = (forLabel / labelLine)
-                            .floor()
-                            .clamp(1, labelMaxLines);
-
-                        return Align(
-                          alignment: Alignment.bottomLeft,
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: <Widget>[
-                              Text(
-                                label,
-                                maxLines: lines,
-                                overflow: TextOverflow.ellipsis,
-                                style: ShiftType.bodyStrong(ink),
-                              ),
-                              if (caption != null)
-                                Text(
-                                  caption!,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: ShiftType.caption(inkSoft),
-                                ),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ),
           ],
         ),
       ),
@@ -408,7 +388,7 @@ class MediaPlaceholder extends StatelessWidget {
 /// Art for a piece with no thumbnail — which is every piece, until the
 /// engine sends previews.
 ///
-/// It was an empty dark box with a type chip, and a masonry grid of those
+/// It was an empty dark box, and a masonry grid of those
 /// is a wall of identical rectangles that makes the vault look empty when
 /// it is not. This draws from the brand's neon sweep and is seeded by the
 /// piece, so the vault reads as one gallery and each piece keeps its own
