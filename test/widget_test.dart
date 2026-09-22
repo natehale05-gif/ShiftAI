@@ -438,6 +438,37 @@ void main() {
     );
   });
 
+  testWidgets('the rings screen can be swiped away as well as tapped away',
+      (WidgetTester tester) async {
+    final AppState state = await _freshState();
+    await tester.pumpWidget(ShiftApp(state: state));
+    // The screen opens itself, so no tap is needed to get onto it.
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Close'), findsOneWidget);
+
+    // A drag down anywhere on the page, not on a handle: the whole body is
+    // the target, which is why the scroll view is stretched to fill it.
+    await tester.drag(find.text('Create'), const Offset(0, 260));
+    await tester.pumpAndSettle();
+
+    expect(find.byTooltip('Close'), findsNothing);
+    expect(find.byType(ShiftShell), findsOneWidget);
+  });
+
+  testWidgets('a short drag keeps the rings screen up',
+      (WidgetTester tester) async {
+    final AppState state = await _freshState();
+    await tester.pumpWidget(ShiftApp(state: state));
+    await tester.pumpAndSettle();
+
+    // Under the threshold the page bounces back rather than leaving —
+    // otherwise the top of a genuine scroll would throw people out.
+    await tester.drag(find.text('Create'), const Offset(0, 40));
+    await tester.pumpAndSettle();
+
+    expect(find.byTooltip('Close'), findsOneWidget);
+  });
+
   test('private chat content never reaches storage', () async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     final AppState state = await AppState.load(tokenStore: MemoryTokenStore());
