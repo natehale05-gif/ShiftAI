@@ -81,7 +81,7 @@ class _SignInScreenState extends State<SignInScreen> {
                         style: ShiftType.bodySm(c.textMuted),
                       ),
                       const SizedBox(height: Space.x5),
-                      Text('EMAIL', style: ShiftType.labelSm(c.textMuted)),
+                      Text('Email', style: ShiftType.caption(c.textMuted)),
                       const SizedBox(height: Space.x2),
                       TextField(
                         controller: _email,
@@ -97,7 +97,7 @@ class _SignInScreenState extends State<SignInScreen> {
                             : (_) => setState(() => _emailError = null),
                       ),
                       const SizedBox(height: Space.x4),
-                      Text('PASSWORD', style: ShiftType.labelSm(c.textMuted)),
+                      Text('Password', style: ShiftType.caption(c.textMuted)),
                       const SizedBox(height: Space.x2),
                       TextField(
                         controller: _password,
@@ -126,7 +126,7 @@ class _SignInScreenState extends State<SignInScreen> {
                                 child:
                                     CircularProgressIndicator(strokeWidth: 2),
                               )
-                            : const Text('SIGN IN'),
+                            : const Text('Sign in'),
                       ),
                       // What the engine said, verbatim. A wrong password
                       // and an engine that is down are different problems,
@@ -203,7 +203,7 @@ class _SignInScreenState extends State<SignInScreen> {
                                   FilledButton(
                                     onPressed: () =>
                                         Navigator.of(context).pop(),
-                                    child: const Text('CLOSE'),
+                                    child: const Text('Close'),
                                   ),
                                 ],
                               );

@@ -33,7 +33,11 @@ abstract final class Seed {
   // Avatars ---------------------------------------------------------------
 
   static const List<Avatar> avatars = <Avatar>[
-    Avatar(id: 'av-1', name: 'Everyday', status: AvatarStatus.ready, personal: true),
+    Avatar(
+        id: 'av-1',
+        name: 'Everyday',
+        status: AvatarStatus.ready,
+        personal: true),
     Avatar(id: 'av-2', name: 'Studio lighting', status: AvatarStatus.training),
   ];
 
@@ -184,7 +188,8 @@ abstract final class Seed {
       StandingRow(rank: 7, name: 'Ama Boateng', earnings: 199.70, movement: 3),
       StandingRow(rank: 8, name: 'Sana Malik', earnings: 176.40, movement: -2),
       StandingRow(rank: 9, name: 'Cole Petrov', earnings: 154.15, movement: 1),
-      StandingRow(rank: 10, name: 'Iris Delgado', earnings: 121.60, movement: 0),
+      StandingRow(
+          rank: 10, name: 'Iris Delgado', earnings: 121.60, movement: 0),
     ],
   );
 
@@ -326,7 +331,7 @@ abstract final class Seed {
     AgentRun(
       id: 'r-imports',
       title: 'Scan conditional imports before release build',
-      detail: 'Unable To Complete Request',
+      detail: 'Unable to complete request',
       status: RunStatus.failed,
     ),
   ];
@@ -353,13 +358,13 @@ abstract final class Seed {
       id: 'd-palette',
       title: 'Palette reference sheet',
       versions: 2,
-      kindLabel: 'PAGE',
+      kindLabel: 'Page',
     ),
     DesignDoc(
       id: 'd-tide',
       title: 'Tide clock landing page',
       versions: 1,
-      kindLabel: 'PAGE',
+      kindLabel: 'Page',
     ),
   ];
 
@@ -412,7 +417,7 @@ abstract final class Seed {
     ChatMessage(
       id: 'm-reply',
       author: MessageAuthor.shift,
-      eyebrow: 'SHIFT · VIDEO',
+      eyebrow: 'SHIFT · Video',
       body: 'Here is the cut. Take two starts at 00:14, so I used that one '
           'and ducked the room tone six decibels under the voice.',
       bullets: <String>[

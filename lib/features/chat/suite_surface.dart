@@ -276,7 +276,7 @@ class _SignInBubble extends StatelessWidget {
                 minimumSize: Size.zero,
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
-              child: Text('SIGN IN', style: ShiftType.labelSm(c.accent)),
+              child: Text('Sign in', style: ShiftType.caption(c.accent)),
             ),
           ],
         ),
@@ -435,7 +435,7 @@ class ArtifactCard extends StatelessWidget {
         const SizedBox(height: 2),
         Text(
           attachment.meta,
-          style: ShiftType.labelSm(c.textMuted),
+          style: ShiftType.caption(c.textMuted),
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
         ),
@@ -585,7 +585,7 @@ Future<void> _editLastAsk(BuildContext context, AppState state) async {
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(controller.text),
-            child: const Text('SEND'),
+            child: const Text('Send'),
           ),
         ],
       );

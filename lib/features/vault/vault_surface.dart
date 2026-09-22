@@ -378,7 +378,7 @@ class _DetailPanel extends StatelessWidget {
             ),
             FilledButton(
               onPressed: () => Navigator.of(context).pop(controller.text),
-              child: const Text('SAVE'),
+              child: const Text('Save'),
             ),
           ],
         );
@@ -432,7 +432,7 @@ class _DetailPanel extends StatelessWidget {
                 foregroundColor: c.onStatus,
               ),
               onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('DELETE'),
+              child: const Text('Delete'),
             ),
           ],
         );
@@ -566,7 +566,7 @@ class _DetailPanel extends StatelessWidget {
                     child: FilledButton(
                       onPressed:
                           item.published ? null : () => _publish(context),
-                      child: Text(item.published ? 'PUBLISHED' : 'PUBLISH'),
+                      child: Text(item.published ? 'Published' : 'Publish'),
                     ),
                   ),
                 ],

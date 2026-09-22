@@ -327,9 +327,9 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
 
     expect(find.text('Everyday'), findsOneWidget);
-    expect(find.text('PERSONAL'), findsOneWidget);
+    expect(find.text('Personal'), findsOneWidget);
     expect(find.text('Studio lighting'), findsOneWidget);
-    expect(find.text('TRAINING…'), findsOneWidget);
+    expect(find.text('Training…'), findsOneWidget);
 
     await tester.ensureVisible(find.text('Create an avatar'));
     await tester.pump();
@@ -338,7 +338,7 @@ void main() {
 
     expect(find.text('Choose a photo or clip'), findsOneWidget);
     final FilledButton create = tester.widget<FilledButton>(
-      find.widgetWithText(FilledButton, 'CREATE'),
+      find.widgetWithText(FilledButton, 'Create'),
     );
     expect(create.onPressed, isNull, reason: 'nothing to upload yet');
     expect(tester.takeException(), isNull);

@@ -487,7 +487,8 @@ void main() {
       await tester.pumpWidget(ShiftApp(state: state));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('SIGN IN'));
+      // The button, not the screen's heading of the same words.
+      await tester.tap(find.widgetWithText(FilledButton, 'Sign in'));
       await tester.pumpAndSettle();
       await _dismissRingsSheet(tester);
 
@@ -507,7 +508,8 @@ void main() {
 
       await tester.enterText(find.byType(TextField).first, 'demo@shiftai.club');
       await tester.enterText(find.byType(TextField).last, 'a-password');
-      await tester.tap(find.text('SIGN IN'));
+      // The button, not the screen's heading of the same words.
+      await tester.tap(find.widgetWithText(FilledButton, 'Sign in'));
       await tester.pumpAndSettle();
       await _dismissRingsSheet(tester);
 

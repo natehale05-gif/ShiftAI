@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' show CupertinoSwitch;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
@@ -203,8 +204,13 @@ class _FeaturesCard extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: Space.x3),
-                  Switch(
+                  // The iOS switch, in the theme's accent. Material's has an
+                  // outlined off state and an inset thumb, and on a phone it
+                  // is the one control on this screen that looks borrowed.
+                  CupertinoSwitch(
                     value: state.isEnabled(feature),
+                    activeTrackColor: c.accent,
+                    inactiveTrackColor: c.surfaceRaised,
                     onChanged: (bool on) =>
                         state.setFeatureEnabled(feature, on),
                   ),
@@ -255,6 +261,18 @@ class _ConnectionsCard extends StatelessWidget {
           LayoutBuilder(
             builder: (BuildContext context, BoxConstraints constraints) {
               final int columns = constraints.maxWidth >= 720 ? 3 : 1;
+              // One column is a grouped list, hairlines inset to the names;
+              // three are filled tiles, which a hairline cannot separate.
+              if (columns == 1) {
+                return Column(
+                  children: <Widget>[
+                    for (int i = 0; i < live.length; i++) ...<Widget>[
+                      if (i > 0) const _ConnectorDivider(),
+                      _ConnectorRow(live[i]),
+                    ],
+                  ],
+                );
+              }
               return GridView.builder(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
@@ -266,7 +284,7 @@ class _ConnectionsCard extends StatelessWidget {
                   mainAxisExtent: 60,
                 ),
                 itemBuilder: (BuildContext context, int i) =>
-                    _ConnectorRow(live[i]),
+                    _ConnectorRow(live[i], tile: true),
               );
             },
           ),
@@ -358,7 +376,7 @@ class _CatalogSheetState extends State<_CatalogSheet> {
                   Text(
                     '${matches.length} OF '
                     '${AppScope.of(context).connectors.length}',
-                    style: ShiftType.labelSm(c.textMuted),
+                    style: ShiftType.caption(c.textMuted),
                   ),
                 ],
               ),
@@ -399,8 +417,7 @@ class _CatalogSheetState extends State<_CatalogSheet> {
                         Space.x6,
                       ),
                       itemCount: matches.length,
-                      separatorBuilder: (_, __) =>
-                          const SizedBox(height: Space.x3),
+                      separatorBuilder: (_, __) => const _ConnectorDivider(),
                       itemBuilder: (BuildContext context, int i) =>
                           _ConnectorRow(matches[i]),
                     ),
@@ -413,42 +430,44 @@ class _CatalogSheetState extends State<_CatalogSheet> {
 }
 
 class _ConnectorRow extends StatelessWidget {
-  const _ConnectorRow(this.connector);
+  const _ConnectorRow(this.connector, {this.tile = false});
 
   final Connector connector;
+
+  /// Filled, for the wide grid. Otherwise a bare row in a grouped list.
+  final bool tile;
 
   @override
   Widget build(BuildContext context) {
     final ShiftColors c = ShiftColors.of(context);
     return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: Space.x3,
+      padding: EdgeInsets.symmetric(
+        horizontal: tile ? Space.x3 : 0,
         vertical: Space.x3,
       ),
-      decoration: BoxDecoration(
-        borderRadius: Radii.mdAll,
-        border: Border.all(color: c.border),
-      ),
+      decoration: tile
+          ? BoxDecoration(color: c.surfaceRaised, borderRadius: Radii.mdAll)
+          : null,
       child: Row(
         children: <Widget>[
           Container(
-            width: 34,
-            height: 34,
+            width: _connectorMark,
+            height: _connectorMark,
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              color: c.surfaceRaised,
+              color: tile ? c.surface : c.surfaceRaised,
               borderRadius: Radii.smAll,
             ),
             child: Text(
               connector.initials,
-              style: ShiftType.mono(c.textMuted, size: 12),
+              style: ShiftType.copy(c.textMuted, size: 12, weight: 700),
             ),
           ),
           const SizedBox(width: Space.x3),
           Expanded(
             child: Text(
               connector.name,
-              style: ShiftType.bodyStrong(c.text),
+              style: ShiftType.copy(c.text, size: 16, weight: 500),
               overflow: TextOverflow.ellipsis,
             ),
           ),
@@ -466,6 +485,25 @@ class _ConnectorRow extends StatelessWidget {
           ] else
             Text('Not connected', style: ShiftType.caption(c.textMuted)),
         ],
+      ),
+    );
+  }
+}
+
+const double _connectorMark = 34;
+
+/// A hairline between connector rows, starting where the names do.
+class _ConnectorDivider extends StatelessWidget {
+  const _ConnectorDivider();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(left: _connectorMark + Space.x3),
+      child: Divider(
+        height: 1,
+        thickness: 0.5,
+        color: ShiftColors.of(context).border,
       ),
     );
   }
@@ -598,10 +636,9 @@ class _AvatarTile extends StatelessWidget {
                     fit: BoxFit.cover,
                     width: 64,
                     height: 64,
-                    errorBuilder:
-                        (BuildContext context, Object _, StackTrace? __) =>
-                            Icon(Icons.person_outline_rounded,
-                                color: c.textMuted),
+                    errorBuilder: (BuildContext context, Object _,
+                            StackTrace? __) =>
+                        Icon(Icons.person_outline_rounded, color: c.textMuted),
                   ),
                 AvatarStatus.failed =>
                   Icon(Icons.error_outline_rounded, color: c.danger),
@@ -626,15 +663,14 @@ class _AvatarTile extends StatelessWidget {
           const SizedBox(height: Space.x1),
           Text(
             avatar.personal
-                ? 'PERSONAL'
+                ? 'Personal'
                 : switch (avatar.status) {
-                    AvatarStatus.training => 'TRAINING…',
-                    AvatarStatus.failed => 'FAILED',
-                    AvatarStatus.ready => 'READY',
+                    AvatarStatus.training => 'Training…',
+                    AvatarStatus.failed => 'Failed',
+                    AvatarStatus.ready => 'Ready',
                   },
             textAlign: TextAlign.center,
-            style:
-                ShiftType.labelSm(avatar.personal ? c.accent : c.textMuted),
+            style: ShiftType.caption(avatar.personal ? c.accent : c.textMuted),
           ),
           const SizedBox(height: Space.x2),
           if (!avatar.personal && avatar.ready)
@@ -647,7 +683,7 @@ class _AvatarTile extends StatelessWidget {
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
                 child:
-                    Text('MAKE PERSONAL', style: ShiftType.labelSm(c.accent)),
+                    Text('Make personal', style: ShiftType.caption(c.accent)),
               ),
             ),
           Align(
@@ -700,7 +736,7 @@ Future<void> _confirmDeleteAvatar(BuildContext context, Avatar avatar) async {
               foregroundColor: c.onStatus,
             ),
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('DELETE'),
+            child: const Text('Delete'),
           ),
         ],
       );
@@ -710,7 +746,8 @@ Future<void> _confirmDeleteAvatar(BuildContext context, Avatar avatar) async {
   final ScaffoldMessengerState bar = ScaffoldMessenger.of(context);
   if (!await state.deleteAvatar(avatar.id)) {
     bar.showSnackBar(
-      SnackBar(content: Text(state.lastError?.message ?? 'Could not delete it.')),
+      SnackBar(
+          content: Text(state.lastError?.message ?? 'Could not delete it.')),
     );
   }
 }
@@ -826,8 +863,7 @@ class _CreateAvatarFlowState extends State<_CreateAvatarFlow> {
                         ),
                       )
                     : bytes == null
-                        ? Icon(Icons.person_outline_rounded,
-                            color: c.textMuted)
+                        ? Icon(Icons.person_outline_rounded, color: c.textMuted)
                         : Image.memory(bytes,
                             fit: BoxFit.cover, width: 56, height: 56),
               ),
@@ -877,7 +913,7 @@ class _CreateAvatarFlowState extends State<_CreateAvatarFlow> {
                             ),
                           ),
                         )
-                      : const Text('CREATE'),
+                      : const Text('Create'),
                 ),
               ),
             ],
@@ -970,7 +1006,7 @@ class _EngineCardState extends State<_EngineCard> {
                       ),
                     );
                   },
-                  child: const Text('SAVE'),
+                  child: const Text('Save'),
                 ),
               ),
             ],

@@ -294,8 +294,7 @@ class League {
   final int promoteCount;
   final int relegateCount;
 
-  StandingRow? get you =>
-      rows.where((StandingRow r) => r.isYou).firstOrNull;
+  StandingRow? get you => rows.where((StandingRow r) => r.isYou).firstOrNull;
 
   static League? fromJson(Map<String, dynamic> json) {
     final Object? divisionRaw = json['division'];
@@ -612,10 +611,10 @@ enum DesignKind {
       };
 
   String get emptyAction => switch (this) {
-        DesignKind.slides => 'ADD SLIDE',
-        DesignKind.design => 'ADD AN ARTBOARD',
-        DesignKind.codebase => 'OPEN A BRANCH',
-        DesignKind.brand => 'ADD A PAGE',
+        DesignKind.slides => 'Add a slide',
+        DesignKind.design => 'Add an artboard',
+        DesignKind.codebase => 'Open a branch',
+        DesignKind.brand => 'Add a page',
       };
 
   /// Slides and Design start from a brand; the other two start from a source.

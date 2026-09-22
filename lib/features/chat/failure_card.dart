@@ -83,7 +83,7 @@ class _FailureCardState extends State<FailureCard> {
                 size: 16,
                 color: c.textMuted,
               ),
-              label: Text('DETAILS', style: ShiftType.labelSm(c.textMuted)),
+              label: Text('Details', style: ShiftType.caption(c.textMuted)),
               style: TextButton.styleFrom(
                 foregroundColor: c.textMuted,
                 padding: const EdgeInsets.symmetric(horizontal: Space.x2),
@@ -113,11 +113,12 @@ class _FailureCardState extends State<FailureCard> {
             children: <Widget>[
               FilledButton(
                 onPressed: state.signOut,
-                child: const Text('SIGN IN'),
+                child: const Text('Sign in'),
               ),
               OutlinedButton(
                 onPressed: () => state.setSurface(Surface.settings),
-                child: Text('SETTINGS', style: ShiftType.label(c.text)),
+                child: Text('Settings',
+                    style: ShiftType.copy(c.text, size: 15, weight: 600)),
               ),
             ],
           ),

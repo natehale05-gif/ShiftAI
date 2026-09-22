@@ -252,10 +252,11 @@ row optimistically and puts the list back if the call is refused, so a
 
 ```json
 [{ "id": "d1", "title": "Palette reference sheet", "versions": 2,
-   "kindLabel": "PAGE" }]
+   "kindLabel": "Page" }]
 ```
 
-`kindLabel` shows on the thumbnail — `PAGE`, `DECK`, `BRAND`.
+`kindLabel` shows on the thumbnail — `Page`, `Deck`, `Brand`, in sentence
+case like every other display string.
 
 ### `/v1/connections`
 
