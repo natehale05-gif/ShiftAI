@@ -57,7 +57,10 @@ class AgentsSurface extends StatelessWidget {
         ),
         PillComposer(
           hint: state.showingJobs ? 'Start a job' : 'Give an agent a task',
-          onSend: (String text) => _hand(context, state, text),
+          onSend: (String text) {
+            _hand(context, state, text);
+            return true;
+          },
         ),
       ],
     );

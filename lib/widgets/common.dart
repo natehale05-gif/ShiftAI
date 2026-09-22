@@ -477,7 +477,11 @@ class PillComposer extends StatefulWidget {
   });
 
   final String hint;
-  final ValueChanged<String>? onSend;
+  /// Returns false when the message was refused, and the bar then keeps
+  /// what was typed instead of clearing it away. Typing something,
+  /// pressing enter and watching it vanish with nothing to show for it is
+  /// the same dead end as being refused, in a worse place.
+  final bool Function(String)? onSend;
 
   /// Suite's composer carries the make-something mark; the others do not.
   final bool showSparkle;
@@ -545,7 +549,11 @@ class _PillComposerState extends State<PillComposer> {
             '[${_attachments.length} attached: '
                 '${_attachments.map((PickedFile f) => f.name).join(', ')}]',
           ].join('\n');
-    widget.onSend?.call(carried);
+    final bool sent = widget.onSend?.call(carried) ?? true;
+    if (!sent) {
+      _focus.requestFocus();
+      return;
+    }
     _controller.clear();
     setState(_attachments.clear);
     _focus.requestFocus();

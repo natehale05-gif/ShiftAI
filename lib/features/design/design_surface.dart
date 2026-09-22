@@ -122,8 +122,10 @@ class _DesignSurfaceState extends State<DesignSurface> {
             ),
             PillComposer(
               hint: 'Describe a page',
-              onSend: (_) =>
-                  DesignEditorScreen.open(context, DesignKind.design),
+              onSend: (_) {
+                DesignEditorScreen.open(context, DesignKind.design);
+                return true;
+              },
             ),
           ],
         );
