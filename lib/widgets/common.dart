@@ -27,7 +27,7 @@ abstract final class ShiftLockup {
 
   /// Width over height of the artwork, glow included. Read off the
   /// viewBox; the lockup is drawn to this and never to a guess.
-  static const double ratio = 5766.0 / 1476.0;
+  static const double ratio = 408.83 / 104.46;
 
   static String? _template;
 

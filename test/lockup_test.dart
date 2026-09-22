@@ -49,8 +49,9 @@ void main() {
     for (final ShiftThemeId id in ShiftThemeId.values) {
       final ShiftColors c = ShiftColors.forTheme(id);
       final String svg = ShiftLockup.forInk(c.text)!;
-      expect(svg, contains('#F508EA'), reason: '${id.name} lost the magenta');
-      expect(svg, contains('#0365FC'), reason: '${id.name} lost the blue');
+      // Sampled off the brand artwork's own glow, not chosen here.
+      expect(svg, contains('#EC01E7'), reason: '${id.name} lost the magenta');
+      expect(svg, contains('#0061F1'), reason: '${id.name} lost the blue');
     }
   });
 
