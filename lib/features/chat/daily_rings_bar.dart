@@ -38,9 +38,9 @@ class DailyRingsButton extends StatelessWidget {
           painter: _RingsPainter(
             track: c.border,
             rings: <_Ring>[
-              _Ring(rings.create, c.danger),
-              _Ring(rings.publish, c.success),
-              _Ring(rings.compete, c.sky),
+              _Ring(rings.create, ShiftBrand.neonAt(0)),
+              _Ring(rings.publish, ShiftBrand.neonAt(0.5)),
+              _Ring(rings.compete, ShiftBrand.neonAt(1)),
             ],
           ),
         ),
@@ -142,9 +142,10 @@ class _RingsScreenState extends State<_RingsScreen> {
                               painter: _RingsPainter(
                                 track: c.border,
                                 rings: <_Ring>[
-                                  _Ring(rings.create, c.danger),
-                                  _Ring(rings.publish, c.success),
-                                  _Ring(rings.compete, c.sky),
+                                  _Ring(rings.create, ShiftBrand.neonAt(0)),
+                                  _Ring(rings.publish,
+                                      ShiftBrand.neonAt(0.5)),
+                                  _Ring(rings.compete, ShiftBrand.neonAt(1)),
                                 ],
                               ),
                             ),
@@ -178,20 +179,20 @@ class _RingsScreenState extends State<_RingsScreen> {
                             label: 'Create',
                             detail: 'Made something today',
                             closed: rings.create,
-                            color: c.danger,
+                            color: ShiftBrand.neonAt(0),
                           ),
                           _RingRow(
                             label: 'Publish',
                             detail: 'Published or hearted a piece',
                             closed: rings.publish,
-                            color: c.success,
+                            color: ShiftBrand.neonAt(0.5),
                           ),
                           _RingRow(
                             label: 'Compete',
                             detail: 'Checked where you stand — harder to '
                                 'close the higher you are placed',
                             closed: rings.compete,
-                            color: c.sky,
+                            color: ShiftBrand.neonAt(1),
                           ),
                         ],
                       ),
