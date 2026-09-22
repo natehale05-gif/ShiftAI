@@ -45,7 +45,9 @@ void main() {
 
     expect(find.byType(ShiftShell), findsOneWidget);
     expect(state.surface, Surface.suite);
-    expect(find.text('What are we making today?'), findsOneWidget);
+    // The greeting rotates, so the test asks the state which line is
+    // showing rather than pinning one sentence — see `Greetings`.
+    expect(find.text(state.greeting), findsOneWidget);
 
     for (final Surface surface in Surface.values) {
       state.setSurface(surface);
@@ -148,7 +150,7 @@ void main() {
     state.sendMessage('Cut a 20 second vertical promo');
     await tester.pump();
 
-    expect(find.text('What are we making today?'), findsNothing);
+    expect(find.text(state.greeting), findsNothing);
     expect(find.text('Cut a 20 second vertical promo'), findsOneWidget);
     // The answer lands a beat later, after the working indicator.
     expect(state.thinking, isTrue);
