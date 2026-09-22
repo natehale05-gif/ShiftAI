@@ -119,8 +119,30 @@ class _AgentsTab extends StatefulWidget {
   State<_AgentsTab> createState() => _AgentsTabState();
 }
 
+/// Which runs the list shows. Each is one of the tallies above it, and a
+/// tally is how you pick it.
+enum _Filter {
+  all('In all'),
+  working('Working'),
+  needYou('Need you'),
+  inReview('In review');
+
+  const _Filter(this.label);
+  final String label;
+
+  /// A failed run needs you as much as one that is waiting on an answer:
+  /// both are something you have to act on before it moves again.
+  bool admits(RunStatus status) => switch (this) {
+        _Filter.all => true,
+        _Filter.working => status == RunStatus.working,
+        _Filter.needYou =>
+          status == RunStatus.needsYou || status == RunStatus.failed,
+        _Filter.inReview => status == RunStatus.inReview,
+      };
+}
+
 class _AgentsTabState extends State<_AgentsTab> {
-  bool _onlyTrouble = false;
+  _Filter _filter = _Filter.all;
 
   @override
   Widget build(BuildContext context) {
@@ -128,76 +150,55 @@ class _AgentsTabState extends State<_AgentsTab> {
     final ShiftColors c = ShiftColors.of(context);
 
     final List<AgentRun> inScope = state.visibleRuns;
-    final List<AgentRun> runs = _onlyTrouble
-        ? inScope
-            .where(
-              (AgentRun r) =>
-                  r.status == RunStatus.failed ||
-                  r.status == RunStatus.needsYou,
-            )
-            .toList(growable: false)
-        : inScope;
+    List<AgentRun> matching(_Filter f) => inScope
+        .where((AgentRun r) => f.admits(r.status))
+        .toList(growable: false);
+    final List<AgentRun> runs = matching(_filter);
 
-    int countOf(RunStatus status) =>
-        inScope.where((AgentRun r) => r.status == status).length;
+    Color colorOf(_Filter f) => switch (f) {
+          _Filter.all => c.text,
+          _Filter.working => _statusColor(RunStatus.working, c),
+          _Filter.needYou => _statusColor(RunStatus.needsYou, c),
+          _Filter.inReview => _statusColor(RunStatus.inReview, c),
+        };
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
         // Four tallies as tiles, the way Reminders opens on its smart
         // lists: the figure large in its status colour, the word under it.
+        // Tapping one shows just those runs; tapping it again, or "In all",
+        // shows everything.
         Row(
           children: <Widget>[
-            for (final (int i, (int, String, Color) tally) in <(
-              int,
-              String,
-              Color,
-            )>[
-              (inScope.length, 'In all', c.text),
-              (
-                countOf(RunStatus.working),
-                'Working',
-                _statusColor(RunStatus.working, c),
-              ),
-              (
-                countOf(RunStatus.needsYou),
-                'Need you',
-                _statusColor(RunStatus.needsYou, c),
-              ),
-              (
-                countOf(RunStatus.inReview),
-                'In review',
-                _statusColor(RunStatus.inReview, c),
-              ),
-            ].indexed) ...<Widget>[
-              if (i > 0) const SizedBox(width: Space.x2),
+            for (final _Filter f in _Filter.values) ...<Widget>[
+              if (f != _Filter.all) const SizedBox(width: Space.x2),
               Expanded(
                 child: _Count(
-                  value: tally.$1,
-                  label: tally.$2,
-                  color: tally.$3,
+                  value: matching(f).length,
+                  label: f.label,
+                  color: colorOf(f),
+                  selected: _filter == f,
+                  onTap: () => setState(
+                    () => _filter = _filter == f ? _Filter.all : f,
+                  ),
                 ),
               ),
             ],
           ],
         ),
         const SizedBox(height: Space.x5),
-        SegmentedPills<bool>(
-          options: const <bool>[false, true],
-          labelOf: (bool trouble) => trouble ? 'Needs attention' : 'All',
-          selected: _onlyTrouble,
-          onChanged: (bool v) => setState(() => _onlyTrouble = v),
-          expand: true,
-        ),
-        const SizedBox(height: Space.x4),
         if (runs.isEmpty)
           Padding(
             padding: const EdgeInsets.only(top: Space.x4),
             child: Text(
-              _onlyTrouble
-                  ? 'Nothing needs you right now.'
-                  : 'Nothing running on ${state.agentScope} yet — give an '
-                      'agent a task below.',
+              switch (_filter) {
+                _Filter.all => 'Nothing running on ${state.agentScope} yet '
+                    '— give an agent a task below.',
+                _Filter.working => 'Nothing is working right now.',
+                _Filter.needYou => 'Nothing needs you right now.',
+                _Filter.inReview => 'Nothing is waiting on review.',
+              },
               style: ShiftType.body(c.textMuted),
             ),
           )
@@ -218,32 +219,69 @@ class _Count extends StatelessWidget {
     required this.value,
     required this.label,
     required this.color,
+    required this.selected,
+    required this.onTap,
   });
 
   final int value;
   final String label;
   final Color color;
+  final bool selected;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final ShiftColors c = ShiftColors.of(context);
-    return Container(
-      padding:
-          const EdgeInsets.fromLTRB(Space.x3, Space.x3, Space.x2, Space.x3),
-      decoration: BoxDecoration(color: c.surface, borderRadius: Radii.lgAll),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Text('$value',
-              style: ShiftType.figures(color, size: 24, weight: 700)),
-          const SizedBox(height: 2),
-          Text(
-            label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: ShiftType.copy(c.textMuted, size: 13, weight: 500),
+    // The chosen tile takes its own colour as a tint and an outline, so
+    // which list is showing reads from the tile, not a second control.
+    final Color fill =
+        selected ? Color.lerp(c.surface, color, 0.14)! : c.surface;
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: '$value $label',
+      excludeSemantics: true,
+      child: Material(
+        color: fill,
+        shape: RoundedRectangleBorder(
+          borderRadius: Radii.lgAll,
+          side: BorderSide(
+            color: selected ? color : Colors.transparent,
+            width: 1.5,
           ),
-        ],
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(
+              Space.x3,
+              Space.x3,
+              Space.x2,
+              Space.x3,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  '$value',
+                  style: ShiftType.figures(color, size: 24, weight: 700),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: ShiftType.copy(
+                    selected ? c.text : c.textMuted,
+                    size: 13,
+                    weight: selected ? 600 : 500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
