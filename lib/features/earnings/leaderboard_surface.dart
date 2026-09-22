@@ -194,7 +194,13 @@ class _StandingsBoard extends StatelessWidget {
         _YouCard(you: you),
         const SizedBox(height: Space.x4),
         _RivalRow(target: target, chaser: chaser, you: you),
-        const SizedBox(height: Space.x5),
+        const SizedBox(height: Space.x6),
+        // Your own row appears again below, tinted. That is not a repeat:
+        // the cards above are the highlights, this is the board itself,
+        // and a board with a hole where you should be is a worse thing to
+        // read. Saying which is which is what the heading is for.
+        const Eyebrow('THE BOARD'),
+        const SizedBox(height: Space.x3),
         ...rest.map((StandingRow row) => _Row(row: row)),
       ],
     );
@@ -514,6 +520,10 @@ class _Face extends StatelessWidget {
   }
 }
 
+/// Second on the left, first in the middle, third on the right — standing
+/// on pedestals of three different heights, because that is the one shape
+/// everybody already reads as a podium. Three circles in a row with
+/// numbers under them is a ranked list wearing a podium's clothes.
 class _Podium extends StatelessWidget {
   const _Podium({required this.rows});
 
@@ -524,65 +534,83 @@ class _Podium extends StatelessWidget {
     if (rows.length < 3) return const SizedBox.shrink();
     final List<StandingRow> sorted = List<StandingRow>.of(rows)
       ..sort((StandingRow a, StandingRow b) => a.rank.compareTo(b.rank));
-    // A race podium, not a ranked list: 2nd on the left, 1st in the
-    // middle, 3rd on the right.
-    final List<StandingRow> order = <StandingRow>[
-      sorted[1],
-      sorted[0],
-      sorted[2],
-    ];
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: order
-          .map(
-            (StandingRow row) => Expanded(
-              child: _PodiumSpot(row: row, lead: row.rank == 1),
-            ),
-          )
-          .toList(),
+
+    // Capped and centred: the board is 950 wide on a desktop, and three
+    // faces spread across all of it stop reading as a podium and start
+    // reading as three unrelated columns.
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 460),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: <Widget>[
+            Expanded(child: _PodiumSpot(row: sorted[1], height: 56)),
+            Expanded(child: _PodiumSpot(row: sorted[0], height: 78)),
+            Expanded(child: _PodiumSpot(row: sorted[2], height: 40)),
+          ],
+        ),
+      ),
     );
   }
 }
 
 class _PodiumSpot extends StatelessWidget {
-  const _PodiumSpot({required this.row, required this.lead});
+  const _PodiumSpot({required this.row, required this.height});
 
   final StandingRow row;
-  final bool lead;
+
+  /// The pedestal, not the whole spot. First is tallest.
+  final double height;
 
   @override
   Widget build(BuildContext context) {
     final ShiftColors c = ShiftColors.of(context);
+    final bool lead = row.rank == 1;
+
     return Column(
       mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        _Face(row: row, size: lead ? 86 : 70),
-        const SizedBox(height: Space.x3),
-        Text(
-          '${row.rank}',
-          style: ShiftType.subheading(c.text).copyWith(
-            fontSize: lead ? 26 : 22,
-            fontWeight: FontWeight.w500,
-          ),
+        // The cup is the one piece of gold on the board, and it is the
+        // only thing marking first place besides the extra height.
+        SizedBox(
+          height: 22,
+          child: lead
+              ? Icon(Icons.emoji_events_rounded, size: 20, color: c.warning)
+              : null,
         ),
-        const SizedBox(height: Space.x1),
+        Center(child: _Face(row: row, size: lead ? 64 : 52)),
+        const SizedBox(height: Space.x3),
         Text(
           row.name,
           maxLines: 1,
+          textAlign: TextAlign.center,
           overflow: TextOverflow.ellipsis,
-          style: ShiftType.body(c.text),
+          style: ShiftType.bodySm(c.text),
         ),
-        const SizedBox(height: Space.x1),
+        const SizedBox(height: 2),
         Text(
           Fmt.money(row.earnings),
-          style: ShiftType.mono(c.success, size: 16),
+          textAlign: TextAlign.center,
+          style: ShiftType.mono(c.textMuted, size: 13),
         ),
-        const SizedBox(height: Space.x1),
-        if (row.tier != null)
-          Text(
-            row.tier!.label.toUpperCase(),
-            style: ShiftType.labelSm(row.tier!.colorOn(c)),
+        const SizedBox(height: Space.x3),
+        // Pedestals meet in the middle with no gap, so the three read as
+        // one block of steps rather than three floating tiles.
+        Container(
+          height: height,
+          alignment: Alignment.topCenter,
+          padding: const EdgeInsets.only(top: Space.x2),
+          decoration: BoxDecoration(
+            color: lead ? c.accentSoft : c.surfaceRaised,
+            borderRadius: const BorderRadius.vertical(top: Radii.sm),
           ),
+          child: Text(
+            '${row.rank}',
+            style: ShiftType.subheading(lead ? c.accent : c.textMuted)
+                .copyWith(fontSize: lead ? 22 : 18),
+          ),
+        ),
       ],
     );
   }
@@ -677,6 +705,12 @@ class _YouCard extends StatelessWidget {
   }
 }
 
+/// The two people either side of you, in one card rather than two.
+///
+/// They were a green-outlined box and a red-outlined box stacked under a
+/// pink-filled one — three different chrome treatments in a column, which
+/// is what made this screen feel busy. One card, one hairline between the
+/// halves, and the only colour is the arrow and the gap itself.
 class _RivalRow extends StatelessWidget {
   const _RivalRow({
     required this.target,
@@ -692,109 +726,103 @@ class _RivalRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final ShiftColors c = ShiftColors.of(context);
 
-    final List<Widget> cards = <Widget>[
+    final List<Widget> halves = <Widget>[
       if (target != null)
-        _RivalCard(
-          eyebrow: 'CATCH #${target!.rank}',
-          name: target!.name,
-          amount: '${Fmt.money(target!.earnings - you.earnings)} away',
+        _GapLine(
+          row: target!,
+          label: 'TO CATCH #${target!.rank}',
+          gap: '${Fmt.money(target!.earnings - you.earnings)} ahead',
           tone: c.success,
-          icon: Icons.keyboard_double_arrow_up_rounded,
+          icon: Icons.arrow_upward_rounded,
         ),
       if (chaser != null)
-        _RivalCard(
-          eyebrow: '#${chaser!.rank} ON YOUR TAIL',
-          name: chaser!.name,
-          amount: '${Fmt.money(you.earnings - chaser!.earnings)} behind',
+        _GapLine(
+          row: chaser!,
+          label: '#${chaser!.rank} ON YOUR TAIL',
+          gap: '${Fmt.money(you.earnings - chaser!.earnings)} behind',
           tone: c.danger,
-          icon: Icons.keyboard_double_arrow_down_rounded,
+          icon: Icons.arrow_downward_rounded,
         ),
     ];
 
-    return LayoutBuilder(
-      builder: (BuildContext context, BoxConstraints constraints) {
-        if (constraints.maxWidth < 620) {
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: <Widget>[
-              for (int i = 0; i < cards.length; i++) ...<Widget>[
-                if (i > 0) const SizedBox(height: Space.x3),
-                cards[i],
-              ],
-            ],
-          );
-        }
-        return IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: <Widget>[
-              for (int i = 0; i < cards.length; i++) ...<Widget>[
-                if (i > 0) const SizedBox(width: Space.x4),
-                Expanded(child: cards[i]),
-              ],
-            ],
-          ),
-        );
-      },
-    );
-  }
-}
+    if (halves.isEmpty) return const SizedBox.shrink();
 
-class _RivalCard extends StatelessWidget {
-  const _RivalCard({
-    required this.eyebrow,
-    required this.name,
-    required this.amount,
-    required this.tone,
-    required this.icon,
-  });
-
-  final String eyebrow;
-  final String name;
-  final String amount;
-  final Color tone;
-  final IconData icon;
-
-  @override
-  Widget build(BuildContext context) {
-    final ShiftColors c = ShiftColors.of(context);
     return Container(
-      padding: const EdgeInsets.all(Space.x4),
       decoration: BoxDecoration(
         borderRadius: Radii.lgAll,
-        border: Border.all(color: tone),
+        border: Border.all(color: c.border),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Text(eyebrow, style: ShiftType.labelSm(tone)),
-          const SizedBox(height: Space.x2),
-          Row(
-            children: <Widget>[
-              Icon(icon, size: 20, color: tone),
-              const SizedBox(width: Space.x3),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Text(
-                      name,
-                      style: ShiftType.body(c.text),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    Text(amount, style: ShiftType.bodySm(c.textMuted)),
-                  ],
-                ),
-              ),
-            ],
-          ),
+          for (int i = 0; i < halves.length; i++) ...<Widget>[
+            if (i > 0) Divider(height: 1, color: c.border),
+            halves[i],
+          ],
         ],
       ),
     );
   }
 }
 
+class _GapLine extends StatelessWidget {
+  const _GapLine({
+    required this.row,
+    required this.label,
+    required this.gap,
+    required this.tone,
+    required this.icon,
+  });
+
+  final StandingRow row;
+  final String label;
+  final String gap;
+  final Color tone;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final ShiftColors c = ShiftColors.of(context);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: Space.x4,
+        vertical: Space.x3,
+      ),
+      child: Row(
+        children: <Widget>[
+          Icon(icon, size: 16, color: tone),
+          const SizedBox(width: Space.x3),
+          _Face(row: row, size: 28),
+          const SizedBox(width: Space.x3),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(label, style: ShiftType.labelSm(c.textMuted)),
+                const SizedBox(height: 1),
+                Text(
+                  row.name,
+                  style: ShiftType.bodySm(c.text),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: Space.x3),
+          Text(gap, style: ShiftType.mono(tone, size: 13)),
+        ],
+      ),
+    );
+  }
+}
+
+/// One line of the board.
+///
+/// Amounts are plain text rather than money-green. Ten green figures in a
+/// column is ten things shouting at once, and then nothing on the screen
+/// stands out — the only colour left here is the rank move, which is the
+/// part that actually changes.
 class _Row extends StatelessWidget {
   const _Row({required this.row});
 
@@ -805,87 +833,89 @@ class _Row extends StatelessWidget {
     final ShiftColors c = ShiftColors.of(context);
     final bool up = row.movement > 0;
     final bool flat = row.movement == 0;
+    final bool mine = row.isYou;
 
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
-        final bool roomForMove = constraints.maxWidth >= 420;
         final bool roomForTier = constraints.maxWidth >= 520;
-        return Padding(
-          padding: const EdgeInsets.only(bottom: Space.x1),
-          child: Column(
+        return Container(
+          margin: const EdgeInsets.only(bottom: 2),
+          padding: const EdgeInsets.symmetric(
+            horizontal: Space.x3,
+            vertical: Space.x2,
+          ),
+          decoration: BoxDecoration(
+            // Your own row is tinted rather than ruled off, so scrolling
+            // the board lands on it without hunting for the number.
+            color: mine ? c.accentSoft : null,
+            borderRadius: Radii.mdAll,
+          ),
+          child: Row(
             children: <Widget>[
               SizedBox(
-                height: 56,
-                child: Row(
-                  children: <Widget>[
-                    SizedBox(
-                      width: 30,
-                      child: Text(
-                        '${row.rank}',
-                        textAlign: TextAlign.right,
-                        style: ShiftType.body(c.text),
-                      ),
-                    ),
-                    if (roomForMove)
-                      SizedBox(
-                        width: 48,
-                        child: flat
-                            ? const SizedBox.shrink()
-                            : Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: <Widget>[
-                                  Icon(
-                                    up
-                                        ? Icons.arrow_drop_up_rounded
-                                        : Icons.arrow_drop_down_rounded,
-                                    size: 18,
-                                    color: up ? c.success : c.danger,
-                                  ),
-                                  Text(
-                                    '${row.movement.abs()}',
-                                    style: ShiftType.caption(
-                                      up ? c.success : c.danger,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                      ),
-                    _Face(row: row, size: 30),
-                    const SizedBox(width: Space.x3),
-                    Flexible(
-                      child: Text(
-                        row.name,
-                        style: ShiftType.body(c.text),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    if (row.tier != null && roomForTier) ...<Widget>[
-                      const SizedBox(width: Space.x3),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: Space.x2,
-                          vertical: 3,
-                        ),
-                        decoration: BoxDecoration(
-                          color: c.surfaceRaised,
-                          borderRadius: Radii.smAll,
-                        ),
-                        child: Text(
-                          row.tier!.label.toUpperCase(),
-                          style: ShiftType.labelSm(row.tier!.colorOn(c)),
-                        ),
-                      ),
-                    ],
-                    const Spacer(),
-                    Text(
-                      Fmt.money(row.earnings),
-                      style: ShiftType.mono(c.success, size: 16),
-                    ),
-                  ],
+                width: 24,
+                child: Text(
+                  '${row.rank}',
+                  textAlign: TextAlign.right,
+                  style: ShiftType.mono(
+                    mine ? c.accent : c.textMuted,
+                    size: 14,
+                  ),
                 ),
               ),
-              Divider(height: 1, color: c.border),
+              // Beside the rank, not beside the money: a variable-width
+              // thing in the middle of the row is what was eating the
+              // names, and the move belongs with the number it moved.
+              SizedBox(
+                width: 22,
+                child: flat
+                    ? null
+                    : Icon(
+                        up
+                            ? Icons.arrow_drop_up_rounded
+                            : Icons.arrow_drop_down_rounded,
+                        size: 18,
+                        color: up ? c.success : c.danger,
+                      ),
+              ),
+              _Face(row: row, size: 30),
+              const SizedBox(width: Space.x3),
+              // Expanded, not Flexible beside a Spacer: those two split
+              // the leftover width between them, so the name gave up half
+              // the row to empty space and then ellipsised — which is why
+              // half the board read 'Leo Font…' with a gap beside it.
+              Expanded(
+                child: Text(
+                  mine ? 'You' : row.name,
+                  style: mine
+                      ? ShiftType.bodyStrong(c.text)
+                      : ShiftType.body(c.text),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              if (row.tier != null && roomForTier) ...<Widget>[
+                const SizedBox(width: Space.x3),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: Space.x2,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: c.surfaceRaised,
+                    borderRadius: Radii.smAll,
+                  ),
+                  child: Text(
+                    row.tier!.label.toUpperCase(),
+                    style: ShiftType.labelSm(row.tier!.colorOn(c)),
+                  ),
+                ),
+              ],
+              const SizedBox(width: Space.x3),
+              Text(
+                Fmt.money(row.earnings),
+                style: ShiftType.mono(c.text, size: 14),
+              ),
             ],
           ),
         );

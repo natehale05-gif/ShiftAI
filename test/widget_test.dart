@@ -8,7 +8,11 @@ import 'package:shift_ai/app/modes.dart';
 import 'package:shift_ai/app/shell.dart';
 import 'package:shift_ai/data/seed.dart';
 import 'package:shift_ai/models/models.dart';
+import 'package:shift_ai/data/auth/auth_service.dart';
+import 'package:shift_ai/data/auth/session.dart';
 import 'package:shift_ai/data/auth/token_store.dart';
+import 'package:shift_ai/data/backend.dart';
+import 'package:shift_ai/data/seed_repository.dart';
 import 'package:shift_ai/state/app_state.dart';
 import 'package:shift_ai/theme/tokens.dart';
 import 'package:shift_ai/util/file_pick.dart';
@@ -19,6 +23,43 @@ Future<AppState> _freshState() async {
   // Never the real keychain: there is no platform channel under the test
   // binding, and a test that reaches for one hangs rather than fails.
   return AppState.load(tokenStore: MemoryTokenStore());
+}
+
+class _StubAuth implements AuthService {
+  /// Nothing here is called. Anything that starts reaching for the auth
+  /// service throws rather than quietly passing.
+  @override
+  dynamic noSuchMethod(Invocation invocation) =>
+      throw UnimplementedError(invocation.memberName.toString());
+}
+
+/// A state with an engine configured and a session already in the
+/// keychain: a returning person, which is the only case chat sends in.
+///
+/// Chat refuses without one — the seeded catalogue is a demo, not an
+/// account, and answering it with the fixture reads as a real answer — so
+/// anything that sends a message starts here rather than [_freshState].
+Future<AppState> _signedInState() async {
+  SharedPreferences.setMockInitialValues(<String, Object>{
+    'shift-backend': 'https://api.example.com',
+  });
+  final TokenStore tokens = MemoryTokenStore();
+  await tokens.write(Session(
+    accessToken: 'access-1',
+    refreshToken: 'refresh-1',
+    expiresAt: DateTime.now().add(const Duration(hours: 1)),
+    creator: Seed.creator,
+  ));
+  final AuthController auth =
+      AuthController(service: _StubAuth(), store: tokens);
+  await auth.restore();
+  return AppState.load(
+    engine: Backend(
+      repository: SeedRepository(),
+      auth: auth,
+      seeded: false,
+    ),
+  );
 }
 
 /// The rings screen opens on its own the moment `ShiftShell` mounts — see
@@ -142,7 +183,7 @@ void main() {
 
   testWidgets('a sent message brings back an answer',
       (WidgetTester tester) async {
-    final AppState state = await _freshState();
+    final AppState state = await _signedInState();
     await tester.pumpWidget(ShiftApp(state: state));
     await tester.pump();
     await _dismissRingsSheet(tester);
@@ -373,7 +414,7 @@ void main() {
   });
 
   test('retry and edit have the last ask to work from', () async {
-    final AppState state = await _freshState();
+    final AppState state = await _signedInState();
     expect(state.lastAsk, isNull);
     state.sendMessage('Cut a 20 second vertical promo');
     expect(state.lastAsk, 'Cut a 20 second vertical promo');
@@ -472,10 +513,13 @@ void main() {
   });
 
   test('private chat content never reaches storage', () async {
-    SharedPreferences.setMockInitialValues(<String, Object>{});
-    final AppState state = await AppState.load(tokenStore: MemoryTokenStore());
+    // Signed in, so the message genuinely lands in the thread first. On
+    // the demo the send is refused and this passes without proving
+    // anything: nothing written is not the same as nothing kept.
+    final AppState state = await _signedInState();
     state.togglePrivateChat();
-    state.sendMessage('something private');
+    expect(state.sendMessage('something private'), isTrue);
+    expect(state.messages, isNotEmpty);
     await Future<void>.delayed(const Duration(milliseconds: 600));
 
     final SharedPreferences prefs = await SharedPreferences.getInstance();

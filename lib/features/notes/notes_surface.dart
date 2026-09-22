@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../app/shell.dart';
@@ -81,22 +83,28 @@ class NotesSurface extends StatelessWidget {
             ),
             PillComposer(
               hint: 'Write a note',
-              onSend: (String text) async {
+              onSend: (String text) {
+                // The bar clears straight away and the save reports itself
+                // in a snack bar, exactly as it did while this callback
+                // could not answer at all.
                 final ScaffoldMessengerState bar =
                     ScaffoldMessenger.of(context);
-                final Note? note = await state.addNote(
-                  title: text.split('\n').first,
-                  body: text,
-                );
-                bar.showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      note == null
-                          ? state.lastError?.message ?? 'Could not save it.'
-                          : 'Saved “${note.title}”',
+                unawaited(() async {
+                  final Note? note = await state.addNote(
+                    title: text.split('\n').first,
+                    body: text,
+                  );
+                  bar.showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        note == null
+                            ? state.lastError?.message ?? 'Could not save it.'
+                            : 'Saved “${note.title}”',
+                      ),
                     ),
-                  ),
-                );
+                  );
+                }());
+                return true;
               },
             ),
           ],
