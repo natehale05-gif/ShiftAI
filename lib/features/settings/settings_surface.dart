@@ -34,12 +34,13 @@ class SettingsSurface extends StatelessWidget {
             child: const Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
-                // Who you are comes first: the avatar you show up as, then
-                // the account it belongs to. Everything below is how the
-                // app looks and behaves, not who is using it.
-                _AvatarsCard(),
-                SizedBox(height: Space.x4),
+                // Who you are comes first: the account itself — name,
+                // email, username — and then the avatars you show up as.
+                // Everything below is how the app looks and behaves, not
+                // who is using it.
                 AccountCard(),
+                SizedBox(height: Space.x4),
+                _AvatarsCard(),
                 SizedBox(height: Space.x4),
                 _AppearanceCard(),
                 SizedBox(height: Space.x4),
