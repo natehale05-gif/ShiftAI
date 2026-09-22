@@ -144,64 +144,52 @@ class _AgentsTabState extends State<_AgentsTab> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        Wrap(
-          spacing: Space.x5,
-          runSpacing: Space.x2,
+        // Four tallies as tiles, the way Reminders opens on its smart
+        // lists: the figure large in its status colour, the word under it.
+        Row(
           children: <Widget>[
-            _Count(value: inScope.length, label: 'in all', color: c.text),
-            _Count(
-              value: countOf(RunStatus.working),
-              label: 'working',
-              color: _statusColor(RunStatus.working, c),
-            ),
-            _Count(
-              value: countOf(RunStatus.needsYou),
-              label: 'need you',
-              color: _statusColor(RunStatus.needsYou, c),
-            ),
-            _Count(
-              value: countOf(RunStatus.inReview),
-              label: 'in review',
-              color: _statusColor(RunStatus.inReview, c),
-            ),
+            for (final (int i, (int, String, Color) tally) in <(
+              int,
+              String,
+              Color,
+            )>[
+              (inScope.length, 'In all', c.text),
+              (
+                countOf(RunStatus.working),
+                'Working',
+                _statusColor(RunStatus.working, c),
+              ),
+              (
+                countOf(RunStatus.needsYou),
+                'Need you',
+                _statusColor(RunStatus.needsYou, c),
+              ),
+              (
+                countOf(RunStatus.inReview),
+                'In review',
+                _statusColor(RunStatus.inReview, c),
+              ),
+            ].indexed) ...<Widget>[
+              if (i > 0) const SizedBox(width: Space.x2),
+              Expanded(
+                child: _Count(
+                  value: tally.$1,
+                  label: tally.$2,
+                  color: tally.$3,
+                ),
+              ),
+            ],
           ],
         ),
         const SizedBox(height: Space.x5),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: InkWell(
-            borderRadius: Radii.pillAll,
-            onTap: () => setState(() => _onlyTrouble = !_onlyTrouble),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: Space.x2,
-                vertical: Space.x2,
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: <Widget>[
-                  Text(
-                    _onlyTrouble ? 'Needs attention and failed' : 'Everything',
-                    style: ShiftType.body(
-                      _onlyTrouble ? c.accent : c.textMuted,
-                    ),
-                  ),
-                  const SizedBox(width: Space.x2),
-                  AnimatedRotation(
-                    turns: _onlyTrouble ? 0.25 : 0,
-                    duration: const Duration(milliseconds: 160),
-                    child: Icon(
-                      Icons.chevron_right_rounded,
-                      size: 20,
-                      color: _onlyTrouble ? c.accent : c.textMuted,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
+        SegmentedPills<bool>(
+          options: const <bool>[false, true],
+          labelOf: (bool trouble) => trouble ? 'Needs attention' : 'All',
+          selected: _onlyTrouble,
+          onChanged: (bool v) => setState(() => _onlyTrouble = v),
+          expand: true,
         ),
-        const SizedBox(height: Space.x2),
+        const SizedBox(height: Space.x4),
         if (runs.isEmpty)
           Padding(
             padding: const EdgeInsets.only(top: Space.x4),
@@ -214,7 +202,12 @@ class _AgentsTabState extends State<_AgentsTab> {
             ),
           )
         else
-          ...runs.map((AgentRun run) => _RunRow(run: run)),
+          GroupedList(
+            dividerInset: _rowInset,
+            children: runs
+                .map((AgentRun run) => _RunRow(run: run))
+                .toList(growable: false),
+          ),
       ],
     );
   }
@@ -234,13 +227,24 @@ class _Count extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ShiftColors c = ShiftColors.of(context);
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: <Widget>[
-        Text('$value', style: ShiftType.body(color)),
-        const SizedBox(width: Space.x2),
-        Text(label, style: ShiftType.body(c.textMuted)),
-      ],
+    return Container(
+      padding:
+          const EdgeInsets.fromLTRB(Space.x3, Space.x3, Space.x2, Space.x3),
+      decoration: BoxDecoration(color: c.surface, borderRadius: Radii.lgAll),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text('$value',
+              style: ShiftType.figures(color, size: 24, weight: 700)),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: ShiftType.copy(c.textMuted, size: 13, weight: 500),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -290,7 +294,7 @@ class _RunRow extends StatelessWidget {
                 const SizedBox(width: Space.x2),
                 Flexible(
                   child: Text(
-                    'Checks Passed · ${run.diff} · ${run.scope}',
+                    'Checks passed · ${run.diff} · ${run.scope}',
                     style: ShiftType.bodySm(c.textMuted),
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -333,30 +337,39 @@ class _JobsTab extends StatelessWidget {
               style: ShiftType.body(c.textMuted),
             ),
           ),
-        ...state.visibleJobs.map(
-          (JobRow job) => _ListRow(
-            dotColor: _statusColor(job.status, c),
-            title: job.title,
-            detail: Text(job.detail, style: ShiftType.bodySm(c.textMuted)),
-            onTap: () => _showRunDetail(
-              context,
-              title: job.title,
-              status: job.status,
-              lines: <String, String>{
-                'Status': job.detail,
-                'Where': job.scope ?? state.jobScope,
-                'Policy': Seed.jobPolicy,
-              },
-            ),
+        if (state.visibleJobs.isNotEmpty)
+          GroupedList(
+            dividerInset: _rowInset,
+            children: state.visibleJobs
+                .map(
+                  (JobRow job) => _ListRow(
+                    dotColor: _statusColor(job.status, c),
+                    title: job.title,
+                    detail:
+                        Text(job.detail, style: ShiftType.bodySm(c.textMuted)),
+                    onTap: () => _showRunDetail(
+                      context,
+                      title: job.title,
+                      status: job.status,
+                      lines: <String, String>{
+                        'Status': job.detail,
+                        'Where': job.scope ?? state.jobScope,
+                        'Policy': Seed.jobPolicy,
+                      },
+                    ),
+                  ),
+                )
+                .toList(growable: false),
           ),
-        ),
       ],
     );
   }
 }
 
-/// One row: a status dot, a title, a line underneath, a hairline that starts
-/// where the text does.
+/// Where a row's text starts, and so where the group's hairlines start.
+const double _rowInset = 40;
+
+/// One row of a grouped list: a status dot, a title, a line underneath.
 class _ListRow extends StatelessWidget {
   const _ListRow({
     required this.dotColor,
@@ -379,7 +392,12 @@ class _ListRow extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       child: Padding(
-        padding: const EdgeInsets.only(top: Space.x3),
+        padding: const EdgeInsets.fromLTRB(
+          Space.x4,
+          Space.x3,
+          Space.x3,
+          Space.x3,
+        ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
@@ -394,30 +412,36 @@ class _ListRow extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(width: Space.x4),
+            const SizedBox(width: _rowInset - Space.x4 - 9),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
-                  Text(title, style: ShiftType.body(c.text)),
+                  Text(
+                    title,
+                    style: ShiftType.copy(
+                      c.text,
+                      size: 16,
+                      weight: 500,
+                      lineHeight: 22,
+                    ),
+                  ),
                   const SizedBox(height: 2),
                   if (richDetail != null)
                     richDetail!
                   else
                     detail ?? const SizedBox.shrink(),
-                  const SizedBox(height: Space.x3),
-                  Divider(height: 1, color: c.border),
                 ],
               ),
             ),
             if (onTap != null) ...<Widget>[
-              const SizedBox(width: Space.x3),
+              const SizedBox(width: Space.x2),
               Padding(
-                padding: const EdgeInsets.only(top: 4),
+                padding: const EdgeInsets.only(top: 1),
                 child: Icon(
                   Icons.chevron_right_rounded,
                   size: 20,
-                  color: c.textMuted,
+                  color: c.textMuted.withValues(alpha: 0.6),
                 ),
               ),
             ],
@@ -510,7 +534,7 @@ Future<void> _showRunDetail(
                   Expanded(
                     child: FilledButton(
                       onPressed: () => Navigator.of(context).pop(),
-                      child: const Text('CLOSE'),
+                      child: const Text('Done'),
                     ),
                   ),
                 ],

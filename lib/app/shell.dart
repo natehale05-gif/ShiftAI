@@ -330,7 +330,7 @@ class SidebarNav extends StatelessWidget {
                   state.setMode(ShiftMode.suite);
                 }),
                 icon: const Icon(Icons.add_rounded, size: 18),
-                label: const Text('NEW CHAT'),
+                label: const Text('New chat'),
                 style: FilledButton.styleFrom(
                   backgroundColor: c.accent,
                   foregroundColor: c.onAccent,
@@ -416,7 +416,10 @@ class _RankBadge extends StatelessWidget {
         color: c.sky.withValues(alpha: 0.14),
         borderRadius: Radii.pillAll,
       ),
-      child: Text('#$rank', style: ShiftType.mono(c.sky, size: 11)),
+      child: Text(
+        '#$rank',
+        style: ShiftType.figures(c.sky, size: 12, weight: 600),
+      ),
     );
   }
 }
@@ -473,50 +476,44 @@ class _NavRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ShiftColors c = ShiftColors.of(context);
-    final Color fg = active ? c.accent : c.textMuted;
 
+    // The sidebar's own shape: a rounded fill marks where you are, and an
+    // unchosen row is ordinary text rather than greyed out. The accent bar
+    // down the left edge was the web's idiom for the same thing, and grey
+    // labels made every row but one look disabled.
     return Padding(
-      padding: const EdgeInsets.only(bottom: 3),
+      padding: const EdgeInsets.only(bottom: 2),
       child: Semantics(
         selected: active,
         button: true,
         child: InkWell(
-          borderRadius: Radii.pillAll,
+          borderRadius: Radii.mdAll,
           onTap: onTap,
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 160),
             curve: Curves.easeOut,
             height: height,
-            padding: const EdgeInsets.only(right: Space.x3),
+            padding: const EdgeInsets.symmetric(horizontal: Space.x3),
             decoration: BoxDecoration(
               color: active ? c.accentSoft : Colors.transparent,
-              borderRadius: Radii.pillAll,
+              borderRadius: Radii.mdAll,
             ),
             child: Row(
               children: <Widget>[
-                // The marker on the left is what tells you where you are at
-                // a glance, before you read a single label.
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 180),
-                  curve: Curves.easeOut,
-                  width: 3,
-                  height: active ? height - 14 : 0,
-                  decoration: BoxDecoration(
-                    color: c.accent,
-                    borderRadius: Radii.pillAll,
-                  ),
-                ),
-                const SizedBox(width: Space.x3 - 3),
-                Icon(icon, size: 18, color: fg),
+                Icon(icon, size: 19, color: active ? c.accent : c.textMuted),
                 const SizedBox(width: Space.x3),
                 Expanded(
                   child: Text(
                     label,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: ShiftType.bodySm(fg).copyWith(
-                      fontWeight: active ? FontWeight.w600 : FontWeight.w400,
-                      letterSpacing: 0.1,
+                    // Weight through the copy style: a copyWith(fontWeight:)
+                    // does nothing on these variable faces, so the chosen
+                    // row was never actually bolder.
+                    style: ShiftType.copy(
+                      active ? c.accent : c.text,
+                      size: 15,
+                      weight: active ? 600 : 400,
                     ),
                   ),
                 ),
@@ -602,7 +599,7 @@ class _UpdateBanner extends StatelessWidget {
       ),
       child: Row(
         children: <Widget>[
-          Text('UPDATE', style: ShiftType.labelSm(c.accent)),
+          Text('Update', style: ShiftType.caption(c.accent)),
           const SizedBox(width: Space.x3),
           Expanded(
             child: Text(
