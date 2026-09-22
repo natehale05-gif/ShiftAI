@@ -133,6 +133,16 @@ abstract final class ShiftType {
   static TextStyle mono(Color color, {double size = 13}) =>
       _plex(size: size, lineHeight: 20, color: color);
 
+  /// A screen's own title, under its back link — the large title a
+  /// navigation stack opens on.
+  static TextStyle largeTitle(Color color) => _outfit(
+        size: 32,
+        lineHeight: 38,
+        weight: 700,
+        letterSpacing: -0.3,
+        color: color,
+      );
+
   /// A section's own heading — "Bronze", "Standings" — set like a title,
   /// in sentence case, where an uppercase mono eyebrow used to go.
   static TextStyle sectionTitle(Color color) =>

@@ -150,9 +150,12 @@ class Eyebrow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ShiftColors c = ShiftColors.of(context);
+    // Set as written. Every caller already passes sentence case —
+    // "Appearance", "Your avatars", "Prompt" — and this used to shout it
+    // into tracked mono capitals on the way to the screen.
     return Text(
-      text.toUpperCase(),
-      style: ShiftType.labelSm(color ?? c.textMuted),
+      text,
+      style: ShiftType.copy(color ?? c.textMuted, size: 13, weight: 600),
     );
   }
 }
@@ -175,12 +178,21 @@ class ShiftCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ShiftColors c = ShiftColors.of(context);
+    // Filled, not outlined. On a dark ground the card's own fill is the
+    // edge. On a light one the card is white on a near-white page, so it
+    // keeps a hairline — half the 1px outline every card used to wear.
+    final Color? edge = borderColor ?? (c.isDarkGround ? null : c.border);
     return Container(
       padding: padding,
       decoration: BoxDecoration(
         color: background ?? c.surface,
         borderRadius: Radii.lgAll,
-        border: Border.all(color: borderColor ?? c.border),
+        border: edge == null
+            ? null
+            : Border.all(
+                color: edge,
+                width: borderColor == null ? 0.5 : 1,
+              ),
       ),
       child: child,
     );
@@ -219,9 +231,8 @@ class SegmentedPills<T> extends StatelessWidget {
     final int at = options.indexOf(selected).clamp(0, n - 1);
     // On a dark ground the thumb is a step lighter than its track; on a
     // light one it is the card white, lifted by a shadow.
-    final Color thumb = c.isDarkGround
-        ? Color.lerp(c.surfaceRaised, c.text, 0.14)!
-        : c.surface;
+    final Color thumb =
+        c.isDarkGround ? Color.lerp(c.surfaceRaised, c.text, 0.14)! : c.surface;
 
     final Widget control = Container(
       height: 36,
@@ -628,6 +639,7 @@ class PillComposer extends StatefulWidget {
   });
 
   final String hint;
+
   /// Returns false when the message was refused, and the bar then keeps
   /// what was typed instead of clearing it away. Typing something,
   /// pressing enter and watching it vanish with nothing to show for it is
@@ -881,8 +893,7 @@ class _PillComposerState extends State<PillComposer> {
                           color: active == null ? c.textMuted : c.accent,
                         ),
                         style: IconButton.styleFrom(
-                          minimumSize:
-                              const Size(_controlSize, _controlSize),
+                          minimumSize: const Size(_controlSize, _controlSize),
                         ),
                       ),
                     if (widget.showSparkle)
@@ -969,7 +980,8 @@ class _AvatarGlyph extends StatelessWidget {
       height: size,
       alignment: Alignment.center,
       clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: c.accent)),
+      decoration: BoxDecoration(
+          shape: BoxShape.circle, border: Border.all(color: c.accent)),
       child: previewUrl == null
           ? face()
           : Image.network(
@@ -1015,7 +1027,7 @@ class _AvatarSheet extends StatelessWidget {
           children: <Widget>[
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: Space.x5),
-              child: Text('Generate as', style: ShiftType.labelSm(c.textMuted)),
+              child: Text('Generate as', style: ShiftType.caption(c.textMuted)),
             ),
             const SizedBox(height: Space.x2),
             _AvatarOption(
@@ -1056,8 +1068,7 @@ class _AvatarOption extends StatelessWidget {
     return ListTile(
       leading: _AvatarGlyph(avatar: avatar, size: 32),
       title: Text(name, style: ShiftType.body(c.text)),
-      trailing:
-          selected ? Icon(Icons.check_rounded, color: c.accent) : null,
+      trailing: selected ? Icon(Icons.check_rounded, color: c.accent) : null,
       onTap: onTap,
     );
   }
@@ -1131,41 +1142,51 @@ class ScreenBreadcrumb extends StatelessWidget {
   final String title;
   final VoidCallback onBack;
 
+  /// A back link in the accent over the screen's title set large — the
+  /// shape of a navigation stack. It was a grey pill with the parent's
+  /// name beside a subheading, which put the way back and the place you
+  /// are at the same weight.
   @override
   Widget build(BuildContext context) {
     final ShiftColors c = ShiftColors.of(context);
-    return Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        InkWell(
-          borderRadius: Radii.pillAll,
-          onTap: onBack,
-          child: Container(
-            height: 44,
-            padding: const EdgeInsets.fromLTRB(
-              Space.x3,
-              0,
-              Space.x4,
-              0,
-            ),
-            decoration: BoxDecoration(
-              color: c.surface,
-              borderRadius: Radii.pillAll,
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                Icon(Icons.chevron_left_rounded, size: 20, color: c.textMuted),
-                const SizedBox(width: Space.x1),
-                Text(parent, style: ShiftType.bodySm(c.textMuted)),
-              ],
+        Semantics(
+          button: true,
+          label: 'Back to $parent',
+          excludeSemantics: true,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: onBack,
+            child: SizedBox(
+              height: 36,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  // Pulled left so the chevron's own side bearing lines
+                  // the text up with the title below it.
+                  Transform.translate(
+                    offset: const Offset(-6, 0),
+                    child: Icon(
+                      Icons.chevron_left_rounded,
+                      size: 28,
+                      color: c.accent,
+                    ),
+                  ),
+                  Transform.translate(
+                    offset: const Offset(-8, 0),
+                    child: Text(
+                      parent,
+                      style: ShiftType.copy(c.accent, size: 17, weight: 500),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
-        const SizedBox(width: Space.x4),
-        Text(
-          title,
-          style: ShiftType.subheading(c.text),
-        ),
+        Text(title, style: ShiftType.largeTitle(c.text)),
       ],
     );
   }
@@ -1193,65 +1214,83 @@ class ScreenTabs extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ShiftColors c = ShiftColors.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+    // A segmented control, not underlined tabs: two views of one list are
+    // a choice of lens, the way a Mail or Photos toolbar sets it.
+    return Row(
       children: <Widget>[
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: <Widget>[
-            for (int i = 0; i < labels.length; i++)
-              Padding(
-                padding: const EdgeInsets.only(right: Space.x5),
-                child: Semantics(
-                  selected: i == selected,
-                  button: true,
-                  child: InkWell(
-                    onTap: () => onChanged(i),
-                    child: Container(
-                      padding: const EdgeInsets.only(bottom: Space.x2),
-                      decoration: BoxDecoration(
-                        border: Border(
-                          bottom: BorderSide(
-                            width: 2,
-                            color:
-                                i == selected ? c.accent : Colors.transparent,
-                          ),
-                        ),
-                      ),
-                      child: Text(
-                        labels[i],
-                        style: ShiftType.subheading(
-                          i == selected ? c.text : c.textMuted,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            const Spacer(),
-            Padding(
-              padding: const EdgeInsets.only(bottom: Space.x2),
-              child: InkWell(
-                borderRadius: Radii.smAll,
-                onTap: onScopeTap,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: <Widget>[
-                    Text(scopeLabel, style: ShiftType.bodySm(c.textMuted)),
-                    const SizedBox(width: Space.x1),
-                    Icon(
-                      Icons.keyboard_arrow_down_rounded,
-                      size: 18,
-                      color: c.textMuted,
-                    ),
-                  ],
-                ),
-              ),
+        SegmentedPills<int>(
+          options: List<int>.generate(labels.length, (int i) => i),
+          labelOf: (int i) => labels[i],
+          selected: selected,
+          onChanged: onChanged,
+        ),
+        const Spacer(),
+        InkWell(
+          borderRadius: Radii.smAll,
+          onTap: onScopeTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: Space.x1,
+              vertical: Space.x2,
             ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Text(
+                  scopeLabel,
+                  style: ShiftType.copy(c.accent, size: 15, weight: 500),
+                ),
+                const SizedBox(width: 2),
+                Icon(
+                  Icons.keyboard_arrow_down_rounded,
+                  size: 18,
+                  color: c.accent,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Rows in one filled, rounded group, with hairlines inset to where the
+/// text starts — the grouped list a settings or standings page is built of.
+class GroupedList extends StatelessWidget {
+  const GroupedList({
+    required this.children,
+    this.dividerInset = Space.x4,
+    super.key,
+  });
+
+  final List<Widget> children;
+
+  /// How far in from the leading edge each hairline starts.
+  final double dividerInset;
+
+  @override
+  Widget build(BuildContext context) {
+    final ShiftColors c = ShiftColors.of(context);
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(color: c.surface, borderRadius: Radii.lgAll),
+      child: Material(
+        type: MaterialType.transparency,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            for (int i = 0; i < children.length; i++) ...<Widget>[
+              if (i > 0)
+                Padding(
+                  padding: EdgeInsets.only(left: dividerInset),
+                  child: Divider(height: 1, thickness: 0.5, color: c.border),
+                ),
+              children[i],
+            ],
           ],
         ),
-        Divider(height: 1, color: c.border),
-      ],
+      ),
     );
   }
 }

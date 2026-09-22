@@ -70,9 +70,15 @@ class _BootScreen extends StatelessWidget {
         backgroundColor: bg,
         body: Center(
           child: error == null
-              ? Text(
-                  'LOADING SHIFT AI',
-                  style: ShiftType.labelSm(muted).copyWith(letterSpacing: 1.8),
+              // A quiet spinner, not a line of tracked capitals: the fonts
+              // may not have loaded yet, and the app is usually up before
+              // anyone could read one.
+              ? const SizedBox.square(
+                  dimension: 22,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.2,
+                    color: muted,
+                  ),
                 )
               : Padding(
                   padding: const EdgeInsets.all(Space.x6),
