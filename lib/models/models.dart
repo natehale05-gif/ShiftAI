@@ -19,7 +19,7 @@ class Creator {
 
   /// The handle with no leading `@`, whatever the engine sent. Every
   /// screen draws the `@` itself, so one arriving in the value would be
-  /// shown twice — which is exactly what `@@natehale` was.
+  /// shown twice — which is exactly what `@@shiftai` was.
   String get bareHandle =>
       handle.startsWith('@') ? handle.substring(1) : handle;
 

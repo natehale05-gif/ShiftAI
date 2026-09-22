@@ -399,21 +399,21 @@ void main() {
     test('an engine that sends the @ does not get it drawn twice', () {
       // Every screen writes its own '@' in front of the handle, so one
       // arriving in the value is what made the account card read
-      // "@@natehale".
+      // "@@shiftai".
       const Creator withAt = Creator(
-        handle: '@natehale',
-        name: 'Nate Hale',
-        email: 'nate@example.com',
-        initials: 'NH',
+        handle: '@shiftai',
+        name: 'SHIFT AI',
+        email: 'demo@shiftai.club',
+        initials: 'SA',
       );
       const Creator without = Creator(
-        handle: 'natehale',
-        name: 'Nate Hale',
-        email: 'nate@example.com',
-        initials: 'NH',
+        handle: 'shiftai',
+        name: 'SHIFT AI',
+        email: 'demo@shiftai.club',
+        initials: 'SA',
       );
-      expect(withAt.bareHandle, 'natehale');
-      expect(without.bareHandle, 'natehale');
+      expect(withAt.bareHandle, 'shiftai');
+      expect(without.bareHandle, 'shiftai');
     });
   });
 

@@ -38,9 +38,9 @@ http.Response _snapshotRoute(http.BaseRequest request) {
   return switch (path) {
     '/v1/me' => http.Response(
         _json(<String, dynamic>{
-          'handle': 'nate',
-          'name': 'Nate Hale',
-          'email': 'nate@example.com',
+          'handle': 'shiftai',
+          'name': 'SHIFT AI',
+          'email': 'demo@shiftai.club',
         }),
         200,
       ),
@@ -187,9 +187,9 @@ void main() {
       );
 
       final ShiftSnapshot snap = await repo.load();
-      expect(snap.creator.name, 'Nate Hale');
+      expect(snap.creator.name, 'SHIFT AI');
       // Initials are derived when the server does not send them.
-      expect(snap.creator.initials, 'NH');
+      expect(snap.creator.initials, 'SA');
       expect(snap.standings.length, 2);
       expect(snap.standings.last.isYou, isTrue);
       expect(snap.notes.single.title, 'From the server');
@@ -337,9 +337,9 @@ void main() {
       final _FakeServer server = _FakeServer(
         (http.BaseRequest r) => http.Response(
           _json(<String, dynamic>{
-            'handle': 'nate2',
-            'name': 'Nate Hale',
-            'email': 'nate@example.com',
+            'handle': 'shiftai2',
+            'name': 'SHIFT AI',
+            'email': 'demo@shiftai.club',
           }),
           200,
         ),
@@ -348,13 +348,13 @@ void main() {
         ApiClient(baseUrl: 'https://api.example.com', client: server),
       );
 
-      final Creator next = await repo.updateHandle('nate2');
-      expect(next.handle, 'nate2');
+      final Creator next = await repo.updateHandle('shiftai2');
+      expect(next.handle, 'shiftai2');
       expect(server.seen.single.method, 'PATCH');
       expect(server.seen.single.url.path, '/v1/me');
       expect(
         jsonDecode((server.seen.single as http.Request).body),
-        <String, dynamic>{'handle': 'nate2'},
+        <String, dynamic>{'handle': 'shiftai2'},
       );
     });
 

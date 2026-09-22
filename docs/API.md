@@ -61,7 +61,7 @@ rest of the app does not care.
 ### `/v1/me`
 
 ```json
-{ "handle": "nate", "name": "Nate Hale", "email": "nate@example.com",
+{ "handle": "shiftai", "name": "SHIFT AI", "email": "demo@shiftai.club",
   "initials": "NH" }
 ```
 
@@ -225,7 +225,7 @@ as not connected.
 ```json
 [{ "id": "r1", "title": "Scan conditional imports", "detail": "...",
    "status": "failed", "checksPassed": false, "diff": "+128 -14",
-   "scope": "natehale05-gif/Shift" }]
+   "scope": "shiftai/shift" }]
 ```
 
 `status` is one of `working`, `needsYou`, `inReview`, `done`, `failed`.
@@ -350,7 +350,7 @@ composer's hint text.
 ### `PATCH /v1/me`
 
 ```json
-{ "handle": "nate2" }
+{ "handle": "shiftai2" }
 ```
 
 Changes the signed-in creator's username. Answer with the same shape as
@@ -455,15 +455,15 @@ carry a bearer token except `DELETE /v1/me`.
 ### `POST /v1/auth/sign-in`
 
 ```json
-{ "email": "nate@example.com", "password": "..." }
+{ "email": "demo@shiftai.club", "password": "..." }
 ```
 
 Answers 200 with:
 
 ```json
 { "accessToken": "...", "refreshToken": "...", "expiresIn": 3600,
-  "user": { "handle": "nate", "name": "Nate Hale",
-            "email": "nate@example.com" } }
+  "user": { "handle": "shiftai", "name": "SHIFT AI",
+            "email": "demo@shiftai.club" } }
 ```
 
 `expiresIn` is seconds. `user` is the same shape as `GET /v1/me`, so the
