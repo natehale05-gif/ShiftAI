@@ -6,50 +6,67 @@ import 'package:shift_ai/widgets/common.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  test('the artwork still carries the fills the recolour looks for',
-      () async {
+  test('the artwork still carries the ink the recolour looks for', () async {
     // The swap is a string replace. If the brand file is redrawn with a
-    // different palette it would quietly do nothing and the lockup would
-    // stay on the old blue over a pink app — which is the bug this whole
-    // change exists to fix, returning by the back door.
+    // different ink it would quietly do nothing and the lockup would stay
+    // on one fixed colour whatever theme is showing.
     await ShiftLockup.preload();
     expect(
-      ShiftLockup.forColors(const Color(0xFF123456), const Color(0xFF654321)),
+      ShiftLockup.forInk(const Color(0xFF123456)),
       isNotNull,
-      reason: 'preload rejected the artwork: its fills have changed',
+      reason: 'preload rejected the artwork: its ink has changed',
     );
   });
 
-  test('each theme gets its own text and accent into the artwork', () async {
+  test('each theme gets its own text colour into the artwork', () async {
+    await ShiftLockup.preload();
+
+    String hex(Color x) {
+      String ch(double v) =>
+          (v * 255).round().clamp(0, 255).toRadixString(16).padLeft(2, '0');
+      return '#${ch(x.r)}${ch(x.g)}${ch(x.b)}'.toUpperCase();
+    }
+
+    for (final ShiftThemeId id in ShiftThemeId.values) {
+      final ShiftColors c = ShiftColors.forTheme(id);
+      final String svg = ShiftLockup.forInk(c.text)!;
+      expect(svg, contains(hex(c.text)), reason: '${id.name} ink');
+      // Nothing is left holding the stand-in value — except where a
+      // theme's own text happens to be that value, which the dark
+      // theme's is, since the artwork was drawn in it.
+      if (hex(c.text) != '#F2F5FA') {
+        expect(svg, isNot(contains('#F2F5FA')),
+            reason: '${id.name} still carries the artwork ink');
+      }
+    }
+  });
+
+  test('the neon gradient is the brand and no theme overwrites it', () async {
+    // That magenta-to-blue is the mark. It is not a token, and a theme
+    // getting to repaint it is the bug this guards.
     await ShiftLockup.preload();
 
     for (final ShiftThemeId id in ShiftThemeId.values) {
       final ShiftColors c = ShiftColors.forTheme(id);
-      final String svg = ShiftLockup.forColors(c.text, c.accent)!;
-
-      String hex(Color x) {
-        String ch(double v) =>
-            (v * 255).round().clamp(0, 255).toRadixString(16).padLeft(2, '0');
-        return '#${ch(x.r)}${ch(x.g)}${ch(x.b)}'.toUpperCase();
-      }
-
-      expect(svg, contains(hex(c.text)), reason: '${id.name} wordmark');
-      expect(svg, contains(hex(c.accent)), reason: '${id.name} accent');
+      final String svg = ShiftLockup.forInk(c.text)!;
+      // Sampled off the brand artwork's own glow, not chosen here.
+      expect(svg, contains('#EC01E7'), reason: '${id.name} lost the magenta');
+      expect(svg, contains('#0061F1'), reason: '${id.name} lost the blue');
     }
   });
 
-  test('the retro themes no longer draw the dark theme\'s blue', () async {
-    // The reason this was raised: retro is the default, and the lockup's
-    // "ai" was arriving in #5B8CFF next to a #FF1A8C app.
+  test('the drawn ratio is the artwork\'s own, not a guess', () async {
     await ShiftLockup.preload();
-
-    for (final ShiftThemeId id in <ShiftThemeId>[
-      ShiftThemeId.retro,
-      ShiftThemeId.retroLight,
-    ]) {
-      final ShiftColors c = ShiftColors.forTheme(id);
-      final String svg = ShiftLockup.forColors(c.text, c.accent)!;
-      expect(svg, isNot(contains('#5B8CFF')), reason: id.name);
-    }
+    final String svg = ShiftLockup.forInk(const Color(0xFFFFFFFF))!;
+    final RegExpMatch? box =
+        RegExp(r'viewBox="([-\d. ]+)"').firstMatch(svg);
+    expect(box, isNotNull, reason: 'the artwork has no viewBox');
+    final List<double> v = box!
+        .group(1)!
+        .trim()
+        .split(RegExp(r'\s+'))
+        .map(double.parse)
+        .toList();
+    expect(ShiftLockup.ratio, closeTo(v[2] / v[3], 0.001));
   });
 }

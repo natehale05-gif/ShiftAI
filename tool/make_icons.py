@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Writes every app icon both stores ask for, from the brand artwork.
 
-The mark is the lockup's own lowercase "ai" — the second path in
-assets/brand/shift-ai-on-dark.svg, lifted out rather than typed in a
-similar font, so the icon and the wordmark are the same drawing. (The
-first path is S-H-I-F-T; this file used to crop the S out of it.)
+The mark is the lockup's own lowercase "ai" — the `id="ai"` group in
+assets/brand/shift-ai-lockup.svg, lifted out rather than typed in a
+similar font, so the icon and the wordmark are the same drawing. It is
+taken by group id and not by position, because the artwork's path count
+is whatever the trace produced and a second path is not a contract.
 
 Every icon is drawn in one of the four app themes: the glyph in that
 theme's onAccent colour, on a ground of its accent. Those are the same
@@ -48,7 +49,10 @@ except ImportError:  # pragma: no cover
     sys.exit("needs: pip install pillow cairosvg numpy")
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-BRAND = os.path.join(ROOT, "assets/brand/shift-ai-on-dark.svg")
+BRAND = os.path.join(ROOT, "assets/brand/shift-ai-lockup.svg")
+# The ink the artwork is drawn in, swapped out per theme. Matches
+# ShiftLockup._artInk in lib/widgets/common.dart.
+ART_INK = "#F2F5FA"
 
 # Straight off ShiftColors in lib/theme/tokens.dart. Keep them in step: a
 # colour that drifts here makes the installed icon disagree with the app
@@ -91,9 +95,24 @@ def contrast(a, b):
     return (hi + 0.05) / (lo + 0.05)
 
 
-def _paths():
-    svg = open(BRAND).read()
-    return re.findall(r'd="([^"]+)"', svg)
+def _art():
+    return open(BRAND).read()
+
+
+def _view_box():
+    m = re.search(r'viewBox="([-\d.\s]+)"', _art())
+    return [float(v) for v in m.group(1).split()]
+
+
+def _group(name):
+    """One named group of the lockup, as (transform, inner markup)."""
+    svg = _art()
+    m = re.search(
+        r'<g id="%s"(?:\s+transform="([^"]*)")?[^>]*>(.*?)</g>' % name,
+        svg, re.S)
+    if m is None:
+        sys.exit(f"the lockup has no group id=\"{name}\": has it been redrawn?")
+    return m.group(1) or "", m.group(2)
 
 
 def glyph(box_px, colour="#FFFFFF"):
@@ -102,16 +121,16 @@ def glyph(box_px, colour="#FFFFFF"):
     Both letters are kept, the i's tittle included — unlike the S this
     replaced, which had to be split off at the first gap in S-H-I-F-T.
     """
-    d = _paths()[1]
+    transform, inner = _group("ai")
+    vx, vy, vw, vh = _view_box()
     # Render large, then crop and scale down: the glyph's ink does not
     # reach the edges of the viewBox, so its true size is only known
     # after rasterising.
-    render_h = box_px * 3
-    scale = render_h / 71.55
+    scale = (box_px * 3) / vh
     svg = (
-        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 589.6 71.55" '
-        f'width="{int(589.6 * scale)}" height="{int(71.55 * scale)}">'
-        f'<g transform="translate(0,1.38)"><path d="{d}" fill="{colour}"/></g></svg>'
+        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="{vx} {vy} {vw} {vh}" '
+        f'width="{int(vw * scale)}" height="{int(vh * scale)}">'
+        f'<g transform="{transform}" fill="{colour}">{inner}</g></svg>'
     )
     tmp = os.path.join(ROOT, "build", "_glyph.png")
     os.makedirs(os.path.dirname(tmp), exist_ok=True)
@@ -188,17 +207,16 @@ def feature_graphic(theme, w=1024, h=500):
     """Play's header image: the whole lockup on the app's own ground."""
     t = THEMES[theme]
     im = Image.new("RGB", (w, h), _rgb(t["bg"]))
-    d = _paths()
-    scale = (w * 0.62) / 589.6
+    vx, vy, vw, vh = _view_box()
+    scale = (w * 0.62) / vw
+    # The whole lockup, inked to the theme exactly as the app inks it. The
+    # badge keeps the brand gradient, so this is the real mark rather than
+    # a two-tone reconstruction of it.
     svg = (
-        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 589.6 71.55" '
-        f'width="{int(589.6 * scale)}" height="{int(71.55 * scale)}">'
-        '<g transform="translate(0,1.38)">'
-        f'<path d="{d[0]}" fill="{t["text"]}"/>'
-        # The divider between SHIFT and ai is a rect in the artwork.
-        f'<rect x="448.2" y="-1.38" width="6.0" height="71.55" fill="{t["accent"]}"/>'
-        f'<path d="{d[1]}" fill="{t["accent"]}"/>'
-        "</g></svg>"
+        _art()
+        .replace(ART_INK, t["text"])
+        .replace("<svg ", f'<svg width="{int(vw * scale)}" '
+                          f'height="{int(vh * scale)}" ', 1)
     )
     tmp = os.path.join(ROOT, "build", "_lockup.png")
     os.makedirs(os.path.dirname(tmp), exist_ok=True)

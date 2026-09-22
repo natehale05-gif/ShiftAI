@@ -505,7 +505,7 @@ void main() {
       await tester.pumpWidget(ShiftApp(state: state));
       await tester.pumpAndSettle();
 
-      await tester.enterText(find.byType(TextField).first, 'nate@example.com');
+      await tester.enterText(find.byType(TextField).first, 'demo@shiftai.club');
       await tester.enterText(find.byType(TextField).last, 'a-password');
       await tester.tap(find.text('SIGN IN'));
       await tester.pumpAndSettle();

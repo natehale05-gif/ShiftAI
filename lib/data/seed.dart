@@ -14,13 +14,20 @@ abstract final class Seed {
     'Client: Rooftop Coffee',
   ];
 
+  /// The demo account is the app itself, never a person.
+  ///
+  /// This used to be a real name on a real iCloud address, which shipped
+  /// in every build and showed up in the sidebar of anybody who opened the
+  /// app without signing in — a private address handed out with the
+  /// binary. A brand-new account should read as a demo, and this is what
+  /// makes it obvious that nobody is signed in yet.
   static const Creator creator = Creator(
     // No '@': docs/API.md stores the bare handle and every screen adds the
     // '@' when it draws one.
-    handle: 'natehale',
-    name: 'Nate Hale',
-    email: 'natehale05@icloud.com',
-    initials: 'NH',
+    handle: 'shiftai',
+    name: 'SHIFT AI',
+    email: 'demo@shiftai.club',
+    initials: 'SA',
   );
 
   // Avatars ---------------------------------------------------------------
@@ -284,14 +291,14 @@ abstract final class Seed {
 
   // Agents --------------------------------------------------------------
 
-  static const String agentScope = 'natehale05-gif/Shift';
+  static const String agentScope = 'shiftai/shift';
 
   /// What the scope picker offers. Only `agentScope` / `jobScope` are
   /// authorised; the rest need connecting first.
   static const List<String> agentScopes = <String>[
     agentScope,
-    'natehale05-gif/shift-server',
-    'natehale05-gif/shift-brand',
+    'shiftai/shift-server',
+    'shiftai/shift-brand',
   ];
   static const List<String> jobScopes = <String>[
     jobScope,

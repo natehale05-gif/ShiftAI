@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -11,39 +9,42 @@ import '../theme/tokens.dart';
 import '../theme/type.dart';
 import '../util/file_pick.dart';
 
-/// The lockup's artwork, recoloured to whichever theme is showing.
+/// The lockup's artwork, inked in whichever theme is showing.
 ///
-/// There are two brand files, and their palettes are the dark and light
-/// themes' own `text` and `accent` tokens — which is why the retro pair
-/// used to draw a blue "ai" over a pink app. Rather than add a third and
-/// fourth copy of the same drawing, one file is loaded and its two fills
-/// are swapped for the live theme's. A theme added later is then carried
-/// with no new artwork.
+/// One file, one substitution. The wordmark and the "ai" take the theme's
+/// own `text`, and the badge keeps the brand's neon gradient — that
+/// magenta-to-blue is the mark, not a colour a theme gets to choose. The
+/// tube's hot core is inked with everything else, so on a light ground it
+/// reads as a drawn outline inside the bloom rather than disappearing.
+///
+/// A theme added later is carried with no new artwork, which is why there
+/// is no on-light copy of the file any more.
 abstract final class ShiftLockup {
-  /// The fills in the on-dark artwork: the wordmark, then the divider and
-  /// the "ai", which share a colour.
-  static const String _artText = '#F2F5FA';
-  static const String _artAccent = '#5B8CFF';
+  /// The ink in the artwork, standing in for the live theme's `text`.
+  static const String _artInk = '#F2F5FA';
 
-  static const String asset = 'assets/brand/shift-ai-on-dark.svg';
+  static const String asset = 'assets/brand/shift-ai-lockup.svg';
+
+  /// Width over height of the artwork, glow included. Read off the
+  /// viewBox; the lockup is drawn to this and never to a guess.
+  static const double ratio = 408.83 / 104.46;
 
   static String? _template;
 
   /// Read once, before the first frame. Without it [ShiftLogo] falls back
-  /// to the unrecoloured files, so a missed preload is a wrong colour
-  /// rather than a missing logo.
+  /// to the artwork's own ink, so a missed preload is a slightly wrong
+  /// colour rather than a missing logo.
   static Future<void> preload() async {
     if (_template != null) return;
     final String svg = await rootBundle.loadString(asset);
-    // If the artwork is redrawn with a different palette the swap below
-    // would quietly do nothing and the lockup would stick on the old
-    // blue. Better to fall back to the files and say so in debug.
-    final bool recognised =
-        svg.contains(_artText) && svg.contains(_artAccent);
+    // If the artwork is redrawn with a different ink the swap below would
+    // quietly do nothing and the lockup would stick on this one value.
+    // Better to fall back to the file and say so in debug.
+    final bool recognised = svg.contains(_artInk);
     assert(
       recognised,
-      'The lockup no longer contains $_artText and $_artAccent. Update '
-      'ShiftLockup, or it will draw the wrong colours.',
+      'The lockup no longer contains $_artInk. Update ShiftLockup, or it '
+      'will draw the wrong colour.',
     );
     if (recognised) _template = svg;
   }
@@ -54,19 +55,12 @@ abstract final class ShiftLockup {
     return '#${channel(c.r)}${channel(c.g)}${channel(c.b)}'.toUpperCase();
   }
 
-  /// The artwork with the wordmark in [text] and the "ai" in [accent], or
-  /// null when [preload] has not run.
-  static String? forColors(Color text, Color accent) {
-    final String? svg = _template;
-    if (svg == null) return null;
-    return svg
-        .replaceAll(_artText, _hex(text))
-        .replaceAll(_artAccent, _hex(accent));
-  }
+  /// The artwork inked in [ink], or null when [preload] has not run.
+  static String? forInk(Color ink) => _template?.replaceAll(_artInk, _hex(ink));
 }
 
-/// The lockup, from the brand files. Never set by hand; recoloured only to
-/// the theme's own tokens, never to a colour chosen here.
+/// The lockup, from the brand file. Never set by hand; inked only to the
+/// theme's own tokens, never to a colour chosen here.
 class ShiftLogo extends StatelessWidget {
   const ShiftLogo({this.height = 22, super.key});
 
@@ -75,21 +69,14 @@ class ShiftLogo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ShiftColors c = ShiftColors.of(context);
-    // The artwork is 589.6 × 71.55, and never goes below 110px wide.
-    final double width = math.max(height * (589.6 / 71.55), 110);
-    final String? themed = ShiftLockup.forColors(c.text, c.accent);
+    final double width = height * ShiftLockup.ratio;
+    final String? themed = ShiftLockup.forInk(c.text);
 
     return Semantics(
       label: 'SHIFT ai',
       child: themed != null
           ? SvgPicture.string(themed, width: width, height: height)
-          : SvgPicture.asset(
-              c.isDarkGround
-                  ? ShiftLockup.asset
-                  : 'assets/brand/shift-ai-on-light.svg',
-              width: width,
-              height: height,
-            ),
+          : SvgPicture.asset(ShiftLockup.asset, width: width, height: height),
     );
   }
 }
