@@ -35,13 +35,13 @@ abstract final class Fmt {
 
   static String seconds(int? value) => value == null ? '' : '${value}s';
 
-  /// "04d 11:38:06" — the shape the board locks down to.
-  static String countdown(Duration left) {
-    if (left.isNegative) return 'LOCKED';
-    final String days = left.inDays.toString().padLeft(2, '0');
-    final String hours = (left.inHours % 24).toString().padLeft(2, '0');
-    final String minutes = (left.inMinutes % 60).toString().padLeft(2, '0');
-    final String seconds = (left.inSeconds % 60).toString().padLeft(2, '0');
-    return '${days}d $hours:$minutes:$seconds';
+  /// "5d 09:36:49" — days unpadded, the clock padded, so it does not read
+  /// like a register being dumped. Null once the week has closed, so the
+  /// caller says so in its own words and drops its "Ends in" with it.
+  static String? countdown(Duration left) {
+    if (left.isNegative) return null;
+    String two(int v) => v.toString().padLeft(2, '0');
+    return '${left.inDays}d ${two(left.inHours % 24)}:'
+        '${two(left.inMinutes % 60)}:${two(left.inSeconds % 60)}';
   }
 }

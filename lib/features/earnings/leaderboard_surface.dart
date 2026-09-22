@@ -59,8 +59,7 @@ class _LeaderboardSurfaceState extends State<LeaderboardSurface> {
                 const SizedBox(height: Space.x5),
                 SegmentedPills<_Board>(
                   options: _Board.values,
-                  labelOf: (_Board b) =>
-                      b == _Board.local ? 'Local' : 'Global',
+                  labelOf: (_Board b) => b == _Board.local ? 'Local' : 'Global',
                   selected: _board,
                   onChanged: (_Board next) => setState(() => _board = next),
                   expand: true,
@@ -103,8 +102,7 @@ class _StandingsBoard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ShiftColors c = ShiftColors.of(context);
-    final StandingRow? you =
-        rows.where((StandingRow r) => r.isYou).firstOrNull;
+    final StandingRow? you = rows.where((StandingRow r) => r.isYou).firstOrNull;
 
     // A board arrives from the engine, so before the first week scores —
     // or before a league has placed this account — there is nothing to
@@ -152,8 +150,7 @@ class _StandingsBoard extends StatelessWidget {
                 if (i > 0)
                   Padding(
                     padding: const EdgeInsets.only(left: 104),
-                    child:
-                        Divider(height: 1, thickness: 0.5, color: c.border),
+                    child: Divider(height: 1, thickness: 0.5, color: c.border),
                   ),
                 _Row(row: rest[i]),
               ],
@@ -247,8 +244,11 @@ class _LocalLeagueSectionState extends State<_LocalLeagueSection> {
     if (!mounted) return;
     setState(() {
       _requesting = false;
-      _problem = ok ? null : (state.lastError?.message ?? 'Could not place '
-          'you locally right now.');
+      _problem = ok
+          ? null
+          : (state.lastError?.message ??
+              'Could not place '
+                  'you locally right now.');
     });
   }
 
@@ -294,7 +294,8 @@ class _NoLeagueYet extends StatelessWidget {
         children: <Widget>[
           Icon(Icons.near_me_outlined, size: 28, color: c.textMuted),
           const SizedBox(height: Space.x4),
-          Text('See how you stack up locally', style: ShiftType.subheading(c.text)),
+          Text('See how you stack up locally',
+              style: ShiftType.subheading(c.text)),
           const SizedBox(height: Space.x2),
           Text(
             'A smaller board of people near you in both rank and location — '
@@ -325,9 +326,8 @@ class _LeagueHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ShiftColors c = ShiftColors.of(context);
-    final String rule = league.promoteCount > 0
-        ? ' · top ${league.promoteCount} move up'
-        : '';
+    final String rule =
+        league.promoteCount > 0 ? ' · top ${league.promoteCount} move up' : '';
     // Where, and what it is, in words — the division is named in the line
     // under the region, so it needs no coloured dot beside it.
     return Column(
@@ -378,13 +378,9 @@ class _ClockRowState extends State<_ClockRow> {
     final AppState state = AppScope.of(context);
     final WeekClock clock = WeekClock();
 
-    final Duration left = clock.remaining;
-    String two(int v) => v.toString().padLeft(2, '0');
-    // Days unpadded, the clock padded: "5d 09:36:49", not a "05d" that
-    // reads like a register being dumped.
-    final String countdown = '${left.inDays}d '
-        '${two(left.inHours % 24)}:${two(left.inMinutes % 60)}:'
-        '${two(left.inSeconds % 60)}';
+    // Null once the week has closed — the formatter written for this
+    // screen last time printed a negative day count instead.
+    final String? countdown = Fmt.countdown(clock.remaining);
 
     // The pool and the payout line are the engine's, not the catalogue's.
     // A week with nothing in it says nothing rather than announcing a pool
@@ -406,11 +402,15 @@ class _ClockRowState extends State<_ClockRow> {
               style: ShiftType.sectionTitle(c.text),
             ),
             const Spacer(),
-            Text('Ends in ', style: ShiftType.caption(c.textMuted)),
-            Text(
-              countdown,
-              style: ShiftType.figures(c.text, size: 15),
-            ),
+            if (countdown == null)
+              Text('Locked', style: ShiftType.caption(c.textMuted))
+            else ...<Widget>[
+              Text('Ends in ', style: ShiftType.caption(c.textMuted)),
+              Text(
+                countdown,
+                style: ShiftType.figures(c.text, size: 15),
+              ),
+            ],
           ],
         ),
         if (detail.isNotEmpty) ...<Widget>[
