@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
 """Writes every app icon both stores ask for, from the brand artwork.
 
-The mark is the lockup's own lowercase "ai" — the `id="ai"` group in
-assets/brand/shift-ai-lockup.svg, lifted out rather than typed in a
-similar font, so the icon and the wordmark are the same drawing. It is
-taken by group id and not by position, because the artwork's path count
-is whatever the trace produced and a second path is not a contract.
+The mark is the lockup's badge — the neon-ringed "ai" — lifted whole out
+of assets/brand/shift-ai-lockup.svg, so the icon and the logo are the
+same drawing. The groups are taken by id and not by position, because the
+artwork's path count is whatever the export produced.
 
-Every icon is drawn in one of the four app themes: the glyph in that
-theme's onAccent colour, on a ground of its accent. Those are the same
-two tokens a filled button uses, so the pairing is one the design system
-has already answered rather than a new decision made here.
+Every icon is drawn in one of the four app themes: the "ai" in that
+theme's text colour on a ground of its bg, which is the pairing the app
+itself uses everywhere, and the badge keeps the brand's neon gradient
+untouched. The ground is bg rather than accent because a neon tube needs
+something to glow against — on a field of hot pink there is nothing for
+it to be brighter than.
 
     python3 tool/make_icons.py                  # the default theme
     python3 tool/make_icons.py --theme dark     # ship a different one
@@ -104,6 +105,13 @@ def _view_box():
     return [float(v) for v in m.group(1).split()]
 
 
+def _defs():
+    """The artwork's <defs>. Without it the badge's strokes point at a
+    gradient that is not there and the ring renders as nothing."""
+    m = re.search(r'<defs>.*?</defs>', _art(), re.S)
+    return m.group(0) if m else ""
+
+
 def _group(name):
     """One named group of the lockup, as (transform, inner markup)."""
     svg = _art()
@@ -115,13 +123,19 @@ def _group(name):
     return m.group(1) or "", m.group(2)
 
 
-def glyph(box_px, colour="#FFFFFF"):
-    """The lockup's lowercase "ai", cropped tight, scaled to fit box_px.
+def mark(box_px, colour="#FFFFFF"):
+    """The lockup's badge — the neon ring with "ai" inside it — cropped
+    tight and scaled to fit box_px.
 
-    Both letters are kept, the i's tittle included — unlike the S this
-    replaced, which had to be split off at the first gap in S-H-I-F-T.
+    The ring is drawn from the artwork's own gradient strokes, so the
+    glow survives at icon sizes instead of being flattened away.
     """
-    transform, inner = _group("ai")
+    groups = []
+    for name in ("ai", "badge"):
+        transform, inner = _group(name)
+        t = f' transform="{transform}"' if transform else ""
+        groups.append(f'<g{t} fill="{colour}">{inner}</g>')
+    defs = _defs()
     vx, vy, vw, vh = _view_box()
     # Render large, then crop and scale down: the glyph's ink does not
     # reach the edges of the viewBox, so its true size is only known
@@ -130,7 +144,7 @@ def glyph(box_px, colour="#FFFFFF"):
     svg = (
         f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="{vx} {vy} {vw} {vh}" '
         f'width="{int(vw * scale)}" height="{int(vh * scale)}">'
-        f'<g transform="{transform}" fill="{colour}">{inner}</g></svg>'
+        f'{defs}{"".join(groups)}</svg>'
     )
     tmp = os.path.join(ROOT, "build", "_glyph.png")
     os.makedirs(os.path.dirname(tmp), exist_ok=True)
@@ -151,9 +165,9 @@ def glyph(box_px, colour="#FFFFFF"):
 
 
 def ground(size, theme):
-    """Accent, deepening downward — enough to have a light source, not so
-    much that it reads as a gradient at 40px."""
-    top = _rgb(THEMES[theme]["accent"])
+    """The theme's ground, deepening downward — enough to have a light
+    source, not so much that it reads as a gradient at 40px."""
+    top = _rgb(THEMES[theme]["bg"])
     bottom = tuple(round(c * 0.86) for c in top)
     im = Image.new("RGB", (size, size), top)
     draw = ImageDraw.Draw(im)
@@ -177,18 +191,18 @@ def _centre(base, mark, lift=0.0):
 
 
 def master(theme, size=1024):
-    """The full-bleed icon: the "ai" in onAccent on the accent ground. No
+    """The full-bleed icon: the badge on the theme's ground. No
     transparency, no rounded corners — both platforms mask it themselves."""
-    mark = glyph(int(size * 0.52), THEMES[theme]["onAccent"])
-    return _centre(ground(size, theme), mark)
+    return _centre(ground(size, theme), mark(int(size * 0.66),
+                                             THEMES[theme]["text"]))
 
 
 def adaptive_foreground(theme, size=1024):
     """Android's foreground layer: the mark alone, inside the safe circle,
     on transparency. The background layer is a flat colour."""
     im = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    mark = glyph(int(size * 0.58 * ADAPTIVE_SAFE), THEMES[theme]["onAccent"])
-    return _centre(im, mark)
+    return _centre(im, mark(int(size * 0.74 * ADAPTIVE_SAFE),
+                            THEMES[theme]["text"]))
 
 
 def maskable(theme, size=512):
@@ -199,8 +213,8 @@ def maskable(theme, size=512):
     guaranteed to survive. The mark is therefore smaller than the
     full-bleed icon's, on the same opaque ground — a maskable icon with
     transparent corners gets them filled with black."""
-    mark = glyph(int(size * 0.46), THEMES[theme]["onAccent"])
-    return _centre(ground(size, theme), mark)
+    return _centre(ground(size, theme), mark(int(size * 0.58),
+                                             THEMES[theme]["text"]))
 
 
 def feature_graphic(theme, w=1024, h=500):
@@ -276,7 +290,7 @@ def install(theme):
     open(os.path.join(values, "ic_launcher_background.xml"), "w").write(
         '<?xml version="1.0" encoding="utf-8"?>\n<resources>\n'
         '    <color name="ic_launcher_background">'
-        f'{THEMES[theme]["accent"]}</color>\n</resources>\n'
+        f'{THEMES[theme]["bg"]}</color>\n</resources>\n'
     )
 
     # --- Web -------------------------------------------------------------
@@ -341,8 +355,8 @@ def main():
     # The App Store rejects a 1024 with an alpha channel, and a mark that
     # cannot be read at 40px is no icon at all. Both are cheap to check.
     for name, t in THEMES.items():
-        ratio = contrast(t["onAccent"], t["accent"])
-        print(f"{name:11} {t['accent']} ground, {t['onAccent']} mark "
+        ratio = contrast(t["text"], t["bg"])
+        print(f"{name:11} {t['bg']} ground, {t['text']} mark "
               f"— contrast {ratio:.1f}:1")
         if ratio < 4.5:
             sys.exit(f"{name}: {ratio:.1f}:1 is below 4.5:1 — the mark would "

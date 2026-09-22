@@ -8,8 +8,12 @@ concentric strokes at falling opacity around the same rounded rectangle
 the PDF strokes for the tube core. Crisp at any size, no base64, and no
 SVG masks for flutter_svg to get wrong.
 """
+import os
+
 import pymupdf
 
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+OUT = os.path.join(ROOT, 'assets/brand/shift-ai-lockup.svg')
 SRC = '/root/.claude/uploads/abf10957-3aad-5655-92d3-40d2a90c812d/bdc73034-shift-ai-on-dark.pdf'
 INK = '#F2F5FA'          # stand-in, swapped per theme by ShiftLockup
 NEON = ('#EC01E7', '#0061F1')   # sampled off the artwork's own glow
@@ -98,15 +102,22 @@ L = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="{f(x0)} {f(y0)} {f(x1-x0
      f'      <stop offset="1" stop-color="{NEON[1]}"/>',
      '    </linearGradient>',
      '  </defs>',
-     f'  <g id="wordmark" fill="{INK}" fill-rule="evenodd">']
-L += [f'    <path d="{d}"/>' for d in word]
-L += ['  </g>', f'  <g id="ai" fill="{INK}" fill-rule="evenodd">']
-L += [f'    <path d="{d}"/>' for d in ai]
-L += ['  </g>', '  <g id="badge">']
+     f'  <g id="wordmark" fill="{INK}">',
+     # One path holding every subpath, not one path each. even-odd only
+     # applies within a single path element: split them up and the "a"'s
+     # counter stops being a hole in the bowl and becomes its own filled
+     # shape sitting on top of it, which is a solid blob where the hole
+     # should be.
+     f'    <path fill-rule="evenodd" d="{"".join(word)}"/>',
+     '  </g>',
+     f'  <g id="ai" fill="{INK}">',
+     f'    <path fill-rule="evenodd" d="{"".join(ai)}"/>',
+     '  </g>',
+     '  <g id="badge">']
 L += [rrect(sw, 'url(#neon)', op) for sw, op in bloom[:-1]]
 L += [rrect(bloom[-1][0], 'url(#neon)', bloom[-1][1]), rrect(w, INK)]
 L += ['  </g>', '</svg>', '']
 svg = '\n'.join(L)
-open('shift-ai-lockup.svg','w').write(svg)
+open(OUT, 'w').write(svg)
 print(f'viewBox {f(x0)} {f(y0)} {f(x1-x0)} {f(y1-y0)}  ratio {(x1-x0)/(y1-y0):.6f}')
 print('bytes', len(svg))
