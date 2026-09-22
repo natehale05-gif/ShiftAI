@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../app/modes.dart';
@@ -20,8 +22,6 @@ class TrophiesSurface extends StatelessWidget {
 
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
-        final int columns = constraints.maxWidth >= 760 ? 2 : 1;
-
         return ListView(
           padding: const EdgeInsets.fromLTRB(
             Space.x5,
@@ -47,20 +47,17 @@ class TrophiesSurface extends StatelessWidget {
                       const _NoShelfYet()
                     else ...<Widget>[
                       const _PointsCard(),
-                      const SizedBox(height: Space.x5),
-                      GridView.builder(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        itemCount: state.trophies.length,
-                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: columns,
-                          mainAxisSpacing: Space.x4,
-                          crossAxisSpacing: Space.x4,
-                          mainAxisExtent: 150,
-                        ),
-                        itemBuilder: (BuildContext context, int i) =>
-                            _TrophyCard(trophy: state.trophies[i]),
-                      ),
+                      // One shelf per tier, cheapest first — the order they
+                      // are usually earned in, so the eye starts on what is
+                      // already won and walks up to what is left.
+                      for (final TrophyTier tier in TrophyTier.values)
+                        if (state.trophies.any((Trophy t) => t.tier == tier))
+                          _TierShelf(
+                            tier: tier,
+                            trophies: state.trophies
+                                .where((Trophy t) => t.tier == tier)
+                                .toList(growable: false),
+                          ),
                     ],
                   ],
                 ),
@@ -161,29 +158,9 @@ class _PointsCard extends StatelessWidget {
                 ],
               );
 
-              final Widget right = Wrap(
-                spacing: Space.x5,
-                runSpacing: Space.x3,
-                children: TrophyTier.values
-                    .map((TrophyTier tier) => _TierCount(tier: tier))
-                    .toList(),
-              );
-
-              if (constraints.maxWidth < 620) {
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    left,
-                    const SizedBox(height: Space.x4),
-                    right,
-                  ],
-                );
-              }
-
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[left, const Spacer(), right],
-              );
+              // The per-tier counts used to sit here too. Each tier's shelf
+              // now opens with its own, so saying it twice was just noise.
+              return left;
             },
           ),
           const SizedBox(height: Space.x4),
@@ -219,143 +196,256 @@ class _PointsCard extends StatelessWidget {
   }
 }
 
-class _TierCount extends StatelessWidget {
-  const _TierCount({required this.tier});
+/// One tier's trophies: a heading with how many are won, then a row of
+/// medallions.
+class _TierShelf extends StatelessWidget {
+  const _TierShelf({required this.tier, required this.trophies});
 
   final TrophyTier tier;
+  final List<Trophy> trophies;
 
   @override
   Widget build(BuildContext context) {
-    final AppState state = AppScope.of(context);
     final ShiftColors c = ShiftColors.of(context);
-    final List<Trophy> inTier =
-        state.trophies.where((Trophy t) => t.tier == tier).toList();
-    final int earned = inTier.where((Trophy t) => t.earned).length;
+    final Color tint = tier.colorOn(c);
+    final int won = trophies.where((Trophy t) => t.earned).length;
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: <Widget>[
-        Icon(Icons.emoji_events_outlined, size: 22, color: tier.colorOn(c)),
-        const SizedBox(height: Space.x2),
-        Text(
-          '$earned/${inTier.length}',
-          style: ShiftType.mono(c.text, size: 13),
-        ),
-        const SizedBox(height: 2),
-        Text(tier.label.toUpperCase(), style: ShiftType.labelSm(c.textMuted)),
-      ],
+    return Padding(
+      padding: const EdgeInsets.only(top: Space.x6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              Container(
+                width: 10,
+                height: 10,
+                decoration: BoxDecoration(color: tint, shape: BoxShape.circle),
+              ),
+              const SizedBox(width: Space.x2),
+              Text(tier.label.toUpperCase(), style: ShiftType.label(tint)),
+              const SizedBox(width: Space.x3),
+              Expanded(child: Divider(height: 1, color: c.border)),
+              const SizedBox(width: Space.x3),
+              Text(
+                '$won / ${trophies.length}',
+                style: ShiftType.mono(c.textMuted, size: 12),
+              ),
+            ],
+          ),
+          const SizedBox(height: Space.x4),
+          LayoutBuilder(
+            builder: (BuildContext context, BoxConstraints box) {
+              // As many medallions as fit at a comfortable size, never
+              // fewer than three: two across on a phone read as cards
+              // again, which is what this replaced.
+              final int columns = (box.maxWidth / 128).floor().clamp(3, 7);
+              final double width =
+                  (box.maxWidth - Space.x3 * (columns - 1)) / columns;
+              return Wrap(
+                spacing: Space.x3,
+                runSpacing: Space.x4,
+                children: trophies
+                    .map((Trophy t) => SizedBox(
+                          width: width,
+                          child: _Medallion(trophy: t),
+                        ))
+                    .toList(),
+              );
+            },
+          ),
+        ],
+      ),
     );
   }
 }
 
-class _TrophyCard extends StatelessWidget {
-  const _TrophyCard({required this.trophy});
+/// A trophy as a medal on a shelf.
+///
+/// These were full-width cards, eighteen of them, each 150 tall, where the
+/// only difference between won and not was the colour of a hairline — a
+/// long scroll of near-identical boxes. A medallion says both at a glance:
+/// a won one is struck in its tier's metal, and one still to win is a dim
+/// outline with an arc for how far along it is.
+class _Medallion extends StatelessWidget {
+  const _Medallion({required this.trophy});
 
   final Trophy trophy;
 
   @override
   Widget build(BuildContext context) {
     final ShiftColors c = ShiftColors.of(context);
-    final bool on = trophy.earned;
+    final bool won = trophy.earned;
     final Color tint = trophy.tier.colorOn(c);
 
-    // The card clips the requirement at two lines, so a tap opens the
+    // The medallion clips the requirement entirely, so a tap opens the
     // whole thing rather than leaving it unreadable.
     return InkWell(
       borderRadius: Radii.lgAll,
       onTap: () => _showTrophy(context, trophy),
-      child: Container(
-        padding: const EdgeInsets.all(Space.x4),
-        decoration: BoxDecoration(
-          color: on ? c.surface : c.bg,
-          borderRadius: Radii.lgAll,
-          border: Border.all(color: on ? tint : c.border),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: Space.x2),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            Container(
-              width: 44,
-              height: 44,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(color: on ? tint : c.border, width: 1.5),
-              ),
-              child: Icon(
-                trophy.glyph,
-                size: 21,
-                color: on ? tint : c.textMuted,
-              ),
+            _Medal(trophy: trophy, size: 64),
+            const SizedBox(height: Space.x3),
+            Text(
+              trophy.name,
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: ShiftType.bodySm(won ? c.text : c.textMuted)
+                  .copyWith(fontWeight: FontWeight.w600, height: 1.2),
             ),
-            const SizedBox(width: Space.x4),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Expanded(
-                        child: Text(
-                          trophy.name,
-                          style: ShiftType.bodyStrong(on ? c.text : c.text)
-                              .copyWith(fontSize: 17),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      const SizedBox(width: Space.x3),
-                      Text(
-                        '${trophy.points} pts',
-                        style: ShiftType.mono(
-                          on ? tint : c.textMuted,
-                          size: 12,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    trophy.requirement,
-                    style: ShiftType.bodySm(c.textMuted),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const Spacer(),
-                  ClipRRect(
-                    borderRadius: Radii.pillAll,
-                    child: LinearProgressIndicator(
-                      value: trophy.progress,
-                      minHeight: 3,
-                      backgroundColor: c.surfaceRaised,
-                      valueColor: AlwaysStoppedAnimation<Color>(
-                        on ? tint : c.borderStrong,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: Space.x2),
-                  // Progress and rarity both come from the engine. With
-                  // nothing said about either, the line is simply absent
-                  // rather than reading "0 OF 1 · 0% OF MEMBERS".
-                  Text(
-                    <String>[
-                      if (trophy.progressLabel.isNotEmpty) trophy.progressLabel,
-                      if (trophy.memberPercent > 0)
-                        '${Fmt.grouped(trophy.memberPercent)}% OF MEMBERS',
-                    ].join(' · '),
-                    style: ShiftType.labelSm(c.textMuted),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ),
+            const SizedBox(height: 2),
+            Text(
+              won
+                  ? '${trophy.points} PTS'
+                  : (trophy.progressLabel.isNotEmpty
+                      ? trophy.progressLabel
+                      : '${trophy.points} PTS'),
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: ShiftType.labelSm(won ? tint : c.textMuted),
             ),
           ],
         ),
       ),
     );
   }
+}
+
+/// The disc itself, shared by the shelf and the detail sheet so a trophy
+/// looks the same in both.
+class _Medal extends StatelessWidget {
+  const _Medal({required this.trophy, required this.size});
+
+  final Trophy trophy;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final ShiftColors c = ShiftColors.of(context);
+    final bool won = trophy.earned;
+    final Color tint = trophy.tier.colorOn(c);
+
+    return SizedBox.square(
+      dimension: size,
+      child: CustomPaint(
+        painter: _MedalPainter(
+          won: won,
+          progress: trophy.progress,
+          tint: tint,
+          track: c.border,
+          ground: c.surfaceRaised,
+        ),
+        child: Center(
+          child: Icon(
+            trophy.glyph,
+            size: size * 0.40,
+            color: won ? tint : c.textMuted,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MedalPainter extends CustomPainter {
+  const _MedalPainter({
+    required this.won,
+    required this.progress,
+    required this.tint,
+    required this.track,
+    required this.ground,
+  });
+
+  final bool won;
+  final double progress;
+  final Color tint;
+  final Color track;
+  final Color ground;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final Offset centre = size.center(Offset.zero);
+    final double radius = size.shortestSide / 2;
+    const double stroke = 3;
+    final Rect ring = Rect.fromCircle(
+      center: centre,
+      radius: radius - stroke / 2,
+    );
+
+    if (won) {
+      // Struck in its metal: a wash that is brightest top-left, like a
+      // face catching the light, a rim, and a finer inner rim.
+      canvas.drawCircle(
+        centre,
+        radius,
+        Paint()
+          ..shader = RadialGradient(
+            center: const Alignment(-0.35, -0.4),
+            radius: 1.1,
+            colors: <Color>[
+              tint.withValues(alpha: 0.42),
+              tint.withValues(alpha: 0.10),
+            ],
+          ).createShader(Rect.fromCircle(center: centre, radius: radius)),
+      );
+      canvas.drawCircle(
+        centre,
+        radius - stroke / 2,
+        Paint()
+          ..color = tint
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = stroke,
+      );
+      canvas.drawCircle(
+        centre,
+        radius - stroke - 4,
+        Paint()
+          ..color = tint.withValues(alpha: 0.35)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1,
+      );
+      return;
+    }
+
+    // Still to win: a plain disc, a track, and an arc for the way there.
+    canvas.drawCircle(centre, radius, Paint()..color = ground);
+    canvas.drawCircle(
+      centre,
+      radius - stroke / 2,
+      Paint()
+        ..color = track
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = stroke,
+    );
+    final double sweep = progress.clamp(0.0, 1.0) * 2 * math.pi;
+    if (sweep > 0) {
+      canvas.drawArc(
+        ring,
+        -math.pi / 2,
+        sweep,
+        false,
+        Paint()
+          ..color = tint.withValues(alpha: 0.85)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = stroke
+          ..strokeCap = StrokeCap.round,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_MedalPainter old) =>
+      old.won != won ||
+      old.progress != progress ||
+      old.tint != tint ||
+      old.track != track ||
+      old.ground != ground;
 }
 
 /// Everything the tile has to clip: the full requirement, the tier, how
@@ -380,23 +470,7 @@ Future<void> _showTrophy(BuildContext context, Trophy trophy) {
             children: <Widget>[
               Row(
                 children: <Widget>[
-                  Container(
-                    width: 44,
-                    height: 44,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: trophy.earned ? tint : c.border,
-                        width: 1.5,
-                      ),
-                    ),
-                    child: Icon(
-                      trophy.glyph,
-                      size: 21,
-                      color: trophy.earned ? tint : c.textMuted,
-                    ),
-                  ),
+                  _Medal(trophy: trophy, size: 52),
                   const SizedBox(width: Space.x4),
                   Expanded(
                     child: Text(
