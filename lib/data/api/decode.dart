@@ -145,4 +145,66 @@ abstract final class Decode {
     }
     return catalogue;
   }
+
+  /// Money from the Suite, in cents. Some fields arrive as strings, so
+  /// both are read (Rex's notes: "parse with num.parse").
+  static int cents(Object? value) => switch (value) {
+        final num n => n.round(),
+        final String s => num.tryParse(s)?.round() ?? 0,
+        _ => 0,
+      };
+
+  /// `GET /v1/boards`: `{ "data": { "compete": [...], "crowd": [...], ... } }`.
+  /// Each row is `id, display_name, avatar_url, current_tier, tier_name,
+  /// is_me, rank` plus that board's cents field. Rows become StandingRows,
+  /// in dollars, so the podium, the rivals and the list draw them as they
+  /// draw the rest; the Suite does not track movement, and they say so.
+  static SuiteBoards boards(Object? body) {
+    final Object? data =
+        body is Map<String, dynamic> ? (body['data'] ?? body) : null;
+    if (data is! Map<String, dynamic>) {
+      throw const ShiftApiException(
+        ShiftApiErrorKind.malformed,
+        'Expected the Suite boards.',
+      );
+    }
+    final Map<SuiteBoard, List<StandingRow>> rows =
+        <SuiteBoard, List<StandingRow>>{};
+    for (final SuiteBoard board in SuiteBoard.values) {
+      final Object? list = data[board.key];
+      if (list is! List) continue;
+      final List<StandingRow> parsed = <StandingRow>[
+        for (final Object? raw in list)
+          if (raw is Map<String, dynamic>)
+            StandingRow(
+              rank: (raw['rank'] as num?)?.toInt() ?? 0,
+              name: (raw['display_name'] as String?)?.trim().isNotEmpty ?? false
+                  ? (raw['display_name'] as String).trim()
+                  : 'Member',
+              earnings: cents(raw[board.field]) / 100,
+              movement: 0,
+              movementKnown: false,
+              tier: _tierNamed(raw['tier_name']),
+              isYou: raw['is_me'] == true,
+              avatarUrl: raw['avatar_url'] is String &&
+                      (raw['avatar_url'] as String).isNotEmpty
+                  ? raw['avatar_url'] as String
+                  : null,
+            ),
+      ]..sort((StandingRow a, StandingRow b) => a.rank.compareTo(b.rank));
+      rows[board] = parsed;
+    }
+    return SuiteBoards(rows);
+  }
+
+  /// The Suite's tier names, where they are one of the four the app draws
+  /// in colour. Anything else is left without one rather than guessed.
+  static TrophyTier? _tierNamed(Object? name) {
+    if (name is! String) return null;
+    final String n = name.toLowerCase();
+    for (final TrophyTier t in TrophyTier.values) {
+      if (n.contains(t.name)) return t;
+    }
+    return null;
+  }
 }

@@ -33,10 +33,24 @@ class HttpRepository implements ShiftRepository {
   static const String _uploads = '/v1/uploads';
   static const String _avatars = '/v1/avatars';
   static const String _league = '/v1/league';
+  static const String _boards = '/v1/boards';
   static const String _location = '/v1/me/location';
+
+  /// The Suite's boards, if this engine serves them. Optional: an engine
+  /// without the route, or one that fails it, still loads everything else
+  /// and the leaderboard falls back to `/v1/standings`.
+  Future<SuiteBoards?> _suiteBoards() async {
+    try {
+      final SuiteBoards boards = Decode.boards(await _api.get(_boards));
+      return boards.isEmpty ? null : boards;
+    } on ShiftApiException {
+      return null;
+    }
+  }
 
   @override
   Future<ShiftSnapshot> load() async {
+    final Future<SuiteBoards?> boards = _suiteBoards();
     // One round trip each, in parallel. A backend that would rather answer
     // in one shot can add a /v1/snapshot and this becomes a single call.
     final List<dynamic> parts = await Future.wait(<Future<dynamic>>[
@@ -91,6 +105,7 @@ class HttpRepository implements ShiftRepository {
       league: parts[12] is Map<String, dynamic>
           ? League.fromJson(parts[12] as Map<String, dynamic>)
           : null,
+      boards: await boards,
     );
   }
 

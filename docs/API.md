@@ -290,6 +290,43 @@ Central** (`lib/util/week.dart`). Pools pay on Friday, which is not the
 close, so copy should never call Friday the end of the week. No income
 claims ("you will earn") in anything the server sends for display.
 
+### `/v1/boards` (the Suite's weekly boards)
+
+Optional: an engine without it, or one that fails it, still loads, and
+the Global tab falls back to `/v1/standings`. Answers as the signed-in
+member, from the same code as the Suite's `/leaderboard` pages, wrapped
+in `{ "data": ... }`. Money is in **cents**, sometimes as a string.
+
+```json
+{ "data": {
+    "compete": [{ "id": "u1", "display_name": "Rex Wilson",
+                  "avatar_url": null, "current_tier": 3,
+                  "tier_name": "Gold", "is_me": false, "rank": 1,
+                  "combined_cents": "123456" }],
+    "crowd": [], "credit_hold": [], "credit_use": [], "club_pools": [],
+    "connect_week": [], "projected_week": [], "lifetime": [],
+    "my_pool_standings": {}, "credit_weights": { "held": 0, "use": 0 },
+    "connect_window": { "start": null, "end": null } } }
+```
+
+| key | label in the app (the Suite's) | value field |
+|---|---|---|
+| `compete` | CompetePay | `combined_cents` |
+| `crowd` | Window earnings | `window_earnings_cents` |
+| `credit_hold` | Credits held | `credits_held_cents` |
+| `credit_use` | Credits used | `credits_used_cents` |
+| `club_pools` | Projected club pay | `projected_clubpay_cents` |
+| `connect_week` | CoachPay this week | `earned_cents` |
+| `projected_week` | Projected this week | `projected_total_cents` |
+| `lifetime` | Lifetime earnings | `earned_cents` |
+
+A board with no rows is not shown. `tier_name` colours a row when it
+names bronze, silver, gold or platinum; anything else is shown without a
+colour. The Suite does not track movement, so these rows never say
+"up 2". Not read yet: `my_pool_standings`, `credit_weights`,
+`connect_window`, and the `/v1/boards/clubs`, `/projections`, `/what-if`
+and `/v1/account` routes.
+
 ### `/v1/league`
 
 ```json

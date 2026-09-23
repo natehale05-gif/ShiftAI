@@ -41,6 +41,16 @@ EMPTY = {
     "/v1/designs": [],
     "/v1/connections": [],
     "/v1/week": {"pool": 0, "payoutLine": "Nothing paid out yet."},
+    # The Suite's weekly boards (Rex's server notes, 23 Sept 2026). A new
+    # member is on none of them yet, so every board is an empty list.
+    "/v1/boards": {"data": {
+        "compete": [], "crowd": [], "credit_hold": [], "credit_use": [],
+        "club_pools": [], "connect_week": [], "projected_week": [],
+        "lifetime": [],
+        "my_pool_standings": {},
+        "credit_weights": {"held": 0, "use": 0},
+        "connect_window": {"start": None, "end": None},
+    }},
     # Same list object POST/DELETE below mutate, so a GET always sees
     # whatever this run has been asked to create.
     "/v1/avatars": AVATARS,

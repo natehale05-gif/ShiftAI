@@ -22,7 +22,12 @@ class ShiftSnapshot {
     required this.payoutLine,
     required this.avatars,
     this.league,
+    this.boards,
   });
+
+  /// The Suite's weekly boards, when the engine serves `/v1/boards`. Null
+  /// before it does, and in the seeded demo, which keeps its own board.
+  final SuiteBoards? boards;
 
   final Creator creator;
   final List<StandingRow> standings;

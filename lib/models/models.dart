@@ -184,6 +184,7 @@ class StandingRow {
     this.tier,
     this.isYou = false,
     this.avatarUrl,
+    this.movementKnown = true,
   });
 
   final int rank;
@@ -192,6 +193,11 @@ class StandingRow {
 
   /// Places gained (positive) or lost (negative) since the week opened.
   final int movement;
+
+  /// False where the board does not track movement (the Suite's boards do
+  /// not), so a screen reader is not told "no change" about a move nobody
+  /// measured.
+  final bool movementKnown;
 
   /// The payout band this creator is in this week, when they are in one.
   final TrophyTier? tier;
@@ -228,6 +234,46 @@ class StandingRow {
         isYou: json['isYou'] as bool? ?? false,
         avatarUrl: json['avatarUrl'] as String?,
       );
+}
+
+/// The Suite's weekly boards, in the order and with the labels the Suite
+/// uses (Rex's server notes, 23 Sept 2026). [key] is the array under
+/// `data` in `GET /v1/boards`; [field] is the row's number, in cents.
+enum SuiteBoard {
+  compete('compete', 'CompetePay', 'combined_cents'),
+  crowd('crowd', 'Window earnings', 'window_earnings_cents'),
+  creditHold('credit_hold', 'Credits held', 'credits_held_cents'),
+  creditUse('credit_use', 'Credits used', 'credits_used_cents'),
+  clubPools('club_pools', 'Projected club pay', 'projected_clubpay_cents'),
+  connectWeek('connect_week', 'CoachPay this week', 'earned_cents'),
+  projectedWeek(
+    'projected_week',
+    'Projected this week',
+    'projected_total_cents',
+  ),
+  lifetime('lifetime', 'Lifetime earnings', 'earned_cents');
+
+  const SuiteBoard(this.key, this.label, this.field);
+
+  final String key;
+  final String label;
+  final String field;
+}
+
+/// Every Suite board this member can see, rows ranked as the Suite ranks
+/// them. A board with no rows is left out, rather than drawn empty.
+@immutable
+class SuiteBoards {
+  const SuiteBoards(this.rows);
+
+  final Map<SuiteBoard, List<StandingRow>> rows;
+
+  /// The boards with rows, in the Suite's order.
+  List<SuiteBoard> get available => SuiteBoard.values
+      .where((SuiteBoard b) => rows[b]?.isNotEmpty ?? false)
+      .toList(growable: false);
+
+  bool get isEmpty => available.isEmpty;
 }
 
 /// Where a HeyGen avatar is in its lifecycle. Training is not instant, so

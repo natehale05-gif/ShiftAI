@@ -403,6 +403,10 @@ class AppState extends ChangeNotifier {
   int get weekPool => _snap.weekPool;
   String get payoutLine => _snap.payoutLine;
 
+  /// The Suite's boards, when the engine serves them; null otherwise, and
+  /// then the Global tab is `/v1/standings`.
+  SuiteBoards? get boards => _snap.boards;
+
   /// The connector catalogue the engine knows about.
   List<Connector> get connectors => _snap.connectors;
 
@@ -945,6 +949,7 @@ class AppState extends ChangeNotifier {
         payoutLine: _snap.payoutLine,
         avatars: _snap.avatars,
         league: _snap.league,
+        boards: _snap.boards,
       );
     }
   }

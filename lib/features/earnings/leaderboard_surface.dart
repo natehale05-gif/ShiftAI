@@ -10,6 +10,7 @@ import '../../state/app_state.dart';
 import '../../theme/tokens.dart';
 import '../../theme/type.dart';
 import '../../util/format.dart';
+import '../../util/haptics.dart';
 import '../../util/geo.dart';
 import '../../util/week.dart';
 import '../../widgets/common.dart';
@@ -85,13 +86,106 @@ class _LeaderboardSurfaceState extends State<LeaderboardSurface> {
 
 /// The global weekly board — everyone, ranked by earnings. What
 /// `LeaderboardSurface` showed before Local existed.
-class _GlobalBoard extends StatelessWidget {
+class _GlobalBoard extends StatefulWidget {
   const _GlobalBoard();
+
+  @override
+  State<_GlobalBoard> createState() => _GlobalBoardState();
+}
+
+/// With the Suite's boards (`/v1/boards`), every one of them: CompetePay,
+/// Window earnings, credits and the rest, labelled as the Suite labels
+/// them, picked from a row of chips. Without them, `/v1/standings`, as
+/// before.
+class _GlobalBoardState extends State<_GlobalBoard> {
+  SuiteBoard _picked = SuiteBoard.compete;
 
   @override
   Widget build(BuildContext context) {
     final AppState state = AppScope.of(context);
-    return _StandingsBoard(rows: state.standings);
+    final SuiteBoards? boards = state.boards;
+    if (boards == null || boards.isEmpty) {
+      return _StandingsBoard(rows: state.standings);
+    }
+    final List<SuiteBoard> available = boards.available;
+    final SuiteBoard board =
+        available.contains(_picked) ? _picked : available.first;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        _BoardChips(
+          boards: available,
+          selected: board,
+          onChanged: (SuiteBoard next) {
+            Haptics.selection();
+            setState(() => _picked = next);
+          },
+        ),
+        const SizedBox(height: Space.x5),
+        _StandingsBoard(
+          rows: boards.rows[board]!,
+          // Not every member is ranked on every board; the board still
+          // reads without a row of your own.
+          requireYou: false,
+          valueNote: board.label,
+        ),
+      ],
+    );
+  }
+}
+
+/// The Suite's boards as a row of chips that scrolls sideways: eight is
+/// too many for a segmented control on a phone.
+class _BoardChips extends StatelessWidget {
+  const _BoardChips({
+    required this.boards,
+    required this.selected,
+    required this.onChanged,
+  });
+
+  final List<SuiteBoard> boards;
+  final SuiteBoard selected;
+  final ValueChanged<SuiteBoard> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final ShiftColors c = ShiftColors.of(context);
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: <Widget>[
+          for (final SuiteBoard b in boards) ...<Widget>[
+            if (b != boards.first) const SizedBox(width: Space.x2),
+            Semantics(
+              button: true,
+              selected: b == selected,
+              child: Material(
+                color: b == selected ? c.accentSoft : c.surface,
+                shape: const StadiumBorder(),
+                child: InkWell(
+                  customBorder: const StadiumBorder(),
+                  onTap: () => onChanged(b),
+                  child: Container(
+                    constraints: const BoxConstraints(minHeight: 44),
+                    padding: const EdgeInsets.symmetric(horizontal: Space.x4),
+                    alignment: Alignment.center,
+                    child: Text(
+                      b.label,
+                      style: ShiftType.copy(
+                        b == selected ? c.accent : c.text,
+                        size: 14,
+                        weight: b == selected ? 600 : 500,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
   }
 }
 
@@ -100,9 +194,22 @@ class _GlobalBoard extends StatelessWidget {
 /// shaped board would just be a second thing to learn. Local and Global
 /// differ in whose rows these are, never in how they are shown.
 class _StandingsBoard extends StatelessWidget {
-  const _StandingsBoard({required this.rows});
+  const _StandingsBoard({
+    required this.rows,
+    this.requireYou = true,
+    this.valueNote = 'this week',
+  });
 
   final List<StandingRow> rows;
+
+  /// Whether a board with no row for you is "no board yet". True for the
+  /// weekly board, where you are always ranked once it scores; false for
+  /// the Suite's boards, which a member can be missing from.
+  final bool requireYou;
+
+  /// What the number on your card is: "this week", or a Suite board's
+  /// name, since Lifetime earnings are not this week's.
+  final String valueNote;
 
   @override
   Widget build(BuildContext context) {
@@ -112,17 +219,23 @@ class _StandingsBoard extends StatelessWidget {
     // A board arrives from the engine, so before the first week scores —
     // or before a league has placed this account — there is nothing to
     // rank. Saying that is better than a podium of three blanks.
-    if (you == null) return const _NoBoardYet();
+    if (you == null && (requireYou || rows.isEmpty)) {
+      return const _NoBoardYet();
+    }
 
     final List<StandingRow> podium =
         rows.where((StandingRow r) => r.rank <= 3).toList();
-    final List<StandingRow> rest =
-        rows.where((StandingRow r) => r.rank > 3).toList();
-    final StandingRow? target = you.rank <= 1
+    // Without a full podium the list starts at first place. It started at
+    // fourth either way, so a board of one or two people drew nobody.
+    final List<StandingRow> rest = podium.length == 3
+        ? rows.where((StandingRow r) => r.rank > 3).toList()
+        : rows;
+    final StandingRow? target = you == null || you.rank <= 1
         ? null
         : rows.where((StandingRow r) => r.rank == you.rank - 1).firstOrNull;
-    final StandingRow? chaser =
-        rows.where((StandingRow r) => r.rank == you.rank + 1).firstOrNull;
+    final StandingRow? chaser = you == null
+        ? null
+        : rows.where((StandingRow r) => r.rank == you.rank + 1).firstOrNull;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -131,10 +244,12 @@ class _StandingsBoard extends StatelessWidget {
           _Podium(rows: podium),
           const SizedBox(height: Space.x5),
         ],
-        _YouCard(you: you),
-        const SizedBox(height: Space.x4),
-        _RivalRow(target: target, chaser: chaser, you: you),
-        const SizedBox(height: Space.x6),
+        if (you != null) ...<Widget>[
+          _YouCard(you: you, valueNote: valueNote),
+          const SizedBox(height: Space.x4),
+          _RivalRow(target: target, chaser: chaser, you: you),
+          const SizedBox(height: Space.x6),
+        ],
         // Your own row appears again below, tinted. That is not a repeat:
         // the cards above are the highlights, this is the board itself,
         // and a board with a hole where you should be is a worse thing to
@@ -638,9 +753,10 @@ class _PodiumSpot extends StatelessWidget {
 }
 
 class _YouCard extends StatelessWidget {
-  const _YouCard({required this.you});
+  const _YouCard({required this.you, this.valueNote = 'this week'});
 
   final StandingRow you;
+  final String valueNote;
 
   @override
   Widget build(BuildContext context) {
@@ -651,7 +767,8 @@ class _YouCard extends StatelessWidget {
     return Semantics(
       container: true,
       label: 'You are ${_place(you.rank)}, '
-          '${Fmt.money(you.earnings)} this week, ${_moved(you.movement)}',
+          '${Fmt.money(you.earnings)} $valueNote'
+          '${you.movementKnown ? ', ${_moved(you.movement)}' : ''}',
       excludeSemantics: true,
       child: LayoutBuilder(
         builder: (BuildContext context, BoxConstraints constraints) {
@@ -878,7 +995,8 @@ class _Row extends StatelessWidget {
     return Semantics(
       container: true,
       label: '${_place(row.rank)}, ${_who(row)}, '
-          '${Fmt.money(row.earnings)}, ${_moved(row.movement)}',
+          '${Fmt.money(row.earnings)}'
+          '${row.movementKnown ? ', ${_moved(row.movement)}' : ''}',
       excludeSemantics: true,
       child: LayoutBuilder(
         builder: (BuildContext context, BoxConstraints constraints) {
