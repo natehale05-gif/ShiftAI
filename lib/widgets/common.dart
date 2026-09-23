@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -148,9 +150,12 @@ class Eyebrow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ShiftColors c = ShiftColors.of(context);
+    // Set as written. Every caller already passes sentence case —
+    // "Appearance", "Your avatars", "Prompt" — and this used to shout it
+    // into tracked mono capitals on the way to the screen.
     return Text(
-      text.toUpperCase(),
-      style: ShiftType.labelSm(color ?? c.textMuted),
+      text,
+      style: ShiftType.copy(color ?? c.textMuted, size: 13, weight: 600),
     );
   }
 }
@@ -173,12 +178,21 @@ class ShiftCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ShiftColors c = ShiftColors.of(context);
+    // Filled, not outlined. On a dark ground the card's own fill is the
+    // edge. On a light one the card is white on a near-white page, so it
+    // keeps a hairline — half the 1px outline every card used to wear.
+    final Color? edge = borderColor ?? (c.isDarkGround ? null : c.border);
     return Container(
       padding: padding,
       decoration: BoxDecoration(
         color: background ?? c.surface,
         borderRadius: Radii.lgAll,
-        border: Border.all(color: borderColor ?? c.border),
+        border: edge == null
+            ? null
+            : Border.all(
+                color: edge,
+                width: borderColor == null ? 0.5 : 1,
+              ),
       ),
       child: child,
     );
@@ -186,6 +200,14 @@ class ShiftCard extends StatelessWidget {
 }
 
 /// The two-way scope toggle the vault uses.
+/// A segmented control: a recessed track, and a raised thumb that slides
+/// to whichever segment is chosen.
+///
+/// It was a pill of uppercase mono tabs with the chosen one flooded in the
+/// accent — loud for something whose whole job is to be a quiet switch,
+/// and a second, different control lived in the leaderboard beside it.
+/// Segments are equal widths so the thumb can slide rather than jump, as
+/// wide as the widest label when [expand] is off.
 class SegmentedPills<T> extends StatelessWidget {
   const SegmentedPills({
     required this.options,
@@ -205,138 +227,291 @@ class SegmentedPills<T> extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ShiftColors c = ShiftColors.of(context);
-    return Container(
-      padding: const EdgeInsets.all(Space.x1),
+    final int n = options.length;
+    final int at = options.indexOf(selected).clamp(0, n - 1);
+    // On a dark ground the thumb is a step lighter than its track; on a
+    // light one it is the card white, lifted by a shadow.
+    final Color thumb =
+        c.isDarkGround ? Color.lerp(c.surfaceRaised, c.text, 0.14)! : c.surface;
+
+    final Widget control = Container(
+      height: 36,
+      padding: const EdgeInsets.all(2),
       decoration: BoxDecoration(
-        color: c.surface,
-        borderRadius: Radii.pillAll,
-        border: Border.all(color: c.border),
+        color: c.surfaceRaised,
+        borderRadius: Radii.mdAll,
       ),
-      child: Row(
-        mainAxisSize: expand ? MainAxisSize.max : MainAxisSize.min,
-        children: options.map((T option) {
-          final bool on = option == selected;
-          final Widget button = Semantics(
-            selected: on,
-            button: true,
-            child: InkWell(
-              borderRadius: Radii.pillAll,
-              onTap: () => onChanged(option),
-              child: Container(
-                height: 36,
-                alignment: Alignment.center,
-                padding: const EdgeInsets.symmetric(horizontal: Space.x4),
-                decoration: BoxDecoration(
-                  color: on ? c.accent : Colors.transparent,
-                  borderRadius: Radii.pillAll,
-                ),
-                child: Text(
-                  labelOf(option).toUpperCase(),
-                  style: ShiftType.labelSm(on ? c.onAccent : c.textMuted),
+      child: Stack(
+        children: <Widget>[
+          Positioned.fill(
+            child: AnimatedAlign(
+              alignment: Alignment(n == 1 ? 0 : -1 + 2 * at / (n - 1), 0),
+              duration: const Duration(milliseconds: 240),
+              curve: Curves.easeOutCubic,
+              child: FractionallySizedBox(
+                widthFactor: 1 / n,
+                heightFactor: 1,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: thumb,
+                    borderRadius: BorderRadius.circular(Radii.md.x - 2),
+                    boxShadow: <BoxShadow>[
+                      BoxShadow(
+                        color: Colors.black.withValues(
+                          alpha: c.isDarkGround ? 0.35 : 0.12,
+                        ),
+                        blurRadius: 4,
+                        offset: const Offset(0, 1),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
-          );
-          return expand ? Expanded(child: button) : button;
-        }).toList(),
+          ),
+          Row(
+            children: options.map((T option) {
+              final bool on = option == selected;
+              return Expanded(
+                child: Semantics(
+                  selected: on,
+                  button: true,
+                  label: labelOf(option),
+                  excludeSemantics: true,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => onChanged(option),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: Space.x4,
+                      ),
+                      child: Center(
+                        child: Text(
+                          labelOf(option),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: ShiftType.copy(
+                            on ? c.text : c.textMuted,
+                            size: 14,
+                            weight: on ? 600 : 500,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ],
       ),
     );
+
+    // Off, the control is as wide as its widest label times the count:
+    // equal Expanded children report exactly that as their intrinsic width.
+    return expand ? control : IntrinsicWidth(child: control);
   }
 }
 
 /// A placeholder for media that has no bytes on device. Better an honest
 /// labelled block than a bad guess at the real thing.
-class MediaPlaceholder extends StatelessWidget {
-  const MediaPlaceholder({
-    required this.label,
-    required this.tag,
-    this.caption,
+/// A piece's artwork, and only its artwork.
+///
+/// The title used to be set over the art on a scrim, with an uppercase
+/// type chip in the corner and a play disc in the middle — three layers of
+/// chrome on every tile. The media grids people already know put the title
+/// under the picture and mark a video with its running time alone, in the
+/// corner; the caption lives in the tile beneath this now.
+class MediaThumbnail extends StatelessWidget {
+  const MediaThumbnail({
+    required this.seed,
+    this.video = false,
+    this.durationSeconds,
     this.selected = false,
-    this.labelMaxLines = 1,
     super.key,
   });
 
-  final String label;
-  final String tag;
-  final String? caption;
+  /// What the art is drawn from — the piece's id, so it looks the same in
+  /// the grid and in its detail panel.
+  final String seed;
+  final bool video;
+  final int? durationSeconds;
   final bool selected;
 
-  /// A tall tile can give a long title a second line; a short one cannot,
-  /// so the caller decides rather than the text overflowing.
-  final int labelMaxLines;
+  static String _clock(int seconds) =>
+      '${seconds ~/ 60}:${(seconds % 60).toString().padLeft(2, '0')}';
 
   @override
   Widget build(BuildContext context) {
     final ShiftColors c = ShiftColors.of(context);
-    return Container(
-      padding: const EdgeInsets.all(Space.x3),
-      decoration: BoxDecoration(
-        color: selected ? c.surfaceRaised : c.surface,
-        borderRadius: Radii.lgAll,
-        border: Border.all(color: selected ? c.accent : c.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Container(
-            padding: const EdgeInsets.symmetric(
-              horizontal: Space.x2,
-              vertical: 3,
-            ),
-            decoration: BoxDecoration(
-              color: selected ? c.bg : c.surfaceRaised,
-              borderRadius: Radii.smAll,
-            ),
-            child: Text(
-              tag.toUpperCase(),
-              style: ShiftType.labelSm(tag == 'video' ? c.sky : c.textMuted),
-            ),
-          ),
-          // The text sits on the floor of the tile and takes only the
-          // lines that actually fit. Splitting the leftover space with a
-          // Spacer used to cut the second line of a title in half on a
-          // narrow tile; here a line is either drawn whole or dropped for
-          // an ellipsis.
-          Expanded(
-            child: LayoutBuilder(
-              builder: (BuildContext context, BoxConstraints box) {
-                const double labelLine = 24;
-                const double captionLine = 20;
-                final double forLabel = caption == null
-                    ? box.maxHeight
-                    : box.maxHeight - captionLine;
-                final int lines =
-                    (forLabel / labelLine).floor().clamp(1, labelMaxLines);
+    final int? d = durationSeconds;
 
-                return Align(
-                  alignment: Alignment.bottomLeft,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Text(
-                        label,
-                        maxLines: lines,
-                        overflow: TextOverflow.ellipsis,
-                        style: ShiftType.bodyStrong(c.text),
-                      ),
-                      if (caption != null)
-                        Text(
-                          caption!,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: ShiftType.caption(c.textMuted),
-                        ),
-                    ],
+    return Container(
+      foregroundDecoration: BoxDecoration(
+        borderRadius: Radii.lgAll,
+        border: Border.all(
+          color: selected ? c.accent : Colors.white.withValues(alpha: 0.06),
+          width: selected ? 2.5 : 1,
+        ),
+      ),
+      child: ClipRRect(
+        borderRadius: Radii.lgAll,
+        child: Stack(
+          fit: StackFit.expand,
+          children: <Widget>[
+            PosterArt(seed: seed),
+            if (video)
+              Positioned(
+                right: Space.x2,
+                bottom: Space.x2,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
                   ),
-                );
-              },
-            ),
-          ),
-        ],
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.45),
+                    borderRadius: Radii.smAll,
+                  ),
+                  child: d == null
+                      ? const Icon(
+                          Icons.play_arrow_rounded,
+                          size: 14,
+                          color: Colors.white,
+                        )
+                      : Text(
+                          _clock(d),
+                          style: ShiftType.figures(
+                            Colors.white,
+                            size: 12,
+                            weight: 600,
+                          ),
+                        ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
+}
+
+/// Art for a piece with no thumbnail — which is every piece, until the
+/// engine sends previews.
+///
+/// It was an empty dark box, and a masonry grid of those
+/// is a wall of identical rectangles that makes the vault look empty when
+/// it is not. This draws from the brand's neon sweep and is seeded by the
+/// piece, so the vault reads as one gallery and each piece keeps its own
+/// look: the same colours in the grid, in its detail panel, and every
+/// time the app opens.
+class PosterArt extends StatelessWidget {
+  const PosterArt({required this.seed, super.key});
+
+  final String seed;
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      painter: _PosterPainter(_stableHash(seed)),
+      child: const SizedBox.expand(),
+    );
+  }
+}
+
+/// The play affordance over a video's poster.
+class PlayDisc extends StatelessWidget {
+  const PlayDisc({this.size = 44, super.key});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: Colors.black.withValues(alpha: 0.35),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.55)),
+      ),
+      child: Icon(
+        Icons.play_arrow_rounded,
+        color: Colors.white,
+        size: size * 0.6,
+      ),
+    );
+  }
+}
+
+/// String.hashCode is not promised to be stable between runs, and a piece
+/// that changed colour on every launch would read as a different piece.
+/// Kept inside 30 bits so the multiply stays exact on the web, where an
+/// int is a double and anything past 2^53 quietly loses its low bits.
+int _stableHash(String s) {
+  int h = 17;
+  for (final int unit in s.codeUnits) {
+    h = (h * 31 + unit) & 0x3FFFFFFF;
+  }
+  return h;
+}
+
+class _PosterPainter extends CustomPainter {
+  const _PosterPainter(this.seed);
+
+  final int seed;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final math.Random rnd = math.Random(seed);
+    final Rect bounds = Offset.zero & size;
+
+    // Two points on the sweep, far enough apart that the pair has some
+    // contrast in it, near enough that it still reads as the brand.
+    final double t1 = rnd.nextDouble();
+    final double t2 = (t1 + 0.35 + rnd.nextDouble() * 0.3) % 1.0;
+    final Color lead = ShiftBrand.neonAt(t1);
+    final Color glow = ShiftBrand.neonAt(t2);
+    // A night ground tinted toward the lead, dark enough for white type.
+    final Color night = Color.lerp(Colors.black, lead, 0.14)!;
+
+    final double angle = rnd.nextDouble() * math.pi * 2;
+    final double dx = math.cos(angle), dy = math.sin(angle);
+    canvas.drawRect(
+      bounds,
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment(-dx, -dy),
+          end: Alignment(dx, dy),
+          colors: <Color>[night, Color.lerp(night, lead, 0.5)!],
+        ).createShader(bounds),
+    );
+
+    void orb(Color colour, double reach, double strength) {
+      final Offset centre = Offset(
+        size.width * (0.15 + rnd.nextDouble() * 0.7),
+        size.height * (0.1 + rnd.nextDouble() * 0.55),
+      );
+      final double radius = size.longestSide * reach;
+      canvas.drawCircle(
+        centre,
+        radius,
+        Paint()
+          ..shader = RadialGradient(
+            colors: <Color>[
+              colour.withValues(alpha: strength),
+              colour.withValues(alpha: 0),
+            ],
+          ).createShader(Rect.fromCircle(center: centre, radius: radius)),
+      );
+    }
+
+    orb(glow, 0.55 + rnd.nextDouble() * 0.25, 0.75);
+    orb(lead, 0.28 + rnd.nextDouble() * 0.2, 0.55);
+  }
+
+  @override
+  bool shouldRepaint(_PosterPainter old) => old.seed != seed;
 }
 
 /// Says the engine refused, on a screen whose contents come from it. Only
@@ -464,6 +639,7 @@ class PillComposer extends StatefulWidget {
   });
 
   final String hint;
+
   /// Returns false when the message was refused, and the bar then keeps
   /// what was typed instead of clearing it away. Typing something,
   /// pressing enter and watching it vanish with nothing to show for it is
@@ -717,8 +893,7 @@ class _PillComposerState extends State<PillComposer> {
                           color: active == null ? c.textMuted : c.accent,
                         ),
                         style: IconButton.styleFrom(
-                          minimumSize:
-                              const Size(_controlSize, _controlSize),
+                          minimumSize: const Size(_controlSize, _controlSize),
                         ),
                       ),
                     if (widget.showSparkle)
@@ -805,7 +980,8 @@ class _AvatarGlyph extends StatelessWidget {
       height: size,
       alignment: Alignment.center,
       clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: c.accent)),
+      decoration: BoxDecoration(
+          shape: BoxShape.circle, border: Border.all(color: c.accent)),
       child: previewUrl == null
           ? face()
           : Image.network(
@@ -851,7 +1027,7 @@ class _AvatarSheet extends StatelessWidget {
           children: <Widget>[
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: Space.x5),
-              child: Text('Generate as', style: ShiftType.labelSm(c.textMuted)),
+              child: Text('Generate as', style: ShiftType.caption(c.textMuted)),
             ),
             const SizedBox(height: Space.x2),
             _AvatarOption(
@@ -892,8 +1068,7 @@ class _AvatarOption extends StatelessWidget {
     return ListTile(
       leading: _AvatarGlyph(avatar: avatar, size: 32),
       title: Text(name, style: ShiftType.body(c.text)),
-      trailing:
-          selected ? Icon(Icons.check_rounded, color: c.accent) : null,
+      trailing: selected ? Icon(Icons.check_rounded, color: c.accent) : null,
       onTap: onTap,
     );
   }
@@ -967,41 +1142,51 @@ class ScreenBreadcrumb extends StatelessWidget {
   final String title;
   final VoidCallback onBack;
 
+  /// A back link in the accent over the screen's title set large — the
+  /// shape of a navigation stack. It was a grey pill with the parent's
+  /// name beside a subheading, which put the way back and the place you
+  /// are at the same weight.
   @override
   Widget build(BuildContext context) {
     final ShiftColors c = ShiftColors.of(context);
-    return Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        InkWell(
-          borderRadius: Radii.pillAll,
-          onTap: onBack,
-          child: Container(
-            height: 44,
-            padding: const EdgeInsets.fromLTRB(
-              Space.x3,
-              0,
-              Space.x4,
-              0,
-            ),
-            decoration: BoxDecoration(
-              color: c.surface,
-              borderRadius: Radii.pillAll,
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                Icon(Icons.chevron_left_rounded, size: 20, color: c.textMuted),
-                const SizedBox(width: Space.x1),
-                Text(parent, style: ShiftType.bodySm(c.textMuted)),
-              ],
+        Semantics(
+          button: true,
+          label: 'Back to $parent',
+          excludeSemantics: true,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: onBack,
+            child: SizedBox(
+              height: 36,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  // Pulled left so the chevron's own side bearing lines
+                  // the text up with the title below it.
+                  Transform.translate(
+                    offset: const Offset(-6, 0),
+                    child: Icon(
+                      Icons.chevron_left_rounded,
+                      size: 28,
+                      color: c.accent,
+                    ),
+                  ),
+                  Transform.translate(
+                    offset: const Offset(-8, 0),
+                    child: Text(
+                      parent,
+                      style: ShiftType.copy(c.accent, size: 17, weight: 500),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
-        const SizedBox(width: Space.x4),
-        Text(
-          title,
-          style: ShiftType.subheading(c.text),
-        ),
+        Text(title, style: ShiftType.largeTitle(c.text)),
       ],
     );
   }
@@ -1029,65 +1214,83 @@ class ScreenTabs extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ShiftColors c = ShiftColors.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+    // A segmented control, not underlined tabs: two views of one list are
+    // a choice of lens, the way a Mail or Photos toolbar sets it.
+    return Row(
       children: <Widget>[
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: <Widget>[
-            for (int i = 0; i < labels.length; i++)
-              Padding(
-                padding: const EdgeInsets.only(right: Space.x5),
-                child: Semantics(
-                  selected: i == selected,
-                  button: true,
-                  child: InkWell(
-                    onTap: () => onChanged(i),
-                    child: Container(
-                      padding: const EdgeInsets.only(bottom: Space.x2),
-                      decoration: BoxDecoration(
-                        border: Border(
-                          bottom: BorderSide(
-                            width: 2,
-                            color:
-                                i == selected ? c.accent : Colors.transparent,
-                          ),
-                        ),
-                      ),
-                      child: Text(
-                        labels[i],
-                        style: ShiftType.subheading(
-                          i == selected ? c.text : c.textMuted,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            const Spacer(),
-            Padding(
-              padding: const EdgeInsets.only(bottom: Space.x2),
-              child: InkWell(
-                borderRadius: Radii.smAll,
-                onTap: onScopeTap,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: <Widget>[
-                    Text(scopeLabel, style: ShiftType.bodySm(c.textMuted)),
-                    const SizedBox(width: Space.x1),
-                    Icon(
-                      Icons.keyboard_arrow_down_rounded,
-                      size: 18,
-                      color: c.textMuted,
-                    ),
-                  ],
-                ),
-              ),
+        SegmentedPills<int>(
+          options: List<int>.generate(labels.length, (int i) => i),
+          labelOf: (int i) => labels[i],
+          selected: selected,
+          onChanged: onChanged,
+        ),
+        const Spacer(),
+        InkWell(
+          borderRadius: Radii.smAll,
+          onTap: onScopeTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: Space.x1,
+              vertical: Space.x2,
             ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Text(
+                  scopeLabel,
+                  style: ShiftType.copy(c.accent, size: 15, weight: 500),
+                ),
+                const SizedBox(width: 2),
+                Icon(
+                  Icons.keyboard_arrow_down_rounded,
+                  size: 18,
+                  color: c.accent,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Rows in one filled, rounded group, with hairlines inset to where the
+/// text starts — the grouped list a settings or standings page is built of.
+class GroupedList extends StatelessWidget {
+  const GroupedList({
+    required this.children,
+    this.dividerInset = Space.x4,
+    super.key,
+  });
+
+  final List<Widget> children;
+
+  /// How far in from the leading edge each hairline starts.
+  final double dividerInset;
+
+  @override
+  Widget build(BuildContext context) {
+    final ShiftColors c = ShiftColors.of(context);
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(color: c.surface, borderRadius: Radii.lgAll),
+      child: Material(
+        type: MaterialType.transparency,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            for (int i = 0; i < children.length; i++) ...<Widget>[
+              if (i > 0)
+                Padding(
+                  padding: EdgeInsets.only(left: dividerInset),
+                  child: Divider(height: 1, thickness: 0.5, color: c.border),
+                ),
+              children[i],
+            ],
           ],
         ),
-        Divider(height: 1, color: c.border),
-      ],
+      ),
     );
   }
 }

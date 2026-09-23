@@ -40,21 +40,11 @@ class NotesSurface extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: <Widget>[
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.baseline,
-                            textBaseline: TextBaseline.alphabetic,
-                            children: <Widget>[
-                              Text(
-                                'Notes',
-                                style: ShiftType.subheading(c.text)
-                                    .copyWith(fontSize: 24),
-                              ),
-                              const SizedBox(width: Space.x3),
-                              Text(
-                                count == 1 ? '1 note' : '$count notes',
-                                style: ShiftType.bodySm(c.textMuted),
-                              ),
-                            ],
+                          Text('Notes', style: ShiftType.largeTitle(c.text)),
+                          const SizedBox(height: 2),
+                          Text(
+                            count == 1 ? '1 note' : '$count notes',
+                            style: ShiftType.copy(c.textMuted, size: 15),
                           ),
                           const SizedBox(height: Space.x4),
                           const EngineBanner(),
@@ -67,12 +57,17 @@ class NotesSurface extends StatelessWidget {
                               ),
                             )
                           else
-                            ...state.notes.map(
-                              (Note note) => _NoteRow(
-                                note: note,
-                                onOpen: () => _openNote(context, note),
-                                onDelete: () => _deleteNote(context, note),
-                              ),
+                            GroupedList(
+                              children: state.notes
+                                  .map(
+                                    (Note note) => _NoteRow(
+                                      note: note,
+                                      onOpen: () => _openNote(context, note),
+                                      onDelete: () =>
+                                          _deleteNote(context, note),
+                                    ),
+                                  )
+                                  .toList(growable: false),
                             ),
                         ],
                       ),
@@ -122,8 +117,11 @@ class NotesSurface extends StatelessWidget {
             backgroundColor: c.accent,
             foregroundColor: c.onAccent,
             elevation: 0,
+            // A round compose button, the way Notes has one, rather than
+            // Material's squircle with a plus in it.
+            shape: const CircleBorder(),
             tooltip: 'New note',
-            child: const Icon(Icons.add_rounded, size: 26),
+            child: const Icon(Icons.edit_square, size: 24),
           ),
         ),
       ],
@@ -157,7 +155,7 @@ Future<void> _deleteNote(BuildContext context, Note note) async {
               foregroundColor: c.onStatus,
             ),
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('DELETE'),
+            child: const Text('Delete'),
           ),
         ],
       );
@@ -189,42 +187,71 @@ class _NoteRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final ShiftColors c = ShiftColors.of(context);
 
-    return InkWell(
-      onTap: onOpen,
-      child: Padding(
-        padding: const EdgeInsets.only(top: Space.x2),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: <Widget>[
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Text(note.title, style: ShiftType.bodyStrong(c.text)),
-                      const SizedBox(height: Space.x1),
-                      Text(note.snippet, style: ShiftType.body(c.textMuted)),
-                    ],
-                  ),
+    // Swipe left to delete, as a list row does on a phone; the icon stays
+    // for a pointer, muted, so it is there without shouting on every row.
+    // Both go through the same confirmation, and a swipe that is declined
+    // springs back.
+    return Dismissible(
+      key: ValueKey<String>('note-${note.id}'),
+      direction: DismissDirection.endToStart,
+      confirmDismiss: (_) async {
+        onDelete();
+        return false;
+      },
+      background: Container(
+        color: c.danger,
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: Space.x5),
+        child: Icon(Icons.delete_outline_rounded, color: c.onStatus),
+      ),
+      child: InkWell(
+        onTap: onOpen,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(
+            Space.x4,
+            Space.x3,
+            Space.x1,
+            Space.x3,
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      note.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: ShiftType.copy(c.text, size: 16, weight: 600),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      note.snippet,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: ShiftType.copy(
+                        c.textMuted,
+                        size: 15,
+                        lineHeight: 21,
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: Space.x4),
-                IconButton(
-                  tooltip: 'Delete this note',
-                  onPressed: onDelete,
-                  icon: Icon(
-                    Icons.delete_outline_rounded,
-                    size: 19,
-                    color: c.accent,
-                  ),
-                  style: IconButton.styleFrom(minimumSize: const Size(44, 44)),
+              ),
+              IconButton(
+                tooltip: 'Delete this note',
+                onPressed: onDelete,
+                icon: Icon(
+                  Icons.delete_outline_rounded,
+                  size: 18,
+                  color: c.textMuted.withValues(alpha: 0.7),
                 ),
-              ],
-            ),
-            const SizedBox(height: Space.x3),
-            Divider(height: 1, color: c.border),
-          ],
+                style: IconButton.styleFrom(minimumSize: const Size(44, 44)),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -385,7 +412,7 @@ class _NoteEditorState extends State<_NoteEditor> {
                             );
                           }
                         },
-                        child: const Text('SAVE'),
+                        child: const Text('Save'),
                       ),
                     ),
                   ],

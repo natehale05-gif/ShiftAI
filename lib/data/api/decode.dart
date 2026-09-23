@@ -109,7 +109,7 @@ abstract final class Decode {
         id: _require<String>(json, 'id'),
         title: _require<String>(json, 'title'),
         versions: (json['versions'] as num?)?.toInt() ?? 1,
-        kindLabel: json['kindLabel'] as String? ?? 'PAGE',
+        kindLabel: json['kindLabel'] as String? ?? 'Page',
       );
 
   static Avatar avatar(Map<String, dynamic> json) => Avatar(

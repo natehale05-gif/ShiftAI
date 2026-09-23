@@ -232,7 +232,7 @@ class _ChatPane extends StatelessWidget {
                       Icons.keyboard_arrow_down_rounded,
                       size: 20,
                     ),
-                    label: const Text('CHOOSE A BRAND'),
+                    label: const Text('Choose a brand'),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: c.text,
                       minimumSize: const Size(0, 52),
@@ -242,7 +242,7 @@ class _ChatPane extends StatelessWidget {
                       shape: const RoundedRectangleBorder(
                         borderRadius: Radii.mdAll,
                       ),
-                      textStyle: ShiftType.label(c.text),
+                      textStyle: ShiftType.copy(c.text, size: 15, weight: 600),
                     ),
                   )
                 else
@@ -407,7 +407,7 @@ class _PreviewPane extends StatelessWidget {
                 OutlinedButton.icon(
                   onPressed: () => _share(context, kind),
                   icon: const Icon(Icons.lock_outline_rounded, size: 15),
-                  label: const Text('SHARE'),
+                  label: const Text('Share'),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: c.text,
                     minimumSize: const Size(0, 44),
@@ -415,7 +415,7 @@ class _PreviewPane extends StatelessWidget {
                     shape: const RoundedRectangleBorder(
                       borderRadius: Radii.mdAll,
                     ),
-                    textStyle: ShiftType.label(c.text),
+                    textStyle: ShiftType.copy(c.text, size: 15, weight: 600),
                   ),
                 ),
                 IconButton(
@@ -483,7 +483,7 @@ class _PreviewPane extends StatelessWidget {
                   ),
                 ),
                 const Spacer(),
-                Text(_zoom, style: ShiftType.labelSm(c.textMuted)),
+                Text(_zoom, style: ShiftType.caption(c.textMuted)),
               ],
             ),
           ),
@@ -581,7 +581,7 @@ class _Artboard extends StatelessWidget {
               const SizedBox(height: Space.x2),
               Text(
                 'Draft 1 · nothing rendered yet',
-                style: ShiftType.labelSm(c.textMuted),
+                style: ShiftType.caption(c.textMuted),
               ),
             ],
           ),

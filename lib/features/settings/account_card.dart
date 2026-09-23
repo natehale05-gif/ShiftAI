@@ -64,8 +64,8 @@ class AccountCard extends StatelessWidget {
               borderRadius: Radii.pillAll,
             ),
             child: Text(
-              'INCLUDED WITH MEMBERSHIP',
-              style: ShiftType.labelSm(c.accent),
+              'Included with membership',
+              style: ShiftType.caption(c.accent),
             ),
           ),
           OutlinedButton(
@@ -147,7 +147,7 @@ Future<void> _renameHandle(BuildContext context) async {
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(controller.text),
-            child: const Text('SAVE'),
+            child: const Text('Save'),
           ),
         ],
       );
@@ -169,8 +169,7 @@ Future<void> _renameHandle(BuildContext context) async {
   if (!await state.updateHandle(trimmed)) {
     bar.showSnackBar(
       SnackBar(
-        content:
-            Text(state.lastError?.message ?? 'Could not change username.'),
+        content: Text(state.lastError?.message ?? 'Could not change username.'),
       ),
     );
   }
@@ -208,8 +207,8 @@ Future<void> _deleteAccount(BuildContext context) async {
                   style: ShiftType.bodySm(c.textMuted),
                 ),
                 const SizedBox(height: Space.x4),
-                Text('TYPE DELETE TO CONFIRM',
-                    style: ShiftType.labelSm(c.textMuted)),
+                Text('Type DELETE to confirm',
+                    style: ShiftType.caption(c.textMuted)),
                 const SizedBox(height: Space.x2),
                 TextField(
                   controller: typed,
@@ -231,7 +230,7 @@ Future<void> _deleteAccount(BuildContext context) async {
                 ),
                 onPressed:
                     matches ? () => Navigator.of(context).pop(true) : null,
-                child: const Text('DELETE ACCOUNT'),
+                child: const Text('Delete account'),
               ),
             ],
           );

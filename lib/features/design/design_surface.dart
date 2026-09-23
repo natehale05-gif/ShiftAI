@@ -207,21 +207,23 @@ class _SearchRow extends StatelessWidget {
     return Row(
       children: <Widget>[
         Expanded(
+          // A filled search field, as a list's search bar is drawn, not an
+          // outlined capsule.
           child: Container(
-            height: 56,
-            padding: const EdgeInsets.symmetric(horizontal: Space.x5),
+            height: 40,
+            padding: const EdgeInsets.symmetric(horizontal: Space.x3),
             decoration: BoxDecoration(
-              borderRadius: Radii.pillAll,
-              border: Border.all(color: c.border),
+              color: c.surfaceRaised,
+              borderRadius: Radii.mdAll,
             ),
             child: Row(
               children: <Widget>[
-                Icon(Icons.search_rounded, size: 20, color: c.textMuted),
-                const SizedBox(width: Space.x3),
+                Icon(Icons.search_rounded, size: 19, color: c.textMuted),
+                const SizedBox(width: Space.x2),
                 Expanded(
                   child: TextField(
                     onChanged: onQuery,
-                    style: ShiftType.body(c.text),
+                    style: ShiftType.copy(c.text, size: 16),
                     decoration: InputDecoration(
                       isDense: true,
                       filled: false,
@@ -229,7 +231,7 @@ class _SearchRow extends StatelessWidget {
                       enabledBorder: InputBorder.none,
                       focusedBorder: InputBorder.none,
                       hintText: 'Search designs',
-                      hintStyle: ShiftType.body(c.textMuted),
+                      hintStyle: ShiftType.copy(c.textMuted, size: 16),
                     ),
                   ),
                 ),
@@ -292,7 +294,7 @@ class _DesignCard extends StatelessWidget {
                 ),
                 child: Text(
                   doc.kindLabel,
-                  style: ShiftType.labelSm(c.textMuted),
+                  style: ShiftType.caption(c.textMuted),
                 ),
               ),
             Padding(
@@ -406,7 +408,7 @@ Future<void> _confirmDelete(BuildContext context, DesignDoc doc) async {
               foregroundColor: c.onStatus,
             ),
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('DELETE'),
+            child: const Text('Delete'),
           ),
         ],
       );

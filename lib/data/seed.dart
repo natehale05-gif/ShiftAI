@@ -33,14 +33,18 @@ abstract final class Seed {
   // Avatars ---------------------------------------------------------------
 
   static const List<Avatar> avatars = <Avatar>[
-    Avatar(id: 'av-1', name: 'Everyday', status: AvatarStatus.ready, personal: true),
+    Avatar(
+        id: 'av-1',
+        name: 'Everyday',
+        status: AvatarStatus.ready,
+        personal: true),
     Avatar(id: 'av-2', name: 'Studio lighting', status: AvatarStatus.training),
   ];
 
   // Leaderboard ---------------------------------------------------------
 
   static const int weekPool = 53497;
-  static const String payoutLine = 'TOP EARNERS CASH OUT FRIDAY';
+  static const String payoutLine = 'Top earners cash out Friday';
 
   static const List<StandingRow> standings = <StandingRow>[
     StandingRow(
@@ -184,7 +188,8 @@ abstract final class Seed {
       StandingRow(rank: 7, name: 'Ama Boateng', earnings: 199.70, movement: 3),
       StandingRow(rank: 8, name: 'Sana Malik', earnings: 176.40, movement: -2),
       StandingRow(rank: 9, name: 'Cole Petrov', earnings: 154.15, movement: 1),
-      StandingRow(rank: 10, name: 'Iris Delgado', earnings: 121.60, movement: 0),
+      StandingRow(
+          rank: 10, name: 'Iris Delgado', earnings: 121.60, movement: 0),
     ],
   );
 
@@ -194,75 +199,75 @@ abstract final class Seed {
     // Bronze, six.
     _t('first_light', 'First Light', 'Make your first piece',
         Icons.auto_awesome_rounded, TrophyTier.bronze,
-        label: '1 OF 1', members: 94, progress: 1, earnedOn: '2026-03-04'),
+        label: '1 of 1', members: 94, progress: 1, earnedOn: '2026-03-04'),
     _t('out_loud', 'Out Loud', 'Publish a piece to the EcoVault',
         Icons.public_rounded, TrophyTier.bronze,
-        label: '0 OF 1', members: 44),
+        label: '0 of 1', members: 44),
     _t('on_the_board', 'On the Board', 'Appear on the weekly leaderboard',
         Icons.bar_chart_rounded, TrophyTier.bronze,
-        label: '1 OF 1', members: 72, progress: 1, earnedOn: '2026-07-06'),
+        label: '1 of 1', members: 72, progress: 1, earnedOn: '2026-07-06'),
     _t('first_dollar', 'First Dollar', 'Bank money from any pool',
         Icons.payments_outlined, TrophyTier.bronze,
-        label: '1 OF 1', members: 68, progress: 1, earnedOn: '2026-07-19'),
+        label: '1 of 1', members: 68, progress: 1, earnedOn: '2026-07-19'),
     _t('sound_check', 'Sound Check', 'Make your first track',
         Icons.graphic_eq_rounded, TrophyTier.bronze,
-        label: '0 OF 1', members: 31),
+        label: '0 of 1', members: 31),
     _t('face_time', 'Face Time', 'Make your first avatar read',
         Icons.person_outline_rounded, TrophyTier.bronze,
-        label: '0 OF 1', members: 27),
+        label: '0 of 1', members: 27),
 
     // Silver, six.
     _t('prolific', 'Prolific', 'Make ten pieces', Icons.grid_view_rounded,
         TrophyTier.silver,
-        label: '8 OF 10', members: 61, progress: 0.8),
+        label: '8 of 10', members: 61, progress: 0.8),
     _t(
         'quadruple_threat',
         'Quadruple Threat',
         'Make a picture, a video, an avatar and a track',
         Icons.category_outlined,
         TrophyTier.silver,
-        label: '2 OF 4',
+        label: '2 of 4',
         members: 28,
         progress: 0.5),
     _t('curator', 'Curator', 'Publish five pieces', Icons.collections_outlined,
         TrophyTier.silver,
-        label: '0 OF 5', members: 19),
+        label: '0 of 5', members: 19),
     _t('contender', 'Contender', 'Finish a week in the top fifty',
         Icons.trending_up_rounded, TrophyTier.silver,
-        label: 'BEST #13', members: 24, progress: 1, earnedOn: '2026-09-11'),
+        label: 'Best #13', members: 24, progress: 1, earnedOn: '2026-09-11'),
     _t('streak', 'Streak', 'Make something five days running',
         Icons.local_fire_department_outlined, TrophyTier.silver,
-        label: '3 OF 5', members: 22, progress: 0.6),
+        label: '3 of 5', members: 22, progress: 0.6),
     _t('bankroll', 'Bankroll', 'Bank a thousand dollars',
         Icons.savings_outlined, TrophyTier.silver,
-        label: '\$767 OF \$1,000', members: 17, progress: 0.77),
+        label: '\$767 of \$1,000', members: 17, progress: 0.77),
 
     // Gold, four.
     _t('machine', 'Machine', 'Make a hundred pieces', Icons.factory_outlined,
         TrophyTier.gold,
-        label: '8 OF 100', members: 12, progress: 0.08),
+        label: '8 of 100', members: 12, progress: 0.08),
     _t(
         'front_page',
         'Front Page',
         'Be the most-viewed piece in the EcoVault that week',
         Icons.workspace_premium_outlined,
         TrophyTier.gold,
-        label: 'NEEDS ECOVAULT VIEW COUNTS',
+        label: 'Needs EcoVault view counts',
         members: 3),
     _t('top_ten', 'Top Ten', 'Finish a week in the top ten',
         Icons.military_tech_outlined, TrophyTier.gold,
-        label: 'BEST #13', members: 6, progress: 0.3),
+        label: 'Best #13', members: 6, progress: 0.3),
     _t('headliner', 'Headliner', 'Finish a week in the top three',
         Icons.star_outline_rounded, TrophyTier.gold,
-        label: 'BEST #13', members: 4, progress: 0.15),
+        label: 'Best #13', members: 4, progress: 0.15),
 
     // Platinum, two.
     _t('champion', 'Champion', 'Finish a week at number one',
         Icons.emoji_events_outlined, TrophyTier.platinum,
-        label: 'BEST #13', members: 1, progress: 0.1),
+        label: 'Best #13', members: 1, progress: 0.1),
     _t('untouchable', 'Untouchable', 'Finish three weeks at number one',
         Icons.shield_outlined, TrophyTier.platinum,
-        label: 'BEST #13', members: 0, progress: 0.05),
+        label: 'Best #13', members: 0, progress: 0.05),
   ];
 
   static Trophy _t(
@@ -326,7 +331,7 @@ abstract final class Seed {
     AgentRun(
       id: 'r-imports',
       title: 'Scan conditional imports before release build',
-      detail: 'Unable To Complete Request',
+      detail: 'Unable to complete request',
       status: RunStatus.failed,
     ),
   ];
@@ -353,13 +358,13 @@ abstract final class Seed {
       id: 'd-palette',
       title: 'Palette reference sheet',
       versions: 2,
-      kindLabel: 'PAGE',
+      kindLabel: 'Page',
     ),
     DesignDoc(
       id: 'd-tide',
       title: 'Tide clock landing page',
       versions: 1,
-      kindLabel: 'PAGE',
+      kindLabel: 'Page',
     ),
   ];
 
@@ -412,7 +417,7 @@ abstract final class Seed {
     ChatMessage(
       id: 'm-reply',
       author: MessageAuthor.shift,
-      eyebrow: 'SHIFT · VIDEO',
+      eyebrow: 'SHIFT · Video',
       body: 'Here is the cut. Take two starts at 00:14, so I used that one '
           'and ducked the room tone six decibels under the voice.',
       bullets: <String>[

@@ -77,8 +77,10 @@ abstract final class ShiftTheme {
         bodyLarge: ShiftType.body(c.text),
         bodyMedium: ShiftType.bodySm(c.text),
         bodySmall: ShiftType.caption(c.textMuted),
-        labelLarge: ShiftType.label(c.text),
-        labelSmall: ShiftType.labelSm(c.textMuted),
+        // Material reaches for labelLarge on dialog actions, chips and
+        // tabs it builds itself; set in the copy face, not tracked mono.
+        labelLarge: ShiftType.copy(c.text, size: 15, weight: 600),
+        labelSmall: ShiftType.caption(c.textMuted),
       ),
       iconTheme: IconThemeData(color: c.textMuted, size: 20),
       scrollbarTheme: ScrollbarThemeData(
@@ -96,7 +98,9 @@ abstract final class ShiftTheme {
           minimumSize: const Size(0, 44),
           padding: const EdgeInsets.symmetric(horizontal: Space.x4),
           shape: const RoundedRectangleBorder(borderRadius: Radii.mdAll),
-          textStyle: ShiftType.label(c.onAccent),
+          // Sentence case in the copy face. Tracked uppercase mono made
+          // every primary action read like a terminal command.
+          textStyle: ShiftType.copy(c.onAccent, size: 15, weight: 600),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
@@ -116,25 +120,27 @@ abstract final class ShiftTheme {
           textStyle: ShiftType.bodyStrong(c.accent),
         ),
       ),
+      // A filled field with no outline until it has focus, rather than a
+      // box drawn round every input on the page.
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: c.bg,
+        fillColor: c.surfaceRaised,
         hintStyle: ShiftType.bodySm(c.textMuted),
         contentPadding: const EdgeInsets.symmetric(
-          horizontal: Space.x3,
+          horizontal: Space.x4,
           vertical: Space.x3,
         ),
-        border: OutlineInputBorder(
+        border: const OutlineInputBorder(
           borderRadius: Radii.mdAll,
-          borderSide: BorderSide(color: c.borderStrong),
+          borderSide: BorderSide.none,
         ),
-        enabledBorder: OutlineInputBorder(
+        enabledBorder: const OutlineInputBorder(
           borderRadius: Radii.mdAll,
-          borderSide: BorderSide(color: c.borderStrong),
+          borderSide: BorderSide.none,
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: Radii.mdAll,
-          borderSide: BorderSide(color: c.accent, width: 2),
+          borderSide: BorderSide(color: c.accent, width: 1.5),
         ),
       ),
       drawerTheme: DrawerThemeData(

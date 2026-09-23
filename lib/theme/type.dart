@@ -132,4 +132,56 @@ abstract final class ShiftType {
   /// Plain mono, for figures that should line up in a column.
   static TextStyle mono(Color color, {double size = 13}) =>
       _plex(size: size, lineHeight: 20, color: color);
+
+  /// A screen's own title, under its back link — the large title a
+  /// navigation stack opens on.
+  static TextStyle largeTitle(Color color) => _outfit(
+        size: 32,
+        lineHeight: 38,
+        weight: 700,
+        letterSpacing: -0.3,
+        color: color,
+      );
+
+  /// A section's own heading — "Bronze", "Standings" — set like a title,
+  /// in sentence case, where an uppercase mono eyebrow used to go.
+  static TextStyle sectionTitle(Color color) =>
+      _outfit(size: 20, lineHeight: 26, weight: 600, color: color);
+
+  /// Numbers that line up in a column — money, ranks, counts, the clock —
+  /// in the copy face rather than the mono one. Tabular figures give the
+  /// alignment mono was being used for, without setting every figure like
+  /// a terminal readout.
+  ///
+  /// [weight] goes through the `wght` axis. These faces are variable, so a
+  /// `copyWith(fontWeight:)` on any style here changes nothing visible —
+  /// the variation wins — and a weight has to be asked for up front.
+  static TextStyle figures(
+    Color color, {
+    double size = 15,
+    int weight = 600,
+  }) =>
+      _manrope(
+        size: size,
+        lineHeight: size * 1.35,
+        weight: weight,
+        color: color,
+      ).copyWith(
+        fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
+      );
+
+  /// Copy at a chosen size and weight, for the few places the fixed scale
+  /// has no step — through the `wght` axis, for the reason [figures] gives.
+  static TextStyle copy(
+    Color color, {
+    required double size,
+    int weight = 400,
+    double? lineHeight,
+  }) =>
+      _manrope(
+        size: size,
+        lineHeight: lineHeight ?? size * 1.35,
+        weight: weight,
+        color: color,
+      );
 }

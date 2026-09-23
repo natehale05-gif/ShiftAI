@@ -68,11 +68,11 @@ cat > index.html <<'HTML'
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="description" content="SHIFT AI — the creator suite: chat, earnings, vault, trophies, notes, agents.">
   <!--
-    manifest.json's theme_color only reaches Chrome for Android at
-    install time, when it mints the WebAPK — it does not get re-read on
-    every load. A live theme-color meta tag is what recent Chrome
-    actually reads in real time for system chrome around the page, so it
-    is worth carrying here too even though the values agree.
+    The live theme-color tag is what Chrome reads, in real time, for the
+    status bar. An installed app's navigation bar ignores it and takes the
+    manifest's colours, re-read only when Chrome checks the installed app
+    for updates. Hence one manifest per theme, and the script below
+    linking the right one.
   -->
   <meta name="theme-color" content="#0A0A0F">
   <meta name="mobile-web-app-capable" content="yes">
@@ -82,6 +82,34 @@ cat > index.html <<'HTML'
   <link rel="icon" type="image/png" href="favicon.png">
   <link rel="manifest" href="manifest.json">
   <title>SHIFT AI</title>
+  <script>
+    // Before any Dart runs: link the manifest for the theme this person
+    // last chose, and paint the first frame in it. Chrome colours an
+    // installed app's navigation bar from the manifest alone and can read
+    // it as soon as the page loads, before the app has started and
+    // swapped the link itself (system_bars_web.dart). The saved blob is
+    // shared_preferences' JSON string of the app's own JSON, hence the
+    // two parses. Colours are ShiftColors' bg per theme;
+    // test/web_manifest_test.dart holds this table to tokens.dart.
+    (function () {
+      var BG = {
+        dark: '#0E1628', light: '#F4F6FA',
+        retro: '#0A0A0F', retroLight: '#F7F7F8'
+      };
+      var theme = 'retro';
+      try {
+        var raw = localStorage.getItem('flutter.shift.app.v1');
+        var saved = raw && JSON.parse(JSON.parse(raw)).theme;
+        if (BG.hasOwnProperty(saved)) theme = saved;
+      } catch (e) { /* nothing saved, or unreadable: the default */ }
+      document.querySelector('link[rel="manifest"]')
+        .setAttribute('href', 'manifest-' + theme + '.json');
+      document.querySelector('meta[name="theme-color"]')
+        .setAttribute('content', BG[theme]);
+      document.documentElement.style.backgroundColor = BG[theme];
+      window.__shiftBootBg = BG[theme];
+    })();
+  </script>
   <style>
     /* ShiftColors.retro bg and textMuted. This is painted before any
        Dart runs, so it has to match the theme a new account opens on or
@@ -97,6 +125,10 @@ cat > index.html <<'HTML'
 </head>
 <body>
   <div id="boot">LOADING SHIFT AI</div>
+  <script>
+    document.body.style.backgroundColor = window.__shiftBootBg;
+    document.getElementById('boot').style.backgroundColor = window.__shiftBootBg;
+  </script>
   <script>
     // Hosts that allow-list file extensions will not serve .bin, so the
     // asset manifest ships under a .wasm name and the engine is pointed

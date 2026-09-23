@@ -97,6 +97,41 @@ void main() {
     }
   });
 
+  testWidgets('the agent tallies filter the list, and a second tap clears it',
+      (WidgetTester tester) async {
+    final AppState state = await _freshState();
+    await tester.pumpWidget(ShiftApp(state: state));
+    await tester.pump();
+    await _dismissRingsSheet(tester);
+    state.setSurface(Surface.agents);
+    await tester.pumpAndSettle();
+
+    const String review = 'Register monospace as a literal family name';
+    const String failed = 'Scan conditional imports before release build';
+    expect(find.text(review), findsOneWidget);
+    expect(find.text(failed), findsOneWidget);
+
+    // A failed run counts as needing you: it will not move until you act.
+    await tester.tap(find.text('Need you'));
+    await tester.pumpAndSettle();
+    expect(find.text(review), findsNothing);
+    expect(find.text(failed), findsOneWidget);
+
+    await tester.tap(find.text('In review'));
+    await tester.pumpAndSettle();
+    expect(find.text(review), findsOneWidget);
+    expect(find.text(failed), findsNothing);
+
+    await tester.tap(find.text('Working'));
+    await tester.pumpAndSettle();
+    expect(find.text('Nothing is working right now.'), findsOneWidget);
+
+    await tester.tap(find.text('Working'));
+    await tester.pumpAndSettle();
+    expect(find.text(review), findsOneWidget);
+    expect(find.text(failed), findsOneWidget);
+  });
+
   testWidgets('the sidebar starts closed and the hamburger opens it',
       (WidgetTester tester) async {
     tester.view.physicalSize = const Size(1440, 1024);
@@ -248,7 +283,7 @@ void main() {
     // Local by default: the seeded league's own region shows.
     expect(find.text(Seed.league.regionLabel), findsOneWidget);
 
-    await tester.tap(find.text('GLOBAL'));
+    await tester.tap(find.text('Global'));
     await tester.pump();
     expect(find.text(Seed.league.regionLabel), findsNothing);
     expect(tester.takeException(), isNull);
@@ -327,9 +362,9 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
 
     expect(find.text('Everyday'), findsOneWidget);
-    expect(find.text('PERSONAL'), findsOneWidget);
+    expect(find.text('Personal'), findsOneWidget);
     expect(find.text('Studio lighting'), findsOneWidget);
-    expect(find.text('TRAINING…'), findsOneWidget);
+    expect(find.text('Training…'), findsOneWidget);
 
     await tester.ensureVisible(find.text('Create an avatar'));
     await tester.pump();
@@ -338,7 +373,7 @@ void main() {
 
     expect(find.text('Choose a photo or clip'), findsOneWidget);
     final FilledButton create = tester.widget<FilledButton>(
-      find.widgetWithText(FilledButton, 'CREATE'),
+      find.widgetWithText(FilledButton, 'Create'),
     );
     expect(create.onPressed, isNull, reason: 'nothing to upload yet');
     expect(tester.takeException(), isNull);

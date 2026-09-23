@@ -18,12 +18,22 @@ import 'package:web/web.dart' as web;
 /// fixing only the tag left a black bar along the bottom of a cream theme.
 /// The overscroll gutter behind a rubber-banded scroll comes from the same
 /// place, so it stops flashing the wrong colour too.
-void applyBrowserChrome(Color background) {
+///
+/// Neither reaches the navigation bar of an *installed* app. Chrome paints
+/// that from the manifest's colours, which it reads when it builds the
+/// app and again only when it checks the installed app for updates, which
+/// is at most about once a day. After a
+/// delete-and-reinstall on a Pixel the bar was still `#0A0A0F`, the one
+/// manifest's colour, under a light theme. So there is a manifest per
+/// theme (`web/manifest-<theme>.json`) and the page links the one that is
+/// showing. Chrome's next update check finds new colours and rebuilds the
+/// installed app with them. That is not instant, but it is the only
+/// signal the navigation bar listens to.
+void applyBrowserChrome(Color background, {required String theme}) {
   final String colour = _css(background);
 
-  web.HTMLMetaElement? tag =
-      web.document.querySelector('meta[name="theme-color"]')
-          as web.HTMLMetaElement?;
+  web.HTMLMetaElement? tag = web.document
+      .querySelector('meta[name="theme-color"]') as web.HTMLMetaElement?;
   if (tag == null) {
     // A page built without the tag (a plain `flutter build web`) still
     // gets one, rather than this being a no-op on half the builds.
@@ -36,6 +46,14 @@ void applyBrowserChrome(Color background) {
   (web.document.documentElement as web.HTMLElement?)?.style.backgroundColor =
       colour;
   web.document.body?.style.backgroundColor = colour;
+
+  final String manifest = 'manifest-$theme.json';
+  final web.HTMLLinkElement? link = web.document
+      .querySelector('link[rel="manifest"]') as web.HTMLLinkElement?;
+  // Compared on the attribute, not `href`, which comes back absolute.
+  if (link != null && link.getAttribute('href') != manifest) {
+    link.setAttribute('href', manifest);
+  }
 }
 
 String _css(Color colour) {
