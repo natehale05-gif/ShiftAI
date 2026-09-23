@@ -10,3 +10,12 @@ void applyBrowserChrome(Color background, {required String theme}) {}
 final ValueListenable<double> browserBottomInset = ValueNotifier<double>(0);
 
 void watchBrowserInsets() {}
+
+/// Only an iPhone home-screen web app needs to reload to recolour its
+/// status bar.
+bool get barsNeedRelaunchForTheme => false;
+
+void relaunchForTheme() {}
+
+/// Whether this launch is that reload. Never, off the web.
+bool consumeThemeRelaunch() => false;

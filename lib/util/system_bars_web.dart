@@ -1,4 +1,5 @@
 import 'dart:js_interop';
+import 'dart:js_interop_unsafe';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart';
@@ -105,4 +106,43 @@ void watchBrowserInsets() {
   web.window.addEventListener('resize', ((web.Event _) => read()).toJS);
   web.window.visualViewport
       ?.addEventListener('resize', ((web.Event _) => read()).toJS);
+}
+
+/// An iPhone home-screen web app reads its status bar colour from the
+/// theme-color tag when it opens and ignores changes after that. Changing
+/// the theme recoloured everything but the bar until the app was swiped
+/// away and reopened. There is no call that makes iOS read the tag again,
+/// so on iOS alone a theme change reloads the page.
+///
+/// `navigator.standalone` exists only in Safari on iOS, and is true only
+/// for an app opened from the home screen.
+bool get barsNeedRelaunchForTheme {
+  final JSAny? standalone =
+      (web.window.navigator as JSObject).getProperty('standalone'.toJS);
+  return standalone.isA<JSBoolean>() && (standalone! as JSBoolean).toDart;
+}
+
+const String _relaunchKey = 'shift-theme-relaunch';
+
+/// Reloads the page, leaving a note so the reload does not reopen the
+/// daily rings as if it were a fresh launch.
+void relaunchForTheme() {
+  try {
+    web.window.sessionStorage.setItem(_relaunchKey, '1');
+  } on Object {
+    // Storage refused (private mode): the rings show once. No harm.
+  }
+  web.window.location.reload();
+}
+
+/// True once, on the launch [relaunchForTheme] caused.
+bool consumeThemeRelaunch() {
+  try {
+    final bool relaunched =
+        web.window.sessionStorage.getItem(_relaunchKey) != null;
+    web.window.sessionStorage.removeItem(_relaunchKey);
+    return relaunched;
+  } on Object {
+    return false;
+  }
 }

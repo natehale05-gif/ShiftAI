@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -25,10 +26,14 @@ class _ShiftAppState extends State<ShiftApp> {
     super.initState();
     // The browser's own chrome is not part of the widget tree, so it has
     // to be told about a theme change rather than rebuilt into one.
+    _barsTheme = widget.state.themeId;
     widget.state.addListener(_syncBrowserChrome);
     _syncBrowserChrome();
     watchBrowserInsets();
   }
+
+  /// The theme the system bars were last painted for.
+  late ShiftThemeId _barsTheme;
 
   @override
   void dispose() {
@@ -37,10 +42,18 @@ class _ShiftAppState extends State<ShiftApp> {
     super.dispose();
   }
 
-  void _syncBrowserChrome() => applyBrowserChrome(
-        ShiftColors.forTheme(widget.state.themeId).bg,
-        theme: widget.state.themeId.name,
-      );
+  void _syncBrowserChrome() {
+    final ShiftThemeId theme = widget.state.themeId;
+    applyBrowserChrome(ShiftColors.forTheme(theme).bg, theme: theme.name);
+    if (theme == _barsTheme) return;
+    _barsTheme = theme;
+    // An iPhone home-screen app only recolours its status bar on launch
+    // (see barsNeedRelaunchForTheme). Save first: the write is debounced,
+    // and a reload inside that window would come back on the old theme.
+    if (barsNeedRelaunchForTheme) {
+      unawaited(widget.state.flush().then((_) => relaunchForTheme()));
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
