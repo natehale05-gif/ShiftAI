@@ -54,7 +54,7 @@ lib/
                              surface each mode lands on
   theme/
     tokens.dart              every SHIFT colour token, x3 themes, as a ThemeExtension
-    type.dart                the type scale (Outfit / Manrope / IBM Plex Mono)
+    type.dart                the type scale (Outfit / Manrope)
     app_theme.dart           ThemeData built from the tokens
   state/
     app_state.dart           the single store, persistence, AppScope
@@ -78,13 +78,12 @@ assets/brand/                the lockup, on dark and on light
 
 Colours, type, spacing and radii come from the ShiftAi design system and
 are carried on `ThemeData` as a `ShiftColors` extension — no widget holds a
-literal hex. Three themes (`dark`, `light`, `retro`) define every token, so
+literal hex. Four themes (`dark`, `light`, `retro`, `retroLight`) define every token, so
 any screen built on them switches over with no new code.
 
-Fonts load through `google_fonts` at runtime. To ship offline, drop the
-Outfit / Manrope / IBM Plex Mono files into `assets/fonts/`, declare them in
-`pubspec.yaml`, and swap the `GoogleFonts.*` calls in `lib/theme/type.dart`
-for `fontFamily:`.
+Fonts (Outfit and Manrope, both variable) are bundled in `assets/fonts/`
+and declared in `pubspec.yaml`, so the app draws its own type with no
+network call.
 
 Icons are Material's rounded set rather than Material Symbols Rounded — the
 shapes match closely and it avoids a font dependency. Swap in

@@ -102,7 +102,7 @@ class _FailureCardState extends State<FailureCard> {
               ),
               child: SelectableText(
                 widget.failure.details,
-                style: ShiftType.mono(c.textMuted, size: 12),
+                style: ShiftType.figures(c.textMuted, size: 13, weight: 400),
               ),
             ),
           ],
