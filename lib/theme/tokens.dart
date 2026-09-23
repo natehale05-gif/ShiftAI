@@ -296,7 +296,10 @@ abstract final class TierColors {
   /// The same four ranks, taken down for a light ground. Pale silver and
   /// bright gold are unreadable on paper, and a tier nobody can read is
   /// not a tier.
-  static const Color bronzeOnLight = Color(0xFF9A5520);
+  // Copper, not brown. At 0xFF9A5520 it sat 15° of hue from gold's
+  // 0xFF946400 at the same darkness, and on the light themes the two read
+  // as one colour. 5.6:1 on the light ground.
+  static const Color bronzeOnLight = Color(0xFFA3461C);
   static const Color silverOnLight = Color(0xFF64707F);
   static const Color goldOnLight = Color(0xFF946400);
   static const Color platinumOnLight = Color(0xFF0A6E88);

@@ -199,6 +199,30 @@ final List<Pair> _pairs = <Pair>[
 ];
 
 void main() {
+  test('the medal colours read on paper and apart from one another', () {
+    const List<Color> onLight = <Color>[
+      TierColors.bronzeOnLight,
+      TierColors.silverOnLight,
+      TierColors.goldOnLight,
+      TierColors.platinumOnLight,
+    ];
+    for (final ShiftThemeId id in <ShiftThemeId>[
+      ShiftThemeId.light,
+      ShiftThemeId.retroLight,
+    ]) {
+      final Color ground = ShiftColors.forTheme(id).bg;
+      for (final Color tier in onLight) {
+        expect(_ratio(tier, ground), greaterThanOrEqualTo(4.5),
+            reason: '$tier on ${id.name}');
+      }
+    }
+    // Bronze and gold were 15° of hue apart at the same darkness, and on
+    // the light themes they read as one colour.
+    final double bronze = HSLColor.fromColor(TierColors.bronzeOnLight).hue;
+    final double gold = HSLColor.fromColor(TierColors.goldOnLight).hue;
+    expect((gold - bronze).abs(), greaterThanOrEqualTo(20));
+  });
+
   for (final ShiftThemeId id in ShiftThemeId.values) {
     test('${id.name} carries every pairing the app draws', () {
       final ShiftColors c = ShiftColors.forTheme(id);
