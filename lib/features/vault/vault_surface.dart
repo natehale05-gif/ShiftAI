@@ -9,12 +9,21 @@ import '../../widgets/common.dart';
 
 /// Media only, with a two way scope toggle: your own generations, or the
 /// published work in EcoVault. Picking a tile opens the detail panel.
-class VaultSurface extends StatelessWidget {
+class VaultSurface extends StatefulWidget {
   const VaultSurface({super.key});
+
+  @override
+  State<VaultSurface> createState() => _VaultSurfaceState();
+}
+
+class _VaultSurfaceState extends State<VaultSurface> {
+  String _query = '';
 
   @override
   Widget build(BuildContext context) {
     final AppState state = AppScope.of(context);
+    final List<VaultItem> shown = vaultMatches(state.visibleVault, _query);
+    final bool searching = _query.trim().isNotEmpty;
 
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
@@ -32,7 +41,42 @@ class VaultSurface extends StatelessWidget {
               padding: EdgeInsets.fromLTRB(Space.x6, 0, Space.x6, 0),
               child: EngineBanner(),
             ),
-            Expanded(child: _MasonryGrid(items: state.visibleVault)),
+            // Design had search and the vault, which holds far more, did not.
+            // Only shown once there is something to search.
+            if (state.visibleVault.isNotEmpty || searching)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  Space.x6,
+                  0,
+                  Space.x6,
+                  Space.x3,
+                ),
+                child: SearchField(
+                  hint: state.vaultScope == VaultScope.mine
+                      ? 'Search your vault'
+                      : 'Search EcoVault',
+                  onChanged: (String v) => setState(() => _query = v),
+                ),
+              ),
+            Expanded(
+              child: searching && shown.isEmpty
+                  ? PullToRefresh(
+                      child: ListView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        children: <Widget>[
+                          EmptyState(
+                            compact: true,
+                            icon: Icons.search_off_rounded,
+                            title: 'No results',
+                            message: 'Nothing in '
+                                '${state.vaultScope.label} matches '
+                                '“${_query.trim()}”.',
+                          ),
+                        ],
+                      ),
+                    )
+                  : _MasonryGrid(items: shown),
+            ),
           ],
         );
 
@@ -136,6 +180,29 @@ class _ScopeBar extends StatelessWidget {
       ),
     );
   }
+}
+
+/// The pieces a vault search keeps: every word typed has to appear in the
+/// title, the prompt, the creator's name or handle, or the model, in any
+/// case and any order. "dusk ferry" finds "Ferry wake at dusk".
+List<VaultItem> vaultMatches(List<VaultItem> items, String query) {
+  final List<String> words = query
+      .toLowerCase()
+      .split(RegExp(r'\s+'))
+      .where((String w) => w.isNotEmpty)
+      .toList(growable: false);
+  if (words.isEmpty) return items;
+  return items.where((VaultItem v) {
+    final String haystack = <String?>[
+      v.title,
+      v.prompt,
+      v.byName,
+      v.byHandle,
+      v.model,
+      v.kind.name,
+    ].whereType<String>().join(' ').toLowerCase();
+    return words.every(haystack.contains);
+  }).toList(growable: false);
 }
 
 /// A masonry that needs no package: items are dealt into whichever column

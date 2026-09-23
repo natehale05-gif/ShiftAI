@@ -601,8 +601,14 @@ void main() {
       bool reloaded = false;
       void watch() => reloaded = reloaded || state.refreshing;
       state.addListener(watch);
+      // The list itself, not a search field's own sideways Scrollable.
       await tester.fling(
-        find.byType(Scrollable).first,
+        find
+            .byWidgetPredicate(
+              (Widget w) =>
+                  w is Scrollable && w.axisDirection == AxisDirection.down,
+            )
+            .first,
         const Offset(0, 400),
         1200,
       );

@@ -1436,3 +1436,77 @@ class EmptyState extends StatelessWidget {
     );
   }
 }
+
+/// A filled search field, as a list's search bar is drawn: a magnifier,
+/// the hint, and a clear button once something is typed.
+class SearchField extends StatefulWidget {
+  const SearchField({required this.hint, required this.onChanged, super.key});
+
+  final String hint;
+  final ValueChanged<String> onChanged;
+
+  @override
+  State<SearchField> createState() => _SearchFieldState();
+}
+
+class _SearchFieldState extends State<SearchField> {
+  final TextEditingController _text = TextEditingController();
+
+  @override
+  void dispose() {
+    _text.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ShiftColors c = ShiftColors.of(context);
+    return Container(
+      height: 44,
+      padding: const EdgeInsets.only(left: Space.x3),
+      decoration: BoxDecoration(
+        color: c.surfaceRaised,
+        borderRadius: Radii.mdAll,
+      ),
+      child: Row(
+        children: <Widget>[
+          Icon(Icons.search_rounded, size: 19, color: c.textMuted),
+          const SizedBox(width: Space.x2),
+          Expanded(
+            child: TextField(
+              controller: _text,
+              onChanged: (String v) {
+                setState(() {});
+                widget.onChanged(v);
+              },
+              textInputAction: TextInputAction.search,
+              style: ShiftType.copy(c.text, size: 16),
+              decoration: InputDecoration(
+                isDense: true,
+                filled: false,
+                border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                hintText: widget.hint,
+                hintStyle: ShiftType.copy(c.textMuted, size: 16),
+              ),
+            ),
+          ),
+          if (_text.text.isNotEmpty)
+            IconButton(
+              tooltip: 'Clear search',
+              onPressed: () {
+                _text.clear();
+                setState(() {});
+                widget.onChanged('');
+              },
+              icon: Icon(Icons.cancel_rounded, size: 18, color: c.textMuted),
+              style: IconButton.styleFrom(minimumSize: const Size(44, 44)),
+            )
+          else
+            const SizedBox(width: Space.x3),
+        ],
+      ),
+    );
+  }
+}
