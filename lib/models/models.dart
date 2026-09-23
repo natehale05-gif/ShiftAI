@@ -2,6 +2,27 @@ import 'package:flutter/material.dart';
 
 import '../theme/tokens.dart';
 
+/// Two letters for a face with no picture: the first and last words'
+/// first letters, "Jodie Marsh" → "JM".
+///
+/// One word takes its first letter and the next capital if it has one, so
+/// "ShiftAi" is "SA", not "SH". With no capital to find, it takes the first
+/// two letters. This lived in three places that disagreed: the
+/// session wrote "S", the decoder "SH", and the leaderboard used the
+/// second word, not the last.
+String initialsOf(String name) {
+  final List<String> words =
+      name.split(RegExp(r'\s+')).where((String w) => w.isNotEmpty).toList();
+  if (words.isEmpty) return '';
+  if (words.length >= 2) {
+    return '${words.first[0]}${words.last[0]}'.toUpperCase();
+  }
+  final String word = words.single;
+  final int capital = word.indexOf(RegExp('[A-Z]'), 1);
+  if (capital > 0) return '${word[0]}${word[capital]}'.toUpperCase();
+  return word.substring(0, word.length >= 2 ? 2 : 1).toUpperCase();
+}
+
 /// The signed-in creator.
 @immutable
 class Creator {
@@ -181,14 +202,7 @@ class StandingRow {
   /// showing up here costs nothing on your device.
   final String? avatarUrl;
 
-  String get initials {
-    final List<String> words =
-        name.split(RegExp(r'\s+')).where((String w) => w.isNotEmpty).toList();
-    if (words.length >= 2) {
-      return '${words[0][0]}${words[1][0]}'.toUpperCase();
-    }
-    return name.substring(0, name.length >= 2 ? 2 : 1).toUpperCase();
-  }
+  String get initials => initialsOf(name);
 
   Map<String, dynamic> toJson() => <String, dynamic>{
         'rank': rank,
@@ -557,7 +571,8 @@ class DesignDoc {
   final String title;
   final int versions;
 
-  /// What shows on the thumbnail: PAGE, DECK, BRAND.
+  /// Which kind of thing it is, in sentence case: Page, Deck or Brand.
+  /// The thumbnail draws that shape.
   final String kindLabel;
 
   String get versionLabel =>
@@ -601,13 +616,13 @@ enum DesignKind {
 
   String get emptyLine => switch (this) {
         DesignKind.slides => 'This deck has no slides yet. Add one, or let '
-            'SHIFT add some.',
+            'ShiftAi add some.',
         DesignKind.design => 'This canvas has no artboards yet. Add one, or '
-            'let SHIFT add some.',
+            'let ShiftAi add some.',
         DesignKind.codebase =>
-          'No branch yet. Pick a repository and SHIFT opens one.',
+          'No branch yet. Pick a repository and ShiftAi opens one.',
         DesignKind.brand => 'This brand has no pages yet. Add one, or let '
-            'SHIFT draft them.',
+            'ShiftAi draft them.',
       };
 
   String get emptyAction => switch (this) {

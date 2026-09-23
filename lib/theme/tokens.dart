@@ -15,6 +15,19 @@ extension ShiftThemeIdLabel on ShiftThemeId {
 
   String get storageValue => name;
 
+  /// The retro pair, or the house pair.
+  bool get isRetro =>
+      this == ShiftThemeId.retro || this == ShiftThemeId.retroLight;
+
+  /// This theme's partner for [brightness], within its own pair: Retro
+  /// neon and Retro light, or Dark and Light. Following the system keeps
+  /// the style someone picked and only changes day for night.
+  ShiftThemeId forBrightness(Brightness brightness) {
+    final bool dark = brightness == Brightness.dark;
+    if (isRetro) return dark ? ShiftThemeId.retro : ShiftThemeId.retroLight;
+    return dark ? ShiftThemeId.dark : ShiftThemeId.light;
+  }
+
   /// Retro neon is the default a new account opens on. An account that
   /// has already chosen a theme keeps it: its name is in the blob and is
   /// matched here, so this fallback only applies when nothing was stored.
@@ -283,7 +296,10 @@ abstract final class TierColors {
   /// The same four ranks, taken down for a light ground. Pale silver and
   /// bright gold are unreadable on paper, and a tier nobody can read is
   /// not a tier.
-  static const Color bronzeOnLight = Color(0xFF9A5520);
+  // Copper, not brown. At 0xFF9A5520 it sat 15° of hue from gold's
+  // 0xFF946400 at the same darkness, and on the light themes the two read
+  // as one colour. 5.6:1 on the light ground.
+  static const Color bronzeOnLight = Color(0xFFA3461C);
   static const Color silverOnLight = Color(0xFF64707F);
   static const Color goldOnLight = Color(0xFF946400);
   static const Color platinumOnLight = Color(0xFF0A6E88);

@@ -95,7 +95,7 @@ class _BootScreen extends StatelessWidget {
               : Padding(
                   padding: const EdgeInsets.all(Space.x6),
                   child: Text(
-                    'SHIFT AI could not start.\n\n$error',
+                    'ShiftAi could not start.\n\n$error',
                     textAlign: TextAlign.center,
                     style: ShiftType.bodySm(muted),
                   ),

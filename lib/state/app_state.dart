@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:ui' show PlatformDispatcher;
 
 import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -38,6 +39,10 @@ abstract final class StoreKeys {
 class AppState extends ChangeNotifier {
   AppState._(this._prefs, Map<String, dynamic> blob, this._repo, this._snap) {
     themeId = ShiftThemeIdLabel.parse(blob['theme'] as String?);
+    // A new account follows the system, as Apple's apps do. One that has
+    // already picked a theme has a stored theme and keeps exactly what it
+    // chose until it turns this on.
+    followSystem = blob['themeAuto'] as bool? ?? blob['theme'] == null;
     // Stored as the disabled set rather than the enabled one, so a feature
     // added by a later version is on by default instead of silently
     // missing for everyone who already has a blob.
@@ -288,7 +293,19 @@ class AppState extends ChangeNotifier {
   Future<void>? _reply;
 
   // Shell ---------------------------------------------------------------
+  /// The theme picked by hand. While [followSystem] is on it names the pair
+  /// to follow the system within; [activeTheme] is what is showing.
   late ShiftThemeId themeId;
+
+  /// Light or dark with the device, within [themeId]'s pair.
+  late bool followSystem;
+
+  // Straight from dart:ui: a state can be loaded before any binding is.
+  Brightness _systemBrightness = PlatformDispatcher.instance.platformBrightness;
+
+  /// The theme on screen now.
+  ShiftThemeId get activeTheme =>
+      followSystem ? themeId.forBrightness(_systemBrightness) : themeId;
   late Surface surface;
   late ShiftMode mode;
   late bool signedIn;
@@ -452,10 +469,28 @@ class AppState extends ChangeNotifier {
       .toList(growable: false);
 
   // Commands ------------------------------------------------------------
+  /// Picking a theme by hand overrides the system.
   void setTheme(ShiftThemeId id) {
-    if (themeId == id) return;
+    if (themeId == id && !followSystem) return;
     themeId = id;
+    followSystem = false;
     _changed();
+  }
+
+  void setFollowSystem(bool on) {
+    if (followSystem == on) return;
+    // Turning it off keeps whatever is showing, rather than jumping back
+    // to the last theme picked by hand.
+    if (!on) themeId = activeTheme;
+    followSystem = on;
+    _changed();
+  }
+
+  /// The device switched between light and dark.
+  void setSystemBrightness(Brightness brightness) {
+    if (_systemBrightness == brightness) return;
+    _systemBrightness = brightness;
+    if (followSystem) notifyListeners();
   }
 
   void setSurface(Surface next) {
@@ -1126,6 +1161,7 @@ class AppState extends ChangeNotifier {
     final Map<String, dynamic> blob = <String, dynamic>{
       'v': _blobVersion,
       'theme': themeId.name,
+      'themeAuto': followSystem,
       'disabledFeatures':
           _disabled.map((ShiftFeature f) => f.name).toList(growable: false),
       'surface': surface.name,

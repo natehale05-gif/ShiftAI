@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/painting.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shift_ai/state/app_state.dart';
 import 'package:shift_ai/theme/tokens.dart';
@@ -10,8 +11,10 @@ import 'package:shift_ai/theme/tokens.dart';
 /// per theme and the page links the one showing. These hold the three
 /// copies of each theme's ground (tokens.dart, the manifests, and the
 /// hosted page's boot script) to one another.
-String _hex(ShiftThemeId id) {
-  final int argb = ShiftColors.forTheme(id).bg.toARGB32();
+String _hex(ShiftThemeId id) => _hexOf(ShiftColors.forTheme(id).bg);
+
+String _hexOf(Color colour) {
+  final int argb = colour.toARGB32();
   return '#${(argb & 0xFFFFFF).toRadixString(16).padLeft(6, '0').toUpperCase()}';
 }
 
@@ -54,6 +57,13 @@ void main() {
         RegExp("${id.name}: '${_hex(id)}'").hasMatch(script),
         isTrue,
         reason: '${id.name} should boot on ${_hex(id)}',
+      );
+      // The loading screen's logo is inked in the theme's text colour.
+      final String ink = _hexOf(ShiftColors.forTheme(id).text);
+      expect(
+        RegExp("${id.name}: '$ink'").hasMatch(script),
+        isTrue,
+        reason: '${id.name} should ink the loading logo $ink',
       );
     }
     // The key the boot script reads the saved theme from.

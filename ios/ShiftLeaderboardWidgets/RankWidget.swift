@@ -28,7 +28,7 @@ struct RankWidgetView: View {
             } else {
                 Image(systemName: "person")
                     .foregroundColor(WidgetTheme.textMuted)
-                Text("OPEN SHIFT AI")
+                Text("Open ShiftAi")
                     .font(.system(size: 10))
                     .tracking(1.2)
                     .foregroundColor(WidgetTheme.textMuted)

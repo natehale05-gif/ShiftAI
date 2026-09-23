@@ -75,7 +75,7 @@ class ShiftLogo extends StatelessWidget {
     final String? themed = ShiftLockup.forInk(c.text);
 
     return Semantics(
-      label: 'SHIFT ai',
+      label: 'ShiftAi',
       child: themed != null
           ? SvgPicture.string(themed, width: width, height: height)
           : SvgPicture.asset(ShiftLockup.asset, width: width, height: height),
@@ -140,7 +140,7 @@ class _GhostPainter extends CustomPainter {
   bool shouldRepaint(_GhostPainter old) => old.color != color;
 }
 
-/// A short uppercase mono line above a block.
+/// A short muted line above a block, in sentence case.
 class Eyebrow extends StatelessWidget {
   const Eyebrow(this.text, {this.color, super.key});
 
@@ -570,26 +570,27 @@ class HeartButton extends StatelessWidget {
     final ShiftColors c = ShiftColors.of(context);
     final bool on = item.saved;
 
-    return Tooltip(
-      message: on ? 'Saved to your vault' : 'Save to your vault',
-      child: IconButton(
-        onPressed: () => _toggle(context, state),
-        iconSize: size,
-        style: IconButton.styleFrom(
-          minimumSize: const Size(44, 44),
-          backgroundColor: c.bg.withValues(alpha: 0.55),
-          shape: const CircleBorder(),
-        ),
-        icon: AnimatedSwitcher(
-          duration: const Duration(milliseconds: 160),
-          transitionBuilder: (Widget child, Animation<double> anim) =>
-              ScaleTransition(scale: anim, child: child),
-          child: Icon(
-            on ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-            key: ValueKey<bool>(on),
-            size: size,
-            color: on ? c.accent : c.text,
-          ),
+    // The button's own tooltip, not a Tooltip round it: only the button's
+    // reaches VoiceOver and TalkBack, and with the wrapper the heart was
+    // announced as an unlabelled button.
+    return IconButton(
+      tooltip: on ? 'Saved to your vault' : 'Save to your vault',
+      onPressed: () => _toggle(context, state),
+      iconSize: size,
+      style: IconButton.styleFrom(
+        minimumSize: const Size(44, 44),
+        backgroundColor: c.bg.withValues(alpha: 0.55),
+        shape: const CircleBorder(),
+      ),
+      icon: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 160),
+        transitionBuilder: (Widget child, Animation<double> anim) =>
+            ScaleTransition(scale: anim, child: child),
+        child: Icon(
+          on ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+          key: ValueKey<bool>(on),
+          size: size,
+          color: on ? c.accent : c.text,
         ),
       ),
     );
@@ -855,30 +856,32 @@ class _PillComposerState extends State<PillComposer> {
                         // Every child is then 44 and the row is level; once
                         // the text wraps, the row grows and the controls stay
                         // with the last line.
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            vertical: (_controlSize - 28) / 2,
-                          ),
-                          child: Focus(
-                            onKeyEvent: _onKey,
-                            child: TextField(
-                              controller: _controller,
-                              focusNode: _focus,
-                              minLines: 1,
-                              maxLines: 8,
-                              keyboardType: TextInputType.multiline,
-                              textInputAction: TextInputAction.newline,
-                              style: ShiftType.body(c.text),
-                              decoration: InputDecoration(
-                                isDense: true,
-                                filled: false,
-                                contentPadding: EdgeInsets.zero,
-                                border: InputBorder.none,
-                                enabledBorder: InputBorder.none,
-                                focusedBorder: InputBorder.none,
-                                hintText: widget.hint,
-                                hintStyle: ShiftType.body(c.textMuted),
+                        //
+                        // The 8 is the field's own content padding, not a
+                        // Padding round it, so the whole 44 row focuses the
+                        // field. Before, only the middle 28 did, under the
+                        // 44-point minimum.
+                        child: Focus(
+                          onKeyEvent: _onKey,
+                          child: TextField(
+                            controller: _controller,
+                            focusNode: _focus,
+                            minLines: 1,
+                            maxLines: 8,
+                            keyboardType: TextInputType.multiline,
+                            textInputAction: TextInputAction.newline,
+                            style: ShiftType.body(c.text),
+                            decoration: InputDecoration(
+                              isDense: true,
+                              filled: false,
+                              contentPadding: const EdgeInsets.symmetric(
+                                vertical: (_controlSize - 28) / 2,
                               ),
+                              border: InputBorder.none,
+                              enabledBorder: InputBorder.none,
+                              focusedBorder: InputBorder.none,
+                              hintText: widget.hint,
+                              hintStyle: ShiftType.body(c.textMuted),
                             ),
                           ),
                         ),
@@ -927,15 +930,15 @@ class _PillComposerState extends State<PillComposer> {
                           ),
                         ),
                       const SizedBox(width: Space.x1),
-                      // The send circle is smaller than a control, so it is
-                      // centred inside one rather than sitting on the floor.
+                      // A full control, 44 like the rest. It was a 40
+                      // circle, under Apple's 44-point minimum target.
                       SizedBox(
                         width: _controlSize,
                         height: _controlSize,
                         child: Center(
                           child: SizedBox(
-                            width: 40,
-                            height: 40,
+                            width: _controlSize,
+                            height: _controlSize,
                             child: IconButton(
                               tooltip: 'Send',
                               onPressed: _send,
@@ -1194,7 +1197,10 @@ class ScreenBreadcrumb extends StatelessWidget {
             ),
           ),
         ),
-        Text(title, style: ShiftType.largeTitle(c.text)),
+        Semantics(
+          header: true,
+          child: Text(title, style: ShiftType.largeTitle(c.text)),
+        ),
       ],
     );
   }
@@ -1232,29 +1238,41 @@ class ScreenTabs extends StatelessWidget {
           selected: selected,
           onChanged: onChanged,
         ),
-        const Spacer(),
-        InkWell(
-          borderRadius: Radii.smAll,
-          onTap: onScopeTap,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: Space.x1,
-              vertical: Space.x2,
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                Text(
-                  scopeLabel,
-                  style: ShiftType.copy(c.accent, size: 15, weight: 500),
+        const SizedBox(width: Space.x3),
+        // Takes what is left and shrinks with an ellipsis rather than
+        // pushing off the edge: a repository or folder name has no length
+        // limit, and at a large text size even a short one ran 101px past
+        // the screen.
+        Expanded(
+          child: Align(
+            alignment: Alignment.centerRight,
+            child: InkWell(
+              borderRadius: Radii.smAll,
+              onTap: onScopeTap,
+              // 44 tall, the minimum tap target; it was 36.
+              child: Container(
+                constraints: const BoxConstraints(minHeight: 44),
+                padding: const EdgeInsets.symmetric(horizontal: Space.x1),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    Flexible(
+                      child: Text(
+                        scopeLabel,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: ShiftType.copy(c.accent, size: 15, weight: 500),
+                      ),
+                    ),
+                    const SizedBox(width: 2),
+                    Icon(
+                      Icons.keyboard_arrow_down_rounded,
+                      size: 18,
+                      color: c.accent,
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 2),
-                Icon(
-                  Icons.keyboard_arrow_down_rounded,
-                  size: 18,
-                  color: c.accent,
-                ),
-              ],
+              ),
             ),
           ),
         ),

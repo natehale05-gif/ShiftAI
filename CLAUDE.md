@@ -1,4 +1,4 @@
-# SHIFT AI — orientation for whoever picks this up
+# ShiftAi — orientation for whoever picks this up
 
 A Flutter creator suite: chat, vault, agents, design, notes, a weekly
 leaderboard and a trophy shelf.
@@ -122,6 +122,6 @@ exploratory, branch.
 flutter analyze && flutter test
 ```
 
-101 tests. They have caught every regression listed above at least once,
+186 tests. They have caught every regression listed above at least once,
 including several of mine. If one fails, read it before changing it —
 twice now the test was right and my expectation was wrong.

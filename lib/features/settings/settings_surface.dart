@@ -85,6 +85,17 @@ class _AppearanceCard extends StatelessWidget {
         children: <Widget>[
           const Eyebrow('Appearance'),
           const SizedBox(height: Space.x3),
+          _SwitchRow(
+            title: 'Match system',
+            subtitle: state.themeId.isRetro
+                ? 'Retro light by day, Retro neon by night, with your phone.'
+                : 'Light by day, Dark by night, with your phone.',
+            value: state.followSystem,
+            onChanged: state.setFollowSystem,
+          ),
+          const SizedBox(height: Space.x4),
+          // Picking one by hand turns Match system off: a swatch is an
+          // override, and the check marks what is showing either way.
           Wrap(
             spacing: Space.x3,
             runSpacing: Space.x3,
@@ -92,13 +103,18 @@ class _AppearanceCard extends StatelessWidget {
               for (final ShiftThemeId id in ShiftThemeId.values)
                 _ThemeSwatch(
                   id: id,
-                  selected: state.themeId == id,
+                  selected: state.activeTheme == id,
                   onTap: () => state.setTheme(id),
                 ),
             ],
           ),
           const SizedBox(height: Space.x3),
-          Text(state.themeId.label, style: ShiftType.bodyStrong(c.text)),
+          Text(
+            state.followSystem
+                ? '${state.activeTheme.label} · matching your phone'
+                : state.activeTheme.label,
+            style: ShiftType.bodyStrong(c.text),
+          ),
         ],
       ),
     );
@@ -156,6 +172,67 @@ class _ThemeSwatch extends StatelessWidget {
   }
 }
 
+/// A setting that is on or off: a title, a line under it, and the iOS
+/// switch in the theme's accent.
+///
+/// The whole row is the control, as it is in Settings on an iPhone. The
+/// switch alone is 59 by 39, under the 44-point minimum, and on its own
+/// it was announced as a toggle with no name. Merged, the row reads as
+/// one labelled switch and takes the tap anywhere along it.
+class _SwitchRow extends StatelessWidget {
+  const _SwitchRow({
+    required this.title,
+    required this.subtitle,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final String title;
+  final String subtitle;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final ShiftColors c = ShiftColors.of(context);
+    return MergeSemantics(
+      child: InkWell(
+        onTap: () => onChanged(!value),
+        borderRadius: Radii.mdAll,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 44),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: Space.x1),
+            child: Row(
+              children: <Widget>[
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(title, style: ShiftType.bodyStrong(c.text)),
+                      const SizedBox(height: 2),
+                      Text(subtitle, style: ShiftType.caption(c.textMuted)),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: Space.x3),
+                // Material's switch has an outlined off state and an inset
+                // thumb, and on a phone it looked borrowed.
+                CupertinoSwitch(
+                  value: value,
+                  activeTrackColor: c.accent,
+                  inactiveTrackColor: c.surfaceRaised,
+                  onChanged: onChanged,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// The switches that hide whole sections of the app.
 ///
 /// Off means gone, not greyed out: the sidebar row, the surface and every
@@ -182,40 +259,11 @@ class _FeaturesCard extends StatelessWidget {
           ),
           const SizedBox(height: Space.x3),
           for (final ShiftFeature feature in ShiftFeature.values)
-            Padding(
-              padding: const EdgeInsets.only(bottom: Space.x2),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: <Widget>[
-                        Text(
-                          feature.label,
-                          style: ShiftType.bodyStrong(c.text),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          feature.description,
-                          style: ShiftType.caption(c.textMuted),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: Space.x3),
-                  // The iOS switch, in the theme's accent. Material's has an
-                  // outlined off state and an inset thumb, and on a phone it
-                  // is the one control on this screen that looks borrowed.
-                  CupertinoSwitch(
-                    value: state.isEnabled(feature),
-                    activeTrackColor: c.accent,
-                    inactiveTrackColor: c.surfaceRaised,
-                    onChanged: (bool on) =>
-                        state.setFeatureEnabled(feature, on),
-                  ),
-                ],
-              ),
+            _SwitchRow(
+              title: feature.label,
+              subtitle: feature.description,
+              value: state.isEnabled(feature),
+              onChanged: (bool on) => state.setFeatureEnabled(feature, on),
             ),
         ],
       ),
@@ -291,7 +339,7 @@ class _ConnectionsCard extends StatelessWidget {
           const SizedBox(height: Space.x3),
           Text(
             live.isEmpty
-                ? 'Nothing connected yet. Browse all to see what SHIFT can '
+                ? 'Nothing connected yet. Browse all to see what ShiftAi can '
                     'talk to, and authorise the ones you use.'
                 : 'The other ${all.length - live.length} are listed and '
                     'ready to authorise. Logos are placeholders until the '
@@ -588,6 +636,89 @@ class _AvatarsCardState extends State<_AvatarsCard> {
   }
 }
 
+/// An avatar's face in its gallery card.
+///
+/// Only a preview the server has sent is a picture. Before, anything that
+/// was not a ready avatar with a URL got a spinner, so a ready avatar whose
+/// preview had not arrived, like the demo's "Everyday", spun forever and
+/// read as broken. Now a face with no picture is a portrait in its own
+/// colours, seeded by the avatar like a vault poster. Training dims it and
+/// marks it with an hourglass rather than a spinner that never finishes.
+class _AvatarFace extends StatelessWidget {
+  const _AvatarFace({required this.avatar});
+
+  final Avatar avatar;
+
+  static const double _size = 64;
+
+  @override
+  Widget build(BuildContext context) {
+    final ShiftColors c = ShiftColors.of(context);
+    final String? url = avatar.previewUrl;
+
+    final Widget portrait = Stack(
+      fit: StackFit.expand,
+      children: <Widget>[
+        PosterArt(seed: avatar.id),
+        Icon(
+          Icons.person_rounded,
+          size: _size * 0.62,
+          color: Colors.white.withValues(alpha: 0.85),
+        ),
+      ],
+    );
+
+    final Widget face = switch (avatar.status) {
+      AvatarStatus.failed => ColoredBox(
+          color: c.surface,
+          child: Icon(Icons.error_outline_rounded, color: c.danger),
+        ),
+      AvatarStatus.ready when url != null && url.isNotEmpty => Image.network(
+          url,
+          fit: BoxFit.cover,
+          errorBuilder: (BuildContext context, Object _, StackTrace? __) =>
+              portrait,
+        ),
+      AvatarStatus.ready => portrait,
+      AvatarStatus.training => Opacity(opacity: 0.45, child: portrait),
+    };
+
+    return Semantics(
+      label: '${avatar.name}, ${avatar.status.name}',
+      image: true,
+      excludeSemantics: true,
+      child: SizedBox.square(
+        dimension: _size,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: <Widget>[
+            Positioned.fill(child: ClipOval(child: face)),
+            if (avatar.status == AvatarStatus.training)
+              Positioned(
+                right: -2,
+                bottom: -2,
+                child: Container(
+                  width: 24,
+                  height: 24,
+                  decoration: BoxDecoration(
+                    color: c.surface,
+                    shape: BoxShape.circle,
+                  ),
+                  alignment: Alignment.center,
+                  child: Icon(
+                    Icons.hourglass_top_rounded,
+                    size: 14,
+                    color: c.textMuted,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _AvatarTile extends StatelessWidget {
   const _AvatarTile({required this.avatar});
 
@@ -621,46 +752,16 @@ class _AvatarTile extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
-          Center(
-            child: Container(
-              width: 64,
-              height: 64,
-              alignment: Alignment.center,
-              clipBehavior: Clip.antiAlias,
-              decoration:
-                  BoxDecoration(shape: BoxShape.circle, color: c.surface),
-              child: switch (avatar.status) {
-                AvatarStatus.ready when avatar.previewUrl != null =>
-                  Image.network(
-                    avatar.previewUrl!,
-                    fit: BoxFit.cover,
-                    width: 64,
-                    height: 64,
-                    errorBuilder: (BuildContext context, Object _,
-                            StackTrace? __) =>
-                        Icon(Icons.person_outline_rounded, color: c.textMuted),
-                  ),
-                AvatarStatus.failed =>
-                  Icon(Icons.error_outline_rounded, color: c.danger),
-                _ => SizedBox.square(
-                    dimension: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(c.accent),
-                    ),
-                  ),
-              },
-            ),
-          ),
+          Center(child: _AvatarFace(avatar: avatar)),
           const SizedBox(height: Space.x2),
           Text(
             avatar.name,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             textAlign: TextAlign.center,
-            style: ShiftType.bodySm(c.text),
+            style: ShiftType.copy(c.text, size: 15, weight: 600),
           ),
-          const SizedBox(height: Space.x1),
+          const SizedBox(height: 2),
           Text(
             avatar.personal
                 ? 'Personal'
@@ -694,10 +795,10 @@ class _AvatarTile extends StatelessWidget {
               icon: Icon(
                 Icons.delete_outline_rounded,
                 size: 18,
-                color: c.danger,
+                color: c.textMuted.withValues(alpha: 0.7),
               ),
               style: IconButton.styleFrom(
-                minimumSize: const Size(32, 32),
+                minimumSize: const Size(44, 44),
                 padding: EdgeInsets.zero,
               ),
             ),

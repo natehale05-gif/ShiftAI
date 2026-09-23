@@ -159,9 +159,12 @@ class _SignInToChat extends StatelessWidget {
                 // seeded demo it keeps the vault, notes and standings —
                 // only the thread and the avatar go — so this is a way in
                 // rather than a way to lose what is on screen.
-                OutlinedButton(
+                // Filled: it is the card's one action, so it is drawn as the
+                // prominent one. The outline version measured 2.5:1 on the
+                // light themes, under the 4.5:1 text needs.
+                FilledButton(
                   onPressed: state.signOut,
-                  child: Text('Sign in', style: ShiftType.bodySm(c.text)),
+                  child: const Text('Sign in'),
                 ),
               ],
             ),

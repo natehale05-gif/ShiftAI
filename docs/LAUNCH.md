@@ -150,7 +150,7 @@ to put in a store listing for an app about creators getting paid.
 
 ## Store listing text
 
-**Name (30 char limit):** SHIFT AI
+**Name (30 char limit):** ShiftAi
 
 **Subtitle / short description (30 / 80):**
 - iOS: `Make it. Keep it. Get paid.`
@@ -158,7 +158,7 @@ to put in a store listing for an app about creators getting paid.
 
 **Description:**
 
-> SHIFT AI is a creator suite that lives in one place. Ask for a clip, a
+> ShiftAi is a creator suite that lives in one place. Ask for a clip, a
 > still, a track or a read, and it is made in the same chat you asked in.
 > Everything you make lands in your vault, where you can rename it,
 > re-run the prompt behind it, or publish it out.

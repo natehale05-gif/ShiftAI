@@ -218,6 +218,23 @@ void main() {
     expect(field(), closeTo(overKeyboard, 0.5));
   });
 
+  testWidgets('an avatar with no preview is a portrait, not a spinner',
+      (WidgetTester tester) async {
+    // The demo's "Everyday" is ready with no preview URL, and "Studio
+    // lighting" is training. Both used to spin forever.
+    final AppState state = await _freshState();
+    await tester.pumpWidget(ShiftApp(state: state));
+    await tester.pump();
+    await _dismissRingsSheet(tester);
+    state.setSurface(Surface.settings);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Everyday'), findsOneWidget);
+    expect(find.text('Studio lighting'), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.byIcon(Icons.hourglass_top_rounded), findsOneWidget);
+  });
+
   testWidgets('the sidebar starts closed and the hamburger opens it',
       (WidgetTester tester) async {
     tester.view.physicalSize = const Size(1440, 1024);
@@ -584,8 +601,9 @@ void main() {
     );
     expect(grown.height, greaterThan(pill.height));
 
-    // A full-size control sits on the 6px inset; the send circle is 40 in
-    // a 44 slot, so it clears the floor by 6 + 2.
+    // Every control sits on the 6px inset, send included: it is a full 44
+    // control now, not a 40 circle in a 44 slot, which was under Apple's
+    // minimum tap target.
     final Rect attach =
         tester.getRect(find.byTooltip('Attach a file — any kind').first);
     expect(
@@ -596,8 +614,8 @@ void main() {
     final Rect send = tester.getRect(find.byTooltip('Send').first);
     expect(
       grown.bottom - send.bottom,
-      closeTo(8, 0.5),
-      reason: 'the send circle should sit 8 above the pill floor',
+      closeTo(6, 0.5),
+      reason: 'the send button should sit 6 above the pill floor',
     );
   });
 

@@ -40,16 +40,8 @@ abstract final class Decode {
         name: _require<String>(json, 'name'),
         email: _require<String>(json, 'email'),
         initials: json['initials'] as String? ??
-            _initialsFrom(_require<String>(json, 'name')),
+            initialsOf(_require<String>(json, 'name')),
       );
-
-  static String _initialsFrom(String name) {
-    final List<String> parts =
-        name.split(' ').where((String p) => p.isNotEmpty).toList();
-    if (parts.isEmpty) return '?';
-    if (parts.length == 1) return parts.first.characters(2);
-    return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
-  }
 
   /// The trophy shelf is a fixed catalogue with artwork the server does not
   /// have. It sends which are earned and how far along the rest are; the
@@ -153,9 +145,4 @@ abstract final class Decode {
     }
     return catalogue;
   }
-}
-
-extension on String {
-  String characters(int n) =>
-      (length <= n ? this : substring(0, n)).toUpperCase();
 }

@@ -1,4 +1,4 @@
-# Getting SHIFT AI into the two stores
+# Getting ShiftAi into the two stores
 
 What the project already does, and what is left. The second list is the
 real one — most of it needs decisions or credentials that are not in the
@@ -53,7 +53,7 @@ run, and set the signing team on the Runner target.
 
 ## Done in the project
 
-- **Identity.** `SHIFT AI` on both platforms, bundle id `club.shiftai.app`
+- **Identity.** `ShiftAi` on both platforms, bundle id `club.shiftai.app`
   on both. Neither can change after the first upload.
 - **Version.** Reset to `1.0.0+1` in `pubspec.yaml`. It was `1.4.0+14`,
   which was prototype counting — a first submission should start at 1.

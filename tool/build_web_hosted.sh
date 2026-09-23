@@ -66,7 +66,7 @@ cat > index.html <<'HTML'
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="description" content="SHIFT AI — the creator suite: chat, earnings, vault, trophies, notes, agents.">
+  <meta name="description" content="ShiftAi — the creator suite: chat, earnings, vault, trophies, notes, agents.">
   <!--
     The live theme-color tag is what Chrome reads, in real time, for the
     status bar. An installed app's navigation bar ignores it and takes the
@@ -77,11 +77,11 @@ cat > index.html <<'HTML'
   <meta name="theme-color" content="#0A0A0F">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="SHIFT AI">
+  <meta name="apple-mobile-web-app-title" content="ShiftAi">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
   <link rel="icon" type="image/png" href="favicon.png">
   <link rel="manifest" href="manifest.json">
-  <title>SHIFT AI</title>
+  <title>ShiftAi</title>
   <script>
     // Before any Dart runs: link the manifest for the theme this person
     // last chose, and paint the first frame in it. Chrome colours an
@@ -96,30 +96,59 @@ cat > index.html <<'HTML'
         dark: '#0E1628', light: '#F4F6FA',
         retro: '#0A0A0F', retroLight: '#F7F7F8'
       };
-      var theme = 'retro';
+      // ShiftColors' text per theme: the ink of the loading screen's logo.
+      var INK = {
+        dark: '#F2F5FA', light: '#0E1628',
+        retro: '#FFFFFF', retroLight: '#0A0A0F'
+      };
+      // The same choice AppState makes: the theme picked by hand, or,
+      // following the system (a new account's default), that theme's
+      // day or night partner.
+      var picked = 'retro', follow = true;
       try {
         var raw = localStorage.getItem('flutter.shift.app.v1');
-        var saved = raw && JSON.parse(JSON.parse(raw)).theme;
-        if (BG.hasOwnProperty(saved)) theme = saved;
+        var saved = raw ? JSON.parse(JSON.parse(raw)) : {};
+        if (BG.hasOwnProperty(saved.theme)) picked = saved.theme;
+        follow = typeof saved.themeAuto === 'boolean'
+          ? saved.themeAuto : !saved.theme;
       } catch (e) { /* nothing saved, or unreadable: the default */ }
+      var theme = picked;
+      if (follow) {
+        var night = window.matchMedia &&
+          window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var retro = picked === 'retro' || picked === 'retroLight';
+        theme = retro ? (night ? 'retro' : 'retroLight')
+                      : (night ? 'dark' : 'light');
+      }
       document.querySelector('link[rel="manifest"]')
         .setAttribute('href', 'manifest-' + theme + '.json');
       document.querySelector('meta[name="theme-color"]')
         .setAttribute('content', BG[theme]);
       document.documentElement.style.backgroundColor = BG[theme];
       window.__shiftBootBg = BG[theme];
+      window.__shiftBootInk = INK[theme];
     })();
   </script>
   <style>
-    /* ShiftColors.retro bg and textMuted. This is painted before any
-       Dart runs, so it has to match the theme a new account opens on or
-       the load flashes one ground and then repaints another. */
+    /* ShiftColors.retro bg and text, the theme a new account opens on.
+       The script above repaints both for a saved theme before the first
+       paint, so the load never flashes one ground and then another. */
     html, body { margin: 0; padding: 0; height: 100%; background: #0A0A0F; }
+    /* The lockup alone on the theme's ground, breathing slowly so a
+       long first load on a phone still reads as alive. It used to be
+       "LOADING SHIFT AI" in tracked uppercase mono, pale grey on every
+       theme, which all but vanished on the light ones. */
     #boot {
       position: fixed; inset: 0; display: flex; align-items: center;
-      justify-content: center; background: #0A0A0F; color: #BFBFBF;
-      font: 500 11px/14px ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-      letter-spacing: 0.16em;
+      justify-content: center; background: #0A0A0F; color: #FFFFFF;
+    }
+    #boot svg {
+      height: 30px; width: auto;
+      animation: boot-breathe 1.4s ease-in-out infinite alternate;
+    }
+    @keyframes boot-breathe { from { opacity: 1; } to { opacity: 0.45; } }
+    @media (prefers-reduced-motion: reduce) {
+      #boot svg { animation: none; }
     }
     /* Chrome for Android only draws a page under the gesture bar, in
        place of a solid bar, when the page uses this inset. Flutter paints
@@ -134,10 +163,12 @@ cat > index.html <<'HTML'
 </head>
 <body>
   <div id="shift-safe-area"></div>
-  <div id="boot">LOADING SHIFT AI</div>
+  <div id="boot" role="img" aria-label="ShiftAi is loading">__LOCKUP__</div>
   <script>
     document.body.style.backgroundColor = window.__shiftBootBg;
-    document.getElementById('boot').style.backgroundColor = window.__shiftBootBg;
+    var boot = document.getElementById('boot');
+    boot.style.backgroundColor = window.__shiftBootBg;
+    boot.style.color = window.__shiftBootInk;
   </script>
   <script>
     // Hosts that allow-list file extensions will not serve .bin, so the
@@ -200,5 +231,22 @@ HTML
 # — the page's own JavaScript uses '$'-free code, but there is no reason
 # to trust that forever), so the build id is spliced in afterwards.
 sed -i.bak "s/__BUILD_ID__/$BUILD_ID/" index.html && rm -f index.html.bak
+
+# The loading screen's logo is the app's own lockup, inlined so it shows
+# before anything else has downloaded. Its ink becomes currentColor, which
+# the boot script sets to the saved theme's text colour, as ShiftLockup
+# does in Dart. The gradient "ai" badge is the brand's and stays as it is.
+python3 - <<'PY'
+import pathlib, re
+svg = pathlib.Path('assets/assets/brand/shift-ai-lockup.svg').read_text()
+svg = re.sub(r'<!--.*?-->', '', svg, flags=re.S)
+assert '#F2F5FA' in svg, 'lockup ink changed; update build_web_hosted.sh'
+svg = svg.replace('#F2F5FA', 'currentColor')
+svg = svg.replace('<svg ', '<svg aria-hidden="true" ', 1)
+page = pathlib.Path('index.html')
+html = page.read_text()
+assert '__LOCKUP__' in html
+page.write_text(html.replace('__LOCKUP__', svg.strip()))
+PY
 
 echo "built $(find . -type f | wc -l) files, $(du -sh . | cut -f1)"

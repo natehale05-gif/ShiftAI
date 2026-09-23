@@ -8,8 +8,8 @@ import '../models/models.dart';
 abstract final class Seed {
   /// Brand kits a design can start from.
   static const List<String> brands = <String>[
-    'SHIFT — house',
-    'SHIFT — retro neon',
+    'ShiftAi — house',
+    'ShiftAi — retro neon',
     'Client: Northline',
     'Client: Rooftop Coffee',
   ];
@@ -25,7 +25,7 @@ abstract final class Seed {
     // No '@': docs/API.md stores the bare handle and every screen adds the
     // '@' when it draws one.
     handle: 'shiftai',
-    name: 'SHIFT AI',
+    name: 'ShiftAi',
     email: 'demo@shiftai.club',
     initials: 'SA',
   );
@@ -354,11 +354,12 @@ abstract final class Seed {
   // Design --------------------------------------------------------------
 
   static const List<DesignDoc> designs = <DesignDoc>[
+    // One of each kind the thumbnails draw.
     DesignDoc(
       id: 'd-palette',
       title: 'Palette reference sheet',
       versions: 2,
-      kindLabel: 'Page',
+      kindLabel: 'Brand',
     ),
     DesignDoc(
       id: 'd-tide',
@@ -366,24 +367,30 @@ abstract final class Seed {
       versions: 1,
       kindLabel: 'Page',
     ),
+    DesignDoc(
+      id: 'd-recap',
+      title: 'Launch week recap',
+      versions: 3,
+      kindLabel: 'Deck',
+    ),
   ];
 
   static const List<SourceOption> sourceOptions = <SourceOption>[
     SourceOption(
       title: 'Sync from a repository',
-      detail: 'Point SHIFT at a repo; it reads the tokens and components '
+      detail: 'Point ShiftAi at a repo; it reads the tokens and components '
           'from code.',
       icon: Icons.code_rounded,
     ),
     SourceOption(
       title: 'Build from connectors',
-      detail: 'SHIFT builds from your connected tools, or asks a few '
+      detail: 'ShiftAi builds from your connected tools, or asks a few '
           'questions first.',
       icon: Icons.hub_outlined,
     ),
     SourceOption(
       title: 'Upload brand files',
-      detail: 'Drop in logos, fonts, guidelines and token files; SHIFT '
+      detail: 'Drop in logos, fonts, guidelines and token files; ShiftAi '
           'drafts from them.',
       icon: Icons.note_add_outlined,
     ),
@@ -417,7 +424,7 @@ abstract final class Seed {
     ChatMessage(
       id: 'm-reply',
       author: MessageAuthor.shift,
-      eyebrow: 'SHIFT · Video',
+      eyebrow: 'ShiftAi · Video',
       body: 'Here is the cut. Take two starts at 00:14, so I used that one '
           'and ducked the room tone six decibels under the voice.',
       bullets: <String>[

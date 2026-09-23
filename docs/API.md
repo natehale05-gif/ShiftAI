@@ -61,7 +61,7 @@ rest of the app does not care.
 ### `/v1/me`
 
 ```json
-{ "handle": "shiftai", "name": "SHIFT AI", "email": "demo@shiftai.club",
+{ "handle": "shiftai", "name": "ShiftAi", "email": "demo@shiftai.club",
   "initials": "NH" }
 ```
 
@@ -334,7 +334,7 @@ answers in by default. An id that is not theirs, not found, or not yet
 Answer with one or more messages, in the order they should appear:
 
 ```json
-[{ "id": "m1", "author": "shift", "eyebrow": "SHIFT · VIDEO",
+[{ "id": "m1", "author": "shift", "eyebrow": "ShiftAi · Video",
    "body": "Here is the cut...",
    "bullets": ["0:00 to 0:06 — wide shot, no music"],
    "attachment": { "fileName": "promo-vertical-v4.mp4", "kind": "video",
@@ -466,7 +466,7 @@ Answers 200 with:
 
 ```json
 { "accessToken": "...", "refreshToken": "...", "expiresIn": 3600,
-  "user": { "handle": "shiftai", "name": "SHIFT AI",
+  "user": { "handle": "shiftai", "name": "ShiftAi",
             "email": "demo@shiftai.club" } }
 ```
 

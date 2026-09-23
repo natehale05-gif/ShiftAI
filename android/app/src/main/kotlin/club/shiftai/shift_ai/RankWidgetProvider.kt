@@ -27,7 +27,7 @@ class RankWidgetProvider : HomeWidgetProvider() {
 
             if (rank == null) {
                 views.setTextViewText(R.id.rank_value, "—")
-                views.setTextViewText(R.id.rank_label, "OPEN SHIFT AI")
+                views.setTextViewText(R.id.rank_label, "Open ShiftAi")
                 views.setTextViewText(R.id.rank_earnings, "")
                 views.setTextViewText(R.id.rank_movement, "")
             } else {

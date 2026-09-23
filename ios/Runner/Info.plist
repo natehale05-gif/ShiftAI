@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>SHIFT AI</string>
+	<string>ShiftAi</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -13,7 +13,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>SHIFT AI</string>
+	<string>ShiftAi</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -46,10 +46,10 @@
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>SHIFT AI needs access to your photos so you can choose one as your avatar and attach pictures to what you are making.</string>
+	<string>ShiftAi needs access to your photos so you can choose one as your avatar and attach pictures to what you are making.</string>
 	<key>NSCameraUsageDescription</key>
-	<string>SHIFT AI uses the camera when you take a new photo for your avatar.</string>
+	<string>ShiftAi uses the camera when you take a new photo for your avatar.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>SHIFT AI uses your rough location to place you in a local leaderboard against people near you.</string>
+	<string>ShiftAi uses your rough location to place you in a local leaderboard against people near you.</string>
 </dict>
 </plist>

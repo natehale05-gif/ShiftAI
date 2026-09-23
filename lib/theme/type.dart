@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 
-/// The SHIFT type scale. Outfit for display, Manrope for copy, IBM Plex Mono
-/// for labels — mono is the accent of the typography, so it is used in short
-/// bursts only (buttons, tabs, eyebrows, tags).
+/// The ShiftAi type scale: Outfit for display, Manrope for copy, and
+/// Manrope's tabular figures wherever numbers line up.
+///
+/// IBM Plex Mono used to set labels, buttons and tabs in tracked uppercase.
+/// The Apple pass retired that, and its last use (a failure's details)
+/// moved to tabular figures, so the face is no longer bundled. It was
+/// 134 KB of every first load on the web.
 ///
 /// The faces are bundled in `assets/fonts/`, so the app draws its own type
 /// with no network call. Outfit and Manrope are variable, hence the
@@ -10,7 +14,6 @@ import 'package:flutter/material.dart';
 abstract final class ShiftType {
   static const String _display = 'Outfit';
   static const String _body = 'Manrope';
-  static const String _mono = 'IBMPlexMono';
 
   static const List<String> _displayFallback = <String>[
     'Helvetica Neue',
@@ -19,11 +22,6 @@ abstract final class ShiftType {
   static const List<String> _bodyFallback = <String>[
     'Helvetica Neue',
     'Arial',
-  ];
-  static const List<String> _monoFallback = <String>[
-    'SF Mono',
-    'Menlo',
-    'Consolas',
   ];
 
   static TextStyle _outfit({
@@ -62,23 +60,6 @@ abstract final class ShiftType {
     );
   }
 
-  static TextStyle _plex({
-    required double size,
-    required double lineHeight,
-    double? letterSpacing,
-    required Color color,
-  }) {
-    return TextStyle(
-      fontFamily: _mono,
-      fontFamilyFallback: _monoFallback,
-      fontSize: size,
-      height: lineHeight / size,
-      fontWeight: FontWeight.w500,
-      letterSpacing: letterSpacing,
-      color: color,
-    );
-  }
-
   static TextStyle displayXl(Color color) => _outfit(
         size: 56,
         lineHeight: 60,
@@ -113,26 +94,6 @@ abstract final class ShiftType {
   static TextStyle caption(Color color) =>
       _manrope(size: 13, lineHeight: 20, weight: 500, color: color);
 
-  /// Uppercase mono, for buttons, tabs and eyebrows.
-  static TextStyle label(Color color) => _plex(
-        size: 12,
-        lineHeight: 16,
-        letterSpacing: 12 * 0.18,
-        color: color,
-      );
-
-  /// Uppercase mono, for tags, badges and table headers.
-  static TextStyle labelSm(Color color) => _plex(
-        size: 11,
-        lineHeight: 14,
-        letterSpacing: 11 * 0.16,
-        color: color,
-      );
-
-  /// Plain mono, for figures that should line up in a column.
-  static TextStyle mono(Color color, {double size = 13}) =>
-      _plex(size: size, lineHeight: 20, color: color);
-
   /// A screen's own title, under its back link — the large title a
   /// navigation stack opens on.
   static TextStyle largeTitle(Color color) => _outfit(
@@ -149,7 +110,7 @@ abstract final class ShiftType {
       _outfit(size: 20, lineHeight: 26, weight: 600, color: color);
 
   /// Numbers that line up in a column — money, ranks, counts, the clock —
-  /// in the copy face rather than the mono one. Tabular figures give the
+  /// in the copy face rather than a mono one. Tabular figures give the
   /// alignment mono was being used for, without setting every figure like
   /// a terminal readout.
   ///
