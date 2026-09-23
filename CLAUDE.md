@@ -93,11 +93,22 @@ after the first upload.
   caller reports a refusal to the person.
 - `lib/theme/tokens.dart` — four themes. **No literal hex anywhere else.**
 
-## The server does not exist yet
+## The server
 
-Someone else is building it. `docs/API.md` is the complete contract —
-every route, shape, error semantic, and the four auth routes. It is
-specific enough to work from without a conversation.
+Rex builds it. A preview is live at
+`https://app.shiftai.club/app-preview/api`, and it rebuilds the web app
+from this repo's `main` within about five minutes of a push. Only the
+three of the team can sign in with real accounts, so it spends real
+credits. `docs/API.md` is the contract: every route, shape, error
+semantic, the four auth routes, and (since 23 Sept 2026) the vault's
+media fields and the Suite's boards at `/v1/boards`.
+
+Not wired yet: `ANY /v1/studio/<path>`, which relays to the Suite's own
+`/api/studio/<path>` (chat, image, video, voice, music, deck and the
+rest). Its request and response shapes are in the Suite's route files
+(`shiftai-suite/app/api/studio/`), which this repo cannot see. Still
+read-only on the server: rename, publish and delete in the vault,
+changing username, and deleting the account.
 
 `python3 tool/mock_engine.py` serves that whole contract with everything
 empty, on 127.0.0.1:8111. Point the app at it to see exactly what a brand
@@ -125,6 +136,6 @@ exploratory, branch.
 flutter analyze && flutter test
 ```
 
-200 tests. They have caught every regression listed above at least once,
+215 tests. They have caught every regression listed above at least once,
 including several of mine. If one fails, read it before changing it —
 twice now the test was right and my expectation was wrong.
