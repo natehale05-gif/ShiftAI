@@ -535,6 +535,53 @@ void main() {
     expect(state.notes.length, before);
   });
 
+  testWidgets('a note saves as you type, with no Save button',
+      (WidgetTester tester) async {
+    final AppState state = await _freshState();
+    await tester.pumpWidget(ShiftApp(state: state));
+    await tester.pump();
+    await _dismissRingsSheet(tester);
+    state.setSurface(Surface.notes);
+    await tester.pumpAndSettle();
+
+    final Note first = state.notes.first;
+    await tester.tap(find.text(first.title));
+    await tester.pumpAndSettle();
+    expect(find.text('Save'), findsNothing);
+
+    final Finder body = find.byType(TextField).last;
+    await tester.enterText(body, 'Rewritten on the train');
+    // Nothing is written mid-sentence; a pause writes it.
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(state.notes.first.body, first.body);
+    await tester.pump(const Duration(milliseconds: 800));
+    expect(state.notes.first.body, 'Rewritten on the train');
+
+    // Leaving writes anything typed since the last pause.
+    await tester.enterText(body, 'Rewritten again');
+    await tester.tap(find.text('Notes').first);
+    await tester.pumpAndSettle();
+    expect(state.notes.first.body, 'Rewritten again');
+  });
+
+  testWidgets('a new note left blank does not stay behind',
+      (WidgetTester tester) async {
+    final AppState state = await _freshState();
+    await tester.pumpWidget(ShiftApp(state: state));
+    await tester.pump();
+    await _dismissRingsSheet(tester);
+    state.setSurface(Surface.notes);
+    await tester.pumpAndSettle();
+    final int before = state.notes.length;
+
+    await tester.tap(find.byTooltip('New note'));
+    await tester.pumpAndSettle();
+    expect(state.notes.length, before + 1);
+    await tester.tap(find.text('Notes').first);
+    await tester.pumpAndSettle();
+    expect(state.notes.length, before);
+  });
+
   test('a design duplicates next to itself and deletes cleanly', () async {
     final AppState state = await _freshState();
     final DesignDoc first = state.designs.first;

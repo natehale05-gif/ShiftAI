@@ -7,6 +7,7 @@ import '../../models/models.dart';
 import '../../state/app_state.dart';
 import '../../theme/tokens.dart';
 import '../../theme/type.dart';
+import '../../util/format.dart';
 import '../../widgets/common.dart';
 
 /// A flat list. A note is a title and what it says — nothing else earns a
@@ -259,17 +260,18 @@ class _NoteRow extends StatelessWidget {
   }
 }
 
-/// Tapping a note — or the + — opens it for editing. Saving writes back
-/// through the same store everything else uses.
+/// Tapping a note, or the compose button, opens it full screen. Nothing
+/// has to be saved: what is typed is written back a moment after you
+/// stop, and again on the way out.
+///
+/// It used to be a bottom sheet with Cancel and Save, and Cancel threw the
+/// changes away. Apple's Notes has no Save button at all, and a note lost
+/// to a mistaken tap is the one failure a notes app cannot have.
 Future<void> _openNote(BuildContext context, Note note) {
-  return showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    backgroundColor: ShiftColors.of(context).surface,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radii.lg),
+  return Navigator.of(context).push(
+    MaterialPageRoute<void>(
+      builder: (BuildContext context) => _NoteEditor(note: note),
     ),
-    builder: (BuildContext context) => _NoteEditor(note: note),
   );
 }
 
@@ -287,141 +289,265 @@ class _NoteEditorState extends State<_NoteEditor> {
       text: widget.note.title == 'Untitled' ? '' : widget.note.title);
   late final TextEditingController _body =
       TextEditingController(text: widget.note.body);
+  final FocusNode _bodyFocus = FocusNode();
+  final FocusNode _titleFocus = FocusNode();
+
+  /// How long after the last keystroke the note is written.
+  static const Duration _settle = Duration(milliseconds: 700);
+
+  Timer? _pending;
+  late String _savedTitle = _title.text;
+  late String _savedBody = _body.text;
+  bool _reportedFailure = false;
+
+  // Held, not looked up: dispose writes the note back, and by then the
+  // tree they would be looked up in is gone.
+  late AppState _state;
+  late ScaffoldMessengerState _messenger;
+
+  bool get _dirty => _title.text != _savedTitle || _body.text != _savedBody;
+  bool get _blank => _title.text.trim().isEmpty && _body.text.trim().isEmpty;
+  bool get _editing => _bodyFocus.hasFocus || _titleFocus.hasFocus;
+
+  @override
+  void initState() {
+    super.initState();
+    _title.addListener(_changed);
+    _body.addListener(_changed);
+    _bodyFocus.addListener(() => setState(() {}));
+    _titleFocus.addListener(() => setState(() {}));
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _state = AppScope.read(context);
+    _messenger = ScaffoldMessenger.of(context);
+  }
+
+  void _changed() {
+    if (!_dirty) return;
+    _pending?.cancel();
+    _pending = Timer(_settle, _save);
+  }
+
+  Future<void> _save() async {
+    _pending?.cancel();
+    _pending = null;
+    if (!_dirty || _blank) return;
+    final String title = _title.text;
+    final String body = _body.text;
+    final bool took =
+        await _state.saveNote(widget.note.id, title: title, body: body);
+    if (took) {
+      _savedTitle = title;
+      _savedBody = body;
+      _reportedFailure = false;
+    } else if (!_reportedFailure) {
+      // Once, not on every keystroke. The text stays on screen and the
+      // next pause tries again.
+      _reportedFailure = true;
+      _messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            _state.lastError?.message ??
+                'Could not save this note. It is still here; keep typing '
+                    'and it will try again.',
+          ),
+        ),
+      );
+    }
+  }
 
   @override
   void dispose() {
+    _pending?.cancel();
+    // A note opened from the compose button and left empty should not
+    // stay behind as a blank row. Anything else is written on the way out.
+    //
+    // After the frame, not here: dispose runs while the tree is being torn
+    // down, and a write here notifies listeners mid-teardown, which threw
+    // "setState() or markNeedsBuild() called when widget tree was locked".
+    final String id = widget.note.id;
+    final String title = _title.text;
+    final String body = _body.text;
+    final AppState state = _state;
+    if (_blank) {
+      Future<void>.microtask(() => state.deleteNote(id));
+    } else if (_dirty) {
+      Future<void>.microtask(
+        () => state.saveNote(id, title: title, body: body),
+      );
+    }
     _title.dispose();
     _body.dispose();
+    _bodyFocus.dispose();
+    _titleFocus.dispose();
     super.dispose();
+  }
+
+  Future<void> _delete() async {
+    final NavigatorState nav = Navigator.of(context);
+    final bool? yes = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext context) {
+        final ShiftColors c = ShiftColors.of(context);
+        return AlertDialog(
+          title: Text('Delete this note?', style: ShiftType.subheading(c.text)),
+          content:
+              Text('It goes for good.', style: ShiftType.bodySm(c.textMuted)),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: c.danger,
+                foregroundColor: c.onStatus,
+              ),
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Delete'),
+            ),
+          ],
+        );
+      },
+    );
+    if (!(yes ?? false)) return;
+    _pending?.cancel();
+    // Blank the fields so dispose does not write the note back.
+    _title.clear();
+    _body.clear();
+    await _state.deleteNote(widget.note.id);
+    nav.pop();
   }
 
   @override
   Widget build(BuildContext context) {
     final ShiftColors c = ShiftColors.of(context);
-    final AppState state = AppScope.read(context);
 
-    return Padding(
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.viewInsetsOf(context).bottom,
-      ),
-      child: DraggableScrollableSheet(
-        expand: false,
-        initialChildSize: 0.75,
-        maxChildSize: 0.95,
-        minChildSize: 0.4,
-        builder: (BuildContext context, ScrollController scroll) {
-          return Column(
-            children: <Widget>[
-              const SizedBox(height: Space.x3),
-              Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: c.borderStrong,
-                  borderRadius: Radii.pillAll,
-                ),
+    return Scaffold(
+      backgroundColor: c.bg,
+      body: SafeArea(
+        child: Column(
+          children: <Widget>[
+            SizedBox(
+              height: 52,
+              child: Row(
+                children: <Widget>[
+                  TextButton.icon(
+                    onPressed: () => Navigator.of(context).maybePop(),
+                    icon: Icon(Icons.chevron_left_rounded,
+                        size: 28, color: c.accent),
+                    label: Text(
+                      'Notes',
+                      style: ShiftType.copy(c.accent, size: 17, weight: 500),
+                    ),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.only(left: 4, right: 12),
+                    ),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    tooltip: 'Delete this note',
+                    onPressed: _delete,
+                    icon: Icon(Icons.delete_outline_rounded,
+                        size: 21, color: c.accent),
+                  ),
+                  // Done puts the keyboard away, as it does in Notes. The
+                  // note is already saved either way.
+                  if (_editing)
+                    TextButton(
+                      onPressed: () {
+                        FocusScope.of(context).unfocus();
+                        _save();
+                      },
+                      child: Text(
+                        'Done',
+                        style: ShiftType.copy(c.accent, size: 17, weight: 600),
+                      ),
+                    ),
+                  const SizedBox(width: Space.x2),
+                ],
               ),
-              Expanded(
+            ),
+            Expanded(
+              child: GestureDetector(
+                // A tap in the empty space under the text carries on
+                // writing, rather than doing nothing.
+                behavior: HitTestBehavior.translucent,
+                onTap: () {
+                  if (!_editing) _bodyFocus.requestFocus();
+                },
                 child: ListView(
-                  controller: scroll,
                   padding: const EdgeInsets.fromLTRB(
                     Space.x5,
-                    Space.x4,
+                    Space.x2,
                     Space.x5,
-                    Space.x5,
+                    Space.x7,
                   ),
                   children: <Widget>[
-                    TextField(
-                      controller: _title,
-                      autofocus: widget.note.body.isEmpty,
-                      style: ShiftType.subheading(c.text),
-                      decoration: InputDecoration(
-                        filled: false,
-                        border: InputBorder.none,
-                        enabledBorder: InputBorder.none,
-                        focusedBorder: InputBorder.none,
-                        contentPadding: EdgeInsets.zero,
-                        hintText: 'Title',
-                        hintStyle: ShiftType.subheading(c.textMuted),
-                      ),
-                    ),
-                    Divider(color: c.border),
-                    TextField(
-                      controller: _body,
-                      minLines: 8,
-                      maxLines: null,
-                      keyboardType: TextInputType.multiline,
-                      style: ShiftType.body(c.text),
-                      decoration: InputDecoration(
-                        filled: false,
-                        border: InputBorder.none,
-                        enabledBorder: InputBorder.none,
-                        focusedBorder: InputBorder.none,
-                        contentPadding: EdgeInsets.zero,
-                        hintText: 'Write it down',
-                        hintStyle: ShiftType.body(c.textMuted),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  Space.x5,
-                  0,
-                  Space.x5,
-                  Space.x5,
-                ),
-                child: Row(
-                  children: <Widget>[
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: () {
-                          // A note opened from + and left untouched should
-                          // not stay behind as an empty row.
-                          if (widget.note.body.isEmpty &&
-                              _body.text.trim().isEmpty &&
-                              _title.text.trim().isEmpty) {
-                            state.deleteNote(widget.note.id);
-                          }
-                          Navigator.of(context).pop();
-                        },
-                        child: const Text('Cancel'),
-                      ),
-                    ),
-                    const SizedBox(width: Space.x3),
-                    Expanded(
-                      child: FilledButton(
-                        onPressed: () async {
-                          final NavigatorState nav = Navigator.of(context);
-                          final ScaffoldMessengerState bar =
-                              ScaffoldMessenger.of(context);
-                          final bool took = await state.saveNote(
-                            widget.note.id,
-                            title: _title.text,
-                            body: _body.text,
-                          );
-                          nav.pop();
-                          if (!took) {
-                            bar.showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  state.lastError?.message ??
-                                      'Could not save it.',
-                                ),
+                    Center(
+                      child: ConstrainedBox(
+                        constraints:
+                            const BoxConstraints(maxWidth: kContentWidth),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: <Widget>[
+                            Text(
+                              Fmt.dateTime(widget.note.editedAt),
+                              textAlign: TextAlign.center,
+                              style: ShiftType.caption(c.textMuted),
+                            ),
+                            const SizedBox(height: Space.x3),
+                            TextField(
+                              controller: _title,
+                              focusNode: _titleFocus,
+                              autofocus: widget.note.body.isEmpty &&
+                                  _title.text.isEmpty,
+                              textInputAction: TextInputAction.next,
+                              onSubmitted: (_) => _bodyFocus.requestFocus(),
+                              style: ShiftType.largeTitle(c.text)
+                                  .copyWith(fontSize: 26),
+                              decoration: InputDecoration(
+                                filled: false,
+                                border: InputBorder.none,
+                                enabledBorder: InputBorder.none,
+                                focusedBorder: InputBorder.none,
+                                contentPadding: EdgeInsets.zero,
+                                hintText: 'Title',
+                                hintStyle: ShiftType.largeTitle(c.textMuted)
+                                    .copyWith(fontSize: 26),
                               ),
-                            );
-                          }
-                        },
-                        child: const Text('Save'),
+                            ),
+                            const SizedBox(height: Space.x2),
+                            TextField(
+                              controller: _body,
+                              focusNode: _bodyFocus,
+                              minLines: 12,
+                              maxLines: null,
+                              keyboardType: TextInputType.multiline,
+                              style: ShiftType.body(c.text),
+                              decoration: InputDecoration(
+                                filled: false,
+                                border: InputBorder.none,
+                                enabledBorder: InputBorder.none,
+                                focusedBorder: InputBorder.none,
+                                contentPadding: EdgeInsets.zero,
+                                hintText: 'Write it down',
+                                hintStyle: ShiftType.body(c.textMuted),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ],
                 ),
               ),
-            ],
-          );
-        },
+            ),
+          ],
+        ),
       ),
     );
   }
