@@ -332,8 +332,19 @@ class MediaThumbnail extends StatelessWidget {
     this.video = false,
     this.durationSeconds,
     this.selected = false,
+    this.thumbnailUrl,
+    this.mediaType = MediaType.image,
     super.key,
   });
+
+  /// The engine's small preview, when it has one. Without it, or while it
+  /// loads, or if it fails, the tile is the seeded art, so a slow network
+  /// never shows an empty box.
+  final String? thumbnailUrl;
+
+  /// Audio and documents have no picture of their own; they get a symbol
+  /// on the art saying which they are.
+  final MediaType mediaType;
 
   /// What the art is drawn from — the piece's id, so it looks the same in
   /// the grid and in its detail panel.
@@ -363,7 +374,11 @@ class MediaThumbnail extends StatelessWidget {
         child: Stack(
           fit: StackFit.expand,
           children: <Widget>[
-            PosterArt(seed: seed),
+            MediaArt(seed: seed, thumbnailUrl: thumbnailUrl),
+            if (thumbnailUrl == null &&
+                (mediaType == MediaType.audio ||
+                    mediaType == MediaType.document))
+              Center(child: _KindMark(mediaType)),
             if (video)
               Positioned(
                 right: Space.x2,
@@ -400,8 +415,78 @@ class MediaThumbnail extends StatelessWidget {
   }
 }
 
-/// Art for a piece with no thumbnail — which is every piece, until the
-/// engine sends previews.
+/// A piece's picture: the engine's image when there is one, faded in over
+/// its seeded art, which is also what shows while it loads or if it fails.
+class MediaArt extends StatelessWidget {
+  const MediaArt({
+    required this.seed,
+    this.thumbnailUrl,
+    this.fit = BoxFit.cover,
+    super.key,
+  });
+
+  final String seed;
+  final String? thumbnailUrl;
+  final BoxFit fit;
+
+  @override
+  Widget build(BuildContext context) {
+    final String? url = thumbnailUrl;
+    if (url == null) return PosterArt(seed: seed);
+    return Stack(
+      fit: StackFit.expand,
+      children: <Widget>[
+        PosterArt(seed: seed),
+        Image.network(
+          url,
+          fit: fit,
+          gaplessPlayback: true,
+          filterQuality: FilterQuality.medium,
+          frameBuilder: (BuildContext context, Widget child, int? frame,
+                  bool synchronous) =>
+              synchronous
+                  ? child
+                  : AnimatedOpacity(
+                      opacity: frame == null ? 0 : 1,
+                      duration: const Duration(milliseconds: 220),
+                      child: child,
+                    ),
+          errorBuilder: (BuildContext context, Object _, StackTrace? __) =>
+              const SizedBox.shrink(),
+        ),
+      ],
+    );
+  }
+}
+
+/// The symbol on an audio or document tile, which has no picture.
+class _KindMark extends StatelessWidget {
+  const _KindMark(this.type);
+
+  final MediaType type;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 52,
+      height: 52,
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.35),
+        shape: BoxShape.circle,
+      ),
+      child: Icon(
+        type == MediaType.audio
+            ? Icons.graphic_eq_rounded
+            : Icons.description_outlined,
+        size: 26,
+        color: Colors.white,
+      ),
+    );
+  }
+}
+
+/// Art for a piece with no thumbnail: audio, documents, and anything the
+/// engine has not sent a preview for.
 ///
 /// It was an empty dark box, and a masonry grid of those
 /// is a wall of identical rectangles that makes the vault look empty when

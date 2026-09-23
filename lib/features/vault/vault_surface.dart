@@ -6,6 +6,7 @@ import '../../theme/tokens.dart';
 import '../../theme/type.dart';
 import '../../util/format.dart';
 import '../../widgets/common.dart';
+import 'media_player.dart';
 
 /// Media only, with a two way scope toggle: your own generations, or the
 /// published work in EcoVault. Picking a tile opens the detail panel.
@@ -199,7 +200,7 @@ List<VaultItem> vaultMatches(List<VaultItem> items, String query) {
       v.byName,
       v.byHandle,
       v.model,
-      v.kind.name,
+      v.mediaType.name,
     ].whereType<String>().join(' ').toLowerCase();
     return words.every(haystack.contains);
   }).toList(growable: false);
@@ -353,7 +354,7 @@ class _VaultTile extends StatelessWidget {
     final ShiftColors c = ShiftColors.of(context);
     final bool video = item.kind == MediaKind.video;
     final double artHeight = height.clamp(150, 420);
-    final String kind = video ? 'Video' : 'Image';
+    final String kind = item.mediaType.label;
     // Someone else's piece says whose it is, so it is never mistaken for
     // your own further down the page.
     final String detail = item.mine
@@ -364,7 +365,7 @@ class _VaultTile extends StatelessWidget {
     return Semantics(
       button: true,
       selected: selected,
-      label: '${item.title}, ${item.kind.name}',
+      label: '${item.title}, ${item.mediaType.label}',
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
@@ -381,6 +382,8 @@ class _VaultTile extends StatelessWidget {
                     video: video,
                     durationSeconds: item.durationSeconds,
                     selected: selected,
+                    thumbnailUrl: item.thumbnailUrl,
+                    mediaType: item.mediaType,
                   ),
                   // The heart sits on the corner of the art rather than
                   // behind a tap into the detail: saving while browsing is
@@ -650,13 +653,7 @@ class _DetailPanel extends StatelessWidget {
                   // on the thing you tapped rather than on a blank box.
                   child: ClipRRect(
                     borderRadius: Radii.lgAll,
-                    child: Stack(
-                      fit: StackFit.expand,
-                      children: <Widget>[
-                        PosterArt(seed: item.id),
-                        if (video) const Center(child: PlayDisc(size: 56)),
-                      ],
-                    ),
+                    child: VaultMedia(item: item),
                   ),
                 ),
               ),
@@ -697,7 +694,12 @@ class _DetailPanel extends StatelessWidget {
                   label: 'Created',
                   value: Fmt.dateTime(item.createdAt),
                 ),
-                _MetaRow(label: 'Charge', value: '${item.credits} credits'),
+                _MetaRow(
+                  label: 'Charge',
+                  value: item.credits == 1
+                      ? '1 credit'
+                      : '${item.credits} credits',
+                ),
                 if (video)
                   _MetaRow(
                     label: 'Length',

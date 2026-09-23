@@ -134,6 +134,20 @@ Three fields carry the gallery:
 reads the same for everyone. Their `saved` is ignored: your own work is
 in your vault because you made it, not because you hearted it.
 
+Three more fields carry the file itself (added 23 Sept 2026):
+
+| field | type | meaning |
+|---|---|---|
+| `mediaType` | `image` \| `video` \| `audio` \| `document` | The file's real type. `kind` stays `image`/`video` so older clients keep parsing; audio used to arrive as `image`. Missing means `kind`. |
+| `mediaUrl` | string or null | The full file. Null for a text-only piece (a deck or a page). |
+| `thumbnailUrl` | string or null | A ~30 KB WebP, 480 wide; a video's first frame. Null for audio and documents. |
+
+Both URLs are on the app's own origin, so CanvasKit can draw them on the
+web without CORS, and **need no auth header**: they are public by an
+unguessable name. Video answers HTTP Range (206), so the player can seek
+and iOS Safari plays it. With no `thumbnailUrl` the client draws the
+piece's seeded art, with a symbol for audio and documents.
+
 ### Hearting
 
 | Method | Path | Returns |

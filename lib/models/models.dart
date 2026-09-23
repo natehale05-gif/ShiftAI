@@ -335,6 +335,25 @@ class League {
 
 enum MediaKind { image, video }
 
+/// What the file behind a vault piece really is. [MediaKind] stays image or
+/// video so older rows keep parsing; audio used to arrive as an image.
+enum MediaType {
+  image('Image'),
+  video('Video'),
+  audio('Audio'),
+  document('Document');
+
+  const MediaType(this.label);
+  final String label;
+
+  static MediaType parse(String? value, MediaKind kind) =>
+      MediaType.values.firstWhere(
+        (MediaType t) => t.name == value,
+        orElse: () =>
+            kind == MediaKind.video ? MediaType.video : MediaType.image,
+      );
+}
+
 enum VaultScope {
   mine('My vault'),
   eco('EcoVault');
@@ -361,11 +380,29 @@ class VaultItem {
     this.byHandle,
     this.byName,
     this.saved = false,
-  });
+    MediaType? mediaType,
+    this.mediaUrl,
+    this.thumbnailUrl,
+  }) : _mediaType = mediaType;
 
   final String id;
   final String title;
   final MediaKind kind;
+
+  final MediaType? _mediaType;
+
+  /// The file's real type; from [kind] when the engine does not say.
+  MediaType get mediaType =>
+      _mediaType ??
+      (kind == MediaKind.video ? MediaType.video : MediaType.image);
+
+  /// The full file, on the app's own origin so CanvasKit can draw it. No
+  /// auth header: the name is unguessable. Null for a text-only piece.
+  final String? mediaUrl;
+
+  /// A small WebP, about 480 wide. For a video it is the first frame. Null
+  /// for audio and documents, which fall back to drawn art.
+  final String? thumbnailUrl;
   final String prompt;
   final String model;
   final DateTime createdAt;
@@ -413,6 +450,10 @@ class VaultItem {
         byHandle: byHandle,
         byName: byName,
         saved: saved ?? this.saved,
+        // Carried through, or renaming a piece would lose its picture.
+        mediaType: _mediaType,
+        mediaUrl: mediaUrl,
+        thumbnailUrl: thumbnailUrl,
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -428,32 +469,46 @@ class VaultItem {
         'durationSeconds': durationSeconds,
         'width': width,
         'height': height,
+        'mediaType': mediaType.name,
+        'mediaUrl': mediaUrl,
+        'thumbnailUrl': thumbnailUrl,
         'byHandle': byHandle,
         'byName': byName,
         'saved': saved,
       };
 
-  factory VaultItem.fromJson(Map<String, dynamic> json) => VaultItem(
-        id: json['id'] as String,
-        title: json['title'] as String,
-        kind: MediaKind.values.firstWhere(
-          (MediaKind k) => k.name == json['kind'],
-          orElse: () => MediaKind.image,
-        ),
-        prompt: json['prompt'] as String? ?? '',
-        model: json['model'] as String? ?? '',
-        createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ??
-            DateTime.now(),
-        credits: (json['credits'] as num?)?.toInt() ?? 0,
-        aspect: (json['aspect'] as num?)?.toDouble() ?? 1,
-        published: json['published'] as bool? ?? false,
-        durationSeconds: (json['durationSeconds'] as num?)?.toInt(),
-        width: (json['width'] as num?)?.toInt(),
-        height: (json['height'] as num?)?.toInt(),
-        byHandle: json['byHandle'] as String?,
-        byName: json['byName'] as String?,
-        saved: json['saved'] as bool? ?? false,
-      );
+  factory VaultItem.fromJson(Map<String, dynamic> json) {
+    final MediaKind kind = MediaKind.values.firstWhere(
+      (MediaKind k) => k.name == json['kind'],
+      orElse: () => MediaKind.image,
+    );
+    String? url(String key) {
+      final Object? v = json[key];
+      return v is String && v.isNotEmpty ? v : null;
+    }
+
+    return VaultItem(
+      id: json['id'] as String,
+      title: json['title'] as String,
+      kind: kind,
+      mediaType: MediaType.parse(json['mediaType'] as String?, kind),
+      mediaUrl: url('mediaUrl'),
+      thumbnailUrl: url('thumbnailUrl'),
+      prompt: json['prompt'] as String? ?? '',
+      model: json['model'] as String? ?? '',
+      createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ??
+          DateTime.now(),
+      credits: (json['credits'] as num?)?.toInt() ?? 0,
+      aspect: (json['aspect'] as num?)?.toDouble() ?? 1,
+      published: json['published'] as bool? ?? false,
+      durationSeconds: (json['durationSeconds'] as num?)?.toInt(),
+      width: (json['width'] as num?)?.toInt(),
+      height: (json['height'] as num?)?.toInt(),
+      byHandle: json['byHandle'] as String?,
+      byName: json['byName'] as String?,
+      saved: json['saved'] as bool? ?? false,
+    );
+  }
 }
 
 @immutable
