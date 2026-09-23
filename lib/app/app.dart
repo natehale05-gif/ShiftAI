@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../features/auth/sign_in_screen.dart';
 import '../state/app_state.dart';
@@ -45,10 +46,23 @@ class _ShiftAppState extends State<ShiftApp> {
       child: AnimatedBuilder(
         animation: widget.state,
         builder: (BuildContext context, _) {
+          final ShiftColors c = ShiftColors.forTheme(widget.state.themeId);
           return MaterialApp(
             title: 'SHIFT AI',
             debugShowCheckedModeBanner: false,
             theme: ShiftTheme.build(widget.state.themeId),
+            // The native builds' own status and navigation bars, set from
+            // the theme showing on every rebuild. Nothing set them before,
+            // so they kept whatever the platform launched with, whichever
+            // theme was showing. Both bars are transparent over the app,
+            // which draws edge to edge (main.dart), so only the icons
+            // change with the theme. The web ignores all of this;
+            // applyBrowserChrome covers it there.
+            builder: (BuildContext context, Widget? child) =>
+                AnnotatedRegion<SystemUiOverlayStyle>(
+              value: _barsFor(c),
+              child: child ?? const SizedBox.shrink(),
+            ),
             home: widget.state.signedIn
                 ? const ShiftShell()
                 : const SignInScreen(),
@@ -57,4 +71,21 @@ class _ShiftAppState extends State<ShiftApp> {
       ),
     );
   }
+}
+
+SystemUiOverlayStyle _barsFor(ShiftColors c) {
+  final Brightness icons = c.isDarkGround ? Brightness.light : Brightness.dark;
+  return SystemUiOverlayStyle(
+    statusBarColor: Colors.transparent,
+    statusBarIconBrightness: icons,
+    // iOS names the ground rather than the icons, so it is the reverse.
+    statusBarBrightness: c.isDarkGround ? Brightness.dark : Brightness.light,
+    // Transparent, so the app's own ground shows through behind the pill.
+    systemNavigationBarColor: Colors.transparent,
+    systemNavigationBarDividerColor: Colors.transparent,
+    systemNavigationBarIconBrightness: icons,
+    // No grey scrim laid over the gesture pill on top of the theme's
+    // ground.
+    systemNavigationBarContrastEnforced: false,
+  );
 }

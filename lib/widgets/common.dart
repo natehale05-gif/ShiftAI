@@ -783,173 +783,181 @@ class _PillComposerState extends State<PillComposer> {
     final bool showAvatarButton =
         widget.showAvatarPicker && state.avatars.any((Avatar a) => a.ready);
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        Space.x4,
-        Space.x3,
-        Space.x4,
-        Space.x5,
-      ),
-      child: Center(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: widget.width),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              if (_attachments.isNotEmpty) ...<Widget>[
-                Wrap(
-                  spacing: Space.x2,
-                  runSpacing: Space.x2,
-                  children: <Widget>[
-                    for (int i = 0; i < _attachments.length; i++)
-                      _AttachmentChip(
-                        file: _attachments[i],
-                        onRemove: () =>
-                            setState(() => _attachments.removeAt(i)),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: Space.x3),
-              ],
-              Container(
-                // 44 for the controls plus 6 top and bottom is the 56 the
-                // pill is drawn at, so at rest the row fills it exactly and
-                // nothing has to be nudged to look centred.
-                key: const ValueKey<String>('composer-pill'),
-                constraints: const BoxConstraints(minHeight: _pillHeight),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: Space.x2,
-                  vertical: _pillInset,
-                ),
-                decoration: BoxDecoration(
-                  color: c.surface,
-                  borderRadius: const BorderRadius.all(Radius.circular(28)),
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: <Widget>[
-                    IconButton(
-                      tooltip: 'Attach a file — any kind',
-                      onPressed: _attach,
-                      icon:
-                          Icon(Icons.add_rounded, size: 22, color: c.textMuted),
-                      style: IconButton.styleFrom(
-                        minimumSize: const Size(_controlSize, _controlSize),
-                      ),
-                    ),
-                    Expanded(
-                      // A polished prompt is several lines, and people
-                      // paste paragraphs: the pill grows to eight lines
-                      // and then scrolls. Enter sends, shift+enter breaks.
-                      //
-                      // One line of body type is 28 tall, so 8 above and
-                      // below makes the field exactly as tall as a control.
-                      // Every child is then 44 and the row is level; once
-                      // the text wraps, the row grows and the controls stay
-                      // with the last line.
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          vertical: (_controlSize - 28) / 2,
+    // Clear of the home indicator and gesture area. Android draws the app
+    // edge to edge now, and nothing stopped the bar sitting under the pill.
+    // On the web the inset is zero, so this changes nothing there.
+    return SafeArea(
+      top: false,
+      left: false,
+      right: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(
+          Space.x4,
+          Space.x3,
+          Space.x4,
+          Space.x5,
+        ),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: widget.width),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                if (_attachments.isNotEmpty) ...<Widget>[
+                  Wrap(
+                    spacing: Space.x2,
+                    runSpacing: Space.x2,
+                    children: <Widget>[
+                      for (int i = 0; i < _attachments.length; i++)
+                        _AttachmentChip(
+                          file: _attachments[i],
+                          onRemove: () =>
+                              setState(() => _attachments.removeAt(i)),
                         ),
-                        child: Focus(
-                          onKeyEvent: _onKey,
-                          child: TextField(
-                            controller: _controller,
-                            focusNode: _focus,
-                            minLines: 1,
-                            maxLines: 8,
-                            keyboardType: TextInputType.multiline,
-                            textInputAction: TextInputAction.newline,
-                            style: ShiftType.body(c.text),
-                            decoration: InputDecoration(
-                              isDense: true,
-                              filled: false,
-                              contentPadding: EdgeInsets.zero,
-                              border: InputBorder.none,
-                              enabledBorder: InputBorder.none,
-                              focusedBorder: InputBorder.none,
-                              hintText: widget.hint,
-                              hintStyle: ShiftType.body(c.textMuted),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    if (showAvatarButton)
+                    ],
+                  ),
+                  const SizedBox(height: Space.x3),
+                ],
+                Container(
+                  // 44 for the controls plus 6 top and bottom is the 56 the
+                  // pill is drawn at, so at rest the row fills it exactly and
+                  // nothing has to be nudged to look centred.
+                  key: const ValueKey<String>('composer-pill'),
+                  constraints: const BoxConstraints(minHeight: _pillHeight),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: Space.x2,
+                    vertical: _pillInset,
+                  ),
+                  decoration: BoxDecoration(
+                    color: c.surface,
+                    borderRadius: const BorderRadius.all(Radius.circular(28)),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: <Widget>[
                       IconButton(
-                        tooltip: active == null
-                            ? 'Choose an avatar to generate as'
-                            : 'Generating as ${active.name}',
-                        onPressed: () => _pickAvatar(state),
-                        // A plain glyph, same family as the "+" beside it —
-                        // just tinted the accent once an avatar is active,
-                        // never a photo or a ring around this one.
-                        icon: Icon(
-                          active == null
-                              ? Icons.face_outlined
-                              : Icons.face_rounded,
-                          size: 22,
-                          color: active == null ? c.textMuted : c.accent,
-                        ),
+                        tooltip: 'Attach a file — any kind',
+                        onPressed: _attach,
+                        icon: Icon(Icons.add_rounded,
+                            size: 22, color: c.textMuted),
                         style: IconButton.styleFrom(
                           minimumSize: const Size(_controlSize, _controlSize),
                         ),
                       ),
-                    if (widget.showSparkle)
-                      IconButton(
-                        tooltip: 'Polish my prompt',
-                        onPressed: _polishing ? null : _polish,
-                        icon: _polishing
-                            ? SizedBox.square(
-                                dimension: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                    c.accent,
-                                  ),
-                                ),
-                              )
-                            : Icon(
-                                Icons.auto_awesome_rounded,
-                                size: 20,
-                                color: c.accent,
+                      Expanded(
+                        // A polished prompt is several lines, and people
+                        // paste paragraphs: the pill grows to eight lines
+                        // and then scrolls. Enter sends, shift+enter breaks.
+                        //
+                        // One line of body type is 28 tall, so 8 above and
+                        // below makes the field exactly as tall as a control.
+                        // Every child is then 44 and the row is level; once
+                        // the text wraps, the row grows and the controls stay
+                        // with the last line.
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            vertical: (_controlSize - 28) / 2,
+                          ),
+                          child: Focus(
+                            onKeyEvent: _onKey,
+                            child: TextField(
+                              controller: _controller,
+                              focusNode: _focus,
+                              minLines: 1,
+                              maxLines: 8,
+                              keyboardType: TextInputType.multiline,
+                              textInputAction: TextInputAction.newline,
+                              style: ShiftType.body(c.text),
+                              decoration: InputDecoration(
+                                isDense: true,
+                                filled: false,
+                                contentPadding: EdgeInsets.zero,
+                                border: InputBorder.none,
+                                enabledBorder: InputBorder.none,
+                                focusedBorder: InputBorder.none,
+                                hintText: widget.hint,
+                                hintStyle: ShiftType.body(c.textMuted),
                               ),
-                        style: IconButton.styleFrom(
-                          minimumSize: const Size(_controlSize, _controlSize),
-                        ),
-                      ),
-                    const SizedBox(width: Space.x1),
-                    // The send circle is smaller than a control, so it is
-                    // centred inside one rather than sitting on the floor.
-                    SizedBox(
-                      width: _controlSize,
-                      height: _controlSize,
-                      child: Center(
-                        child: SizedBox(
-                          width: 40,
-                          height: 40,
-                          child: IconButton(
-                            tooltip: 'Send',
-                            onPressed: _send,
-                            icon: const Icon(
-                              Icons.arrow_upward_rounded,
-                              size: 20,
-                            ),
-                            style: IconButton.styleFrom(
-                              backgroundColor: c.accent,
-                              foregroundColor: c.onAccent,
-                              shape: const CircleBorder(),
-                              padding: EdgeInsets.zero,
                             ),
                           ),
                         ),
                       ),
-                    ),
-                  ],
+                      if (showAvatarButton)
+                        IconButton(
+                          tooltip: active == null
+                              ? 'Choose an avatar to generate as'
+                              : 'Generating as ${active.name}',
+                          onPressed: () => _pickAvatar(state),
+                          // A plain glyph, same family as the "+" beside it —
+                          // just tinted the accent once an avatar is active,
+                          // never a photo or a ring around this one.
+                          icon: Icon(
+                            active == null
+                                ? Icons.face_outlined
+                                : Icons.face_rounded,
+                            size: 22,
+                            color: active == null ? c.textMuted : c.accent,
+                          ),
+                          style: IconButton.styleFrom(
+                            minimumSize: const Size(_controlSize, _controlSize),
+                          ),
+                        ),
+                      if (widget.showSparkle)
+                        IconButton(
+                          tooltip: 'Polish my prompt',
+                          onPressed: _polishing ? null : _polish,
+                          icon: _polishing
+                              ? SizedBox.square(
+                                  dimension: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                      c.accent,
+                                    ),
+                                  ),
+                                )
+                              : Icon(
+                                  Icons.auto_awesome_rounded,
+                                  size: 20,
+                                  color: c.accent,
+                                ),
+                          style: IconButton.styleFrom(
+                            minimumSize: const Size(_controlSize, _controlSize),
+                          ),
+                        ),
+                      const SizedBox(width: Space.x1),
+                      // The send circle is smaller than a control, so it is
+                      // centred inside one rather than sitting on the floor.
+                      SizedBox(
+                        width: _controlSize,
+                        height: _controlSize,
+                        child: Center(
+                          child: SizedBox(
+                            width: 40,
+                            height: 40,
+                            child: IconButton(
+                              tooltip: 'Send',
+                              onPressed: _send,
+                              icon: const Icon(
+                                Icons.arrow_upward_rounded,
+                                size: 20,
+                              ),
+                              style: IconButton.styleFrom(
+                                backgroundColor: c.accent,
+                                foregroundColor: c.onAccent,
+                                shape: const CircleBorder(),
+                                padding: EdgeInsets.zero,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

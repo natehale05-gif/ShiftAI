@@ -1,6 +1,5 @@
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shift_ai/app/app.dart';
@@ -130,6 +129,61 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text(review), findsOneWidget);
     expect(find.text(failed), findsOneWidget);
+  });
+
+  testWidgets('the native system bars are clear, with icons for the theme',
+      (WidgetTester tester) async {
+    final AppState state = await _freshState();
+    await tester.pumpWidget(ShiftApp(state: state));
+    await tester.pump();
+    await _dismissRingsSheet(tester);
+
+    for (final ShiftThemeId id in ShiftThemeId.values) {
+      state.setTheme(id);
+      await tester.pumpAndSettle();
+      final ShiftColors c = ShiftColors.forTheme(id);
+      final SystemUiOverlayStyle bars = tester
+          .widget<AnnotatedRegion<SystemUiOverlayStyle>>(
+            find.byType(AnnotatedRegion<SystemUiOverlayStyle>).first,
+          )
+          .value;
+      // No strip behind the gesture pill: the app's ground shows through.
+      expect(
+        bars.systemNavigationBarColor,
+        Colors.transparent,
+        reason: id.name,
+      );
+      expect(bars.systemNavigationBarContrastEnforced, isFalse);
+      // Dark icons on a light ground, light ones on a dark ground.
+      expect(
+        bars.statusBarIconBrightness,
+        c.isDarkGround ? Brightness.light : Brightness.dark,
+        reason: id.name,
+      );
+    }
+  });
+
+  testWidgets('the composer sits clear of the home indicator',
+      (WidgetTester tester) async {
+    // Where the composer's field ends, with and without a bottom inset
+    // the size of a home indicator. The app draws edge to edge, so
+    // without its SafeArea the field would run under the gesture pill.
+    Future<double> fieldBottom({required double inset}) async {
+      tester.view.padding = FakeViewPadding(
+        bottom: inset * tester.view.devicePixelRatio,
+      );
+      tester.view.viewPadding = tester.view.padding;
+      final AppState state = await _freshState();
+      await tester.pumpWidget(ShiftApp(state: state));
+      await tester.pump();
+      await _dismissRingsSheet(tester);
+      return tester.getRect(find.byType(TextField).last).bottom;
+    }
+
+    addTearDown(tester.view.reset);
+    final double flush = await fieldBottom(inset: 0);
+    final double inset = await fieldBottom(inset: 34);
+    expect(flush - inset, closeTo(34, 0.5));
   });
 
   testWidgets('the sidebar starts closed and the hamburger opens it',
@@ -289,8 +343,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  test('the local league arrives already placed in the seeded demo',
-      () async {
+  test('the local league arrives already placed in the seeded demo', () async {
     final AppState state = await _freshState();
     expect(state.league, isNotNull);
     expect(state.league!.regionLabel, Seed.league.regionLabel);
