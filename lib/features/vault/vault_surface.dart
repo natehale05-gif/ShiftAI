@@ -198,38 +198,42 @@ class _MasonryGrid extends StatelessWidget {
         }
 
         return Scrollbar(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(
-              Space.x6,
-              Space.x3,
-              Space.x6,
-              Space.x6,
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                for (int i = 0; i < columns; i++) ...<Widget>[
-                  if (i > 0) const SizedBox(width: Space.x4),
-                  SizedBox(
-                    width: columnWidth,
-                    child: Column(
-                      children: buckets[i]
-                          .map(
-                            (VaultItem item) => Padding(
-                              padding: const EdgeInsets.only(bottom: Space.x5),
-                              child: _VaultTile(
-                                item: item,
-                                height: columnWidth / item.aspect,
-                                selected: state.selectedVaultId == item.id,
-                                onTap: () => state.selectVaultItem(item.id),
+          child: PullToRefresh(
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(
+                Space.x6,
+                Space.x3,
+                Space.x6,
+                Space.x6,
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  for (int i = 0; i < columns; i++) ...<Widget>[
+                    if (i > 0) const SizedBox(width: Space.x4),
+                    SizedBox(
+                      width: columnWidth,
+                      child: Column(
+                        children: buckets[i]
+                            .map(
+                              (VaultItem item) => Padding(
+                                padding:
+                                    const EdgeInsets.only(bottom: Space.x5),
+                                child: _VaultTile(
+                                  item: item,
+                                  height: columnWidth / item.aspect,
+                                  selected: state.selectedVaultId == item.id,
+                                  onTap: () => state.selectVaultItem(item.id),
+                                ),
                               ),
-                            ),
-                          )
-                          .toList(),
+                            )
+                            .toList(),
+                      ),
                     ),
-                  ),
+                  ],
                 ],
-              ],
+              ),
             ),
           ),
         );

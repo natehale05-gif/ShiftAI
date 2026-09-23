@@ -20,39 +20,42 @@ class AgentsSurface extends StatelessWidget {
     return Column(
       children: <Widget>[
         Expanded(
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(
-              Space.x5,
-              Space.x5,
-              Space.x5,
-              Space.x5,
-            ),
-            children: <Widget>[
-              Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: kContentWidth),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: <Widget>[
-                      ScreenTabs(
-                        labels: const <String>['Agents', 'Jobs'],
-                        selected: state.showingJobs ? 1 : 0,
-                        onChanged: (int i) => state.showJobs(i == 1),
-                        scopeLabel: state.showingJobs
-                            ? state.jobScope
-                            : state.agentScope,
-                        onScopeTap: () => _showScopePicker(context, state),
-                      ),
-                      const SizedBox(height: Space.x5),
-                      if (state.showingJobs)
-                        const _JobsTab()
-                      else
-                        const _AgentsTab(),
-                    ],
+          child: PullToRefresh(
+            child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(
+                Space.x5,
+                Space.x5,
+                Space.x5,
+                Space.x5,
+              ),
+              children: <Widget>[
+                Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: kContentWidth),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: <Widget>[
+                        ScreenTabs(
+                          labels: const <String>['Agents', 'Jobs'],
+                          selected: state.showingJobs ? 1 : 0,
+                          onChanged: (int i) => state.showJobs(i == 1),
+                          scopeLabel: state.showingJobs
+                              ? state.jobScope
+                              : state.agentScope,
+                          onScopeTap: () => _showScopePicker(context, state),
+                        ),
+                        const SizedBox(height: Space.x5),
+                        if (state.showingJobs)
+                          const _JobsTab()
+                        else
+                          const _AgentsTab(),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
         PillComposer(

@@ -26,55 +26,58 @@ class NotesSurface extends StatelessWidget {
         Column(
           children: <Widget>[
             Expanded(
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(
-                  Space.x5,
-                  Space.x5,
-                  Space.x5,
-                  Space.x5,
-                ),
-                children: <Widget>[
-                  Center(
-                    child: ConstrainedBox(
-                      constraints:
-                          const BoxConstraints(maxWidth: kContentWidth),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: <Widget>[
-                          Text('Notes', style: ShiftType.largeTitle(c.text)),
-                          const SizedBox(height: 2),
-                          Text(
-                            count == 1 ? '1 note' : '$count notes',
-                            style: ShiftType.copy(c.textMuted, size: 15),
-                          ),
-                          const SizedBox(height: Space.x4),
-                          const EngineBanner(),
-                          if (state.notes.isEmpty)
-                            Padding(
-                              padding: const EdgeInsets.only(top: Space.x6),
-                              child: Text(
-                                'Nothing written down yet.',
-                                style: ShiftType.body(c.textMuted),
-                              ),
-                            )
-                          else
-                            GroupedList(
-                              children: state.notes
-                                  .map(
-                                    (Note note) => _NoteRow(
-                                      note: note,
-                                      onOpen: () => _openNote(context, note),
-                                      onDelete: () =>
-                                          _deleteNote(context, note),
-                                    ),
-                                  )
-                                  .toList(growable: false),
+              child: PullToRefresh(
+                child: ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.fromLTRB(
+                    Space.x5,
+                    Space.x5,
+                    Space.x5,
+                    Space.x5,
+                  ),
+                  children: <Widget>[
+                    Center(
+                      child: ConstrainedBox(
+                        constraints:
+                            const BoxConstraints(maxWidth: kContentWidth),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: <Widget>[
+                            Text('Notes', style: ShiftType.largeTitle(c.text)),
+                            const SizedBox(height: 2),
+                            Text(
+                              count == 1 ? '1 note' : '$count notes',
+                              style: ShiftType.copy(c.textMuted, size: 15),
                             ),
-                        ],
+                            const SizedBox(height: Space.x4),
+                            const EngineBanner(),
+                            if (state.notes.isEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(top: Space.x6),
+                                child: Text(
+                                  'Nothing written down yet.',
+                                  style: ShiftType.body(c.textMuted),
+                                ),
+                              )
+                            else
+                              GroupedList(
+                                children: state.notes
+                                    .map(
+                                      (Note note) => _NoteRow(
+                                        note: note,
+                                        onOpen: () => _openNote(context, note),
+                                        onDelete: () =>
+                                            _deleteNote(context, note),
+                                      ),
+                                    )
+                                    .toList(growable: false),
+                              ),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
             PillComposer(

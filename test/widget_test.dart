@@ -582,6 +582,36 @@ void main() {
     expect(state.notes.length, before);
   });
 
+  testWidgets('pulling a list down reloads it from the engine',
+      (WidgetTester tester) async {
+    final AppState state = await _freshState();
+    await tester.pumpWidget(ShiftApp(state: state));
+    await tester.pump();
+    await _dismissRingsSheet(tester);
+
+    for (final Surface surface in <Surface>[
+      Surface.earnings,
+      Surface.trophies,
+      Surface.vault,
+      Surface.notes,
+      Surface.agents,
+    ]) {
+      state.setSurface(surface);
+      await tester.pumpAndSettle();
+      bool reloaded = false;
+      void watch() => reloaded = reloaded || state.refreshing;
+      state.addListener(watch);
+      await tester.fling(
+        find.byType(Scrollable).first,
+        const Offset(0, 400),
+        1200,
+      );
+      await tester.pumpAndSettle();
+      state.removeListener(watch);
+      expect(reloaded, isTrue, reason: surface.name);
+    }
+  });
+
   test('a design duplicates next to itself and deletes cleanly', () async {
     final AppState state = await _freshState();
     final DesignDoc first = state.designs.first;

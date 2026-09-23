@@ -36,45 +36,49 @@ class _LeaderboardSurfaceState extends State<LeaderboardSurface> {
   Widget build(BuildContext context) {
     final AppState state = AppScope.of(context);
 
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(
-        Space.x5,
-        Space.x5,
-        Space.x5,
-        Space.x6,
-      ),
-      children: <Widget>[
-        Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: kContentWidth),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: <Widget>[
-                ScreenBreadcrumb(
-                  parent: 'Create',
-                  title: 'Leaderboard',
-                  onBack: () => state.setSurface(Surface.suite),
-                ),
-                const SizedBox(height: Space.x5),
-                const _ClockRow(),
-                const SizedBox(height: Space.x5),
-                SegmentedPills<_Board>(
-                  options: _Board.values,
-                  labelOf: (_Board b) => b == _Board.local ? 'Local' : 'Global',
-                  selected: _board,
-                  onChanged: (_Board next) => setState(() => _board = next),
-                  expand: true,
-                ),
-                const SizedBox(height: Space.x6),
-                if (_board == _Board.local)
-                  const _LocalLeagueSection()
-                else
-                  const _GlobalBoard(),
-              ],
+    return PullToRefresh(
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(
+          Space.x5,
+          Space.x5,
+          Space.x5,
+          Space.x6,
+        ),
+        children: <Widget>[
+          Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: kContentWidth),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: <Widget>[
+                  ScreenBreadcrumb(
+                    parent: 'Create',
+                    title: 'Leaderboard',
+                    onBack: () => state.setSurface(Surface.suite),
+                  ),
+                  const SizedBox(height: Space.x5),
+                  const _ClockRow(),
+                  const SizedBox(height: Space.x5),
+                  SegmentedPills<_Board>(
+                    options: _Board.values,
+                    labelOf: (_Board b) =>
+                        b == _Board.local ? 'Local' : 'Global',
+                    selected: _board,
+                    onChanged: (_Board next) => setState(() => _board = next),
+                    expand: true,
+                  ),
+                  const SizedBox(height: Space.x6),
+                  if (_board == _Board.local)
+                    const _LocalLeagueSection()
+                  else
+                    const _GlobalBoard(),
+                ],
+              ),
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

@@ -1320,3 +1320,36 @@ class GroupedList extends StatelessWidget {
     );
   }
 }
+
+/// Pull down to reload from the engine, as any list on an iPhone does.
+///
+/// The spinner is the platform's own (RefreshIndicator.adaptive): the
+/// iOS activity wheel on an iPhone, Material's on Android and the web. A
+/// reload that fails keeps what is on screen, which AppState.refresh
+/// already does, and says why rather than dropping silently back into
+/// place. The scroll view inside needs AlwaysScrollableScrollPhysics, or a
+/// list shorter than the screen cannot be pulled at all.
+class PullToRefresh extends StatelessWidget {
+  const PullToRefresh({required this.child, super.key});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final ShiftColors c = ShiftColors.of(context);
+    return RefreshIndicator.adaptive(
+      color: c.accent,
+      backgroundColor: c.surface,
+      onRefresh: () async {
+        final AppState state = AppScope.read(context);
+        final ScaffoldMessengerState bar = ScaffoldMessenger.of(context);
+        await state.refresh();
+        final ShiftApiException? error = state.lastError;
+        if (error != null) {
+          bar.showSnackBar(SnackBar(content: Text(error.message)));
+        }
+      },
+      child: child,
+    );
+  }
+}

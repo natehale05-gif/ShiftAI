@@ -22,48 +22,51 @@ class TrophiesSurface extends StatelessWidget {
 
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
-        return ListView(
-          padding: const EdgeInsets.fromLTRB(
-            Space.x5,
-            Space.x5,
-            Space.x5,
-            Space.x6,
-          ),
-          children: <Widget>[
-            Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: kContentWidth),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: <Widget>[
-                    ScreenBreadcrumb(
-                      parent: 'Create',
-                      title: 'Trophies',
-                      onBack: () => state.setSurface(Surface.suite),
-                    ),
-                    const SizedBox(height: Space.x5),
-                    const EngineBanner(),
-                    if (state.trophies.isEmpty)
-                      const _NoShelfYet()
-                    else ...<Widget>[
-                      const _PointsCard(),
-                      // One shelf per tier, cheapest first — the order they
-                      // are usually earned in, so the eye starts on what is
-                      // already won and walks up to what is left.
-                      for (final TrophyTier tier in TrophyTier.values)
-                        if (state.trophies.any((Trophy t) => t.tier == tier))
-                          _TierShelf(
-                            tier: tier,
-                            trophies: state.trophies
-                                .where((Trophy t) => t.tier == tier)
-                                .toList(growable: false),
-                          ),
+        return PullToRefresh(
+          child: ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(
+              Space.x5,
+              Space.x5,
+              Space.x5,
+              Space.x6,
+            ),
+            children: <Widget>[
+              Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: kContentWidth),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: <Widget>[
+                      ScreenBreadcrumb(
+                        parent: 'Create',
+                        title: 'Trophies',
+                        onBack: () => state.setSurface(Surface.suite),
+                      ),
+                      const SizedBox(height: Space.x5),
+                      const EngineBanner(),
+                      if (state.trophies.isEmpty)
+                        const _NoShelfYet()
+                      else ...<Widget>[
+                        const _PointsCard(),
+                        // One shelf per tier, cheapest first — the order they
+                        // are usually earned in, so the eye starts on what is
+                        // already won and walks up to what is left.
+                        for (final TrophyTier tier in TrophyTier.values)
+                          if (state.trophies.any((Trophy t) => t.tier == tier))
+                            _TierShelf(
+                              tier: tier,
+                              trophies: state.trophies
+                                  .where((Trophy t) => t.tier == tier)
+                                  .toList(growable: false),
+                            ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         );
       },
     );
