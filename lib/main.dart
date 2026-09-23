@@ -1,4 +1,8 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'app/app.dart';
 import 'state/app_state.dart';
@@ -8,6 +12,14 @@ import 'widgets/common.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  // Edge to edge: the app draws under both system bars, so the bottom one
+  // is only the gesture pill floating over the theme's own ground, with no
+  // strip of colour behind it. The overlay style in app.dart makes the
+  // bars transparent; the composer's SafeArea keeps it clear of the pill.
+  // The web ignores this; an installed web app's bars are Chrome's.
+  if (!kIsWeb) {
+    unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge));
+  }
   runApp(const ShiftBoot());
 }
 

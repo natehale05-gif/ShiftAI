@@ -54,9 +54,9 @@ class _ShiftAppState extends State<ShiftApp> {
             // The native builds' own status and navigation bars, set from
             // the theme showing on every rebuild. Nothing set them before,
             // so they kept whatever the platform launched with, whichever
-            // theme was showing. Where Android draws edge to edge the bar is
-            // transparent over the app's own ground, and the colour below
-            // only applies where it is not. The web ignores all of this;
+            // theme was showing. Both bars are transparent over the app,
+            // which draws edge to edge (main.dart), so only the icons
+            // change with the theme. The web ignores all of this;
             // applyBrowserChrome covers it there.
             builder: (BuildContext context, Widget? child) =>
                 AnnotatedRegion<SystemUiOverlayStyle>(
@@ -80,8 +80,9 @@ SystemUiOverlayStyle _barsFor(ShiftColors c) {
     statusBarIconBrightness: icons,
     // iOS names the ground rather than the icons, so it is the reverse.
     statusBarBrightness: c.isDarkGround ? Brightness.dark : Brightness.light,
-    systemNavigationBarColor: c.bg,
-    systemNavigationBarDividerColor: c.bg,
+    // Transparent, so the app's own ground shows through behind the pill.
+    systemNavigationBarColor: Colors.transparent,
+    systemNavigationBarDividerColor: Colors.transparent,
     systemNavigationBarIconBrightness: icons,
     // No grey scrim laid over the gesture pill on top of the theme's
     // ground.

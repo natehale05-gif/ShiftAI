@@ -131,7 +131,7 @@ void main() {
     expect(find.text(failed), findsOneWidget);
   });
 
-  testWidgets('the native system bars follow the theme',
+  testWidgets('the native system bars are clear, with icons for the theme',
       (WidgetTester tester) async {
     final AppState state = await _freshState();
     await tester.pumpWidget(ShiftApp(state: state));
@@ -147,7 +147,13 @@ void main() {
             find.byType(AnnotatedRegion<SystemUiOverlayStyle>).first,
           )
           .value;
-      expect(bars.systemNavigationBarColor, c.bg, reason: id.name);
+      // No strip behind the gesture pill: the app's ground shows through.
+      expect(
+        bars.systemNavigationBarColor,
+        Colors.transparent,
+        reason: id.name,
+      );
+      expect(bars.systemNavigationBarContrastEnforced, isFalse);
       // Dark icons on a light ground, light ones on a dark ground.
       expect(
         bars.statusBarIconBrightness,
@@ -155,6 +161,29 @@ void main() {
         reason: id.name,
       );
     }
+  });
+
+  testWidgets('the composer sits clear of the home indicator',
+      (WidgetTester tester) async {
+    // Where the composer's field ends, with and without a bottom inset
+    // the size of a home indicator. The app draws edge to edge, so
+    // without its SafeArea the field would run under the gesture pill.
+    Future<double> fieldBottom({required double inset}) async {
+      tester.view.padding = FakeViewPadding(
+        bottom: inset * tester.view.devicePixelRatio,
+      );
+      tester.view.viewPadding = tester.view.padding;
+      final AppState state = await _freshState();
+      await tester.pumpWidget(ShiftApp(state: state));
+      await tester.pump();
+      await _dismissRingsSheet(tester);
+      return tester.getRect(find.byType(TextField).last).bottom;
+    }
+
+    addTearDown(tester.view.reset);
+    final double flush = await fieldBottom(inset: 0);
+    final double inset = await fieldBottom(inset: 34);
+    expect(flush - inset, closeTo(34, 0.5));
   });
 
   testWidgets('the sidebar starts closed and the hamburger opens it',
