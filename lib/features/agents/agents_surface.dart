@@ -7,6 +7,7 @@ import '../../state/app_state.dart';
 import '../../theme/tokens.dart';
 import '../../theme/type.dart';
 import '../../widgets/common.dart';
+import '../../util/haptics.dart';
 
 /// Two tabs: the runs sitting against a repository, and the jobs running in
 /// a folder. Both are lists of one line each — nothing is dressed up.
@@ -182,9 +183,10 @@ class _AgentsTabState extends State<_AgentsTab> {
                   label: f.label,
                   color: colorOf(f),
                   selected: _filter == f,
-                  onTap: () => setState(
-                    () => _filter = _filter == f ? _Filter.all : f,
-                  ),
+                  onTap: () {
+                    Haptics.selection();
+                    setState(() => _filter = _filter == f ? _Filter.all : f);
+                  },
                 ),
               ),
             ],

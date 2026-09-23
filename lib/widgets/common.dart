@@ -10,6 +10,7 @@ import '../state/app_state.dart';
 import '../theme/tokens.dart';
 import '../theme/type.dart';
 import '../util/file_pick.dart';
+import '../util/haptics.dart';
 
 /// The lockup's artwork, inked in whichever theme is showing.
 ///
@@ -280,7 +281,10 @@ class SegmentedPills<T> extends StatelessWidget {
                   excludeSemantics: true,
                   child: GestureDetector(
                     behavior: HitTestBehavior.opaque,
-                    onTap: () => onChanged(option),
+                    onTap: () {
+                      if (option != selected) Haptics.selection();
+                      onChanged(option);
+                    },
                     child: Padding(
                       padding: const EdgeInsets.symmetric(
                         horizontal: Space.x4,
@@ -599,6 +603,7 @@ class HeartButton extends StatelessWidget {
   Future<void> _toggle(BuildContext context, AppState state) async {
     final bool wasOn = item.saved;
     final ScaffoldMessengerState bar = ScaffoldMessenger.of(context);
+    Haptics.light();
     final bool took = await state.toggleSaved(item.id);
     if (!took) {
       bar.showSnackBar(
@@ -704,6 +709,7 @@ class _PillComposerState extends State<PillComposer> {
   }
 
   void _send() {
+    if (_controller.text.trim().isNotEmpty) Haptics.light();
     final String text = _controller.text.trim();
     if (text.isEmpty && _attachments.isEmpty) return;
     final String carried = _attachments.isEmpty

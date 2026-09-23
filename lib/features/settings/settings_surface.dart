@@ -13,6 +13,7 @@ import '../../widgets/common.dart';
 import 'account_card.dart';
 import 'avatar.dart';
 import 'connectors.dart';
+import '../../util/haptics.dart';
 
 /// The avatar maker and the account first, then appearance, sections and
 /// connections — who you are before how the app looks and behaves.
@@ -104,7 +105,10 @@ class _AppearanceCard extends StatelessWidget {
                 _ThemeSwatch(
                   id: id,
                   selected: state.activeTheme == id,
-                  onTap: () => state.setTheme(id),
+                  onTap: () {
+                    if (state.activeTheme != id) Haptics.selection();
+                    state.setTheme(id);
+                  },
                 ),
             ],
           ),
@@ -197,7 +201,10 @@ class _SwitchRow extends StatelessWidget {
     final ShiftColors c = ShiftColors.of(context);
     return MergeSemantics(
       child: InkWell(
-        onTap: () => onChanged(!value),
+        onTap: () {
+          Haptics.selection();
+          onChanged(!value);
+        },
         borderRadius: Radii.mdAll,
         child: ConstrainedBox(
           constraints: const BoxConstraints(minHeight: 44),
@@ -222,7 +229,14 @@ class _SwitchRow extends StatelessWidget {
                   value: value,
                   activeTrackColor: c.accent,
                   inactiveTrackColor: c.surfaceRaised,
-                  onChanged: onChanged,
+                  // The iOS switch taps the Taptic Engine itself; elsewhere
+                  // it is silent, so the tick is added here.
+                  onChanged: (bool on) {
+                    if (defaultTargetPlatform != TargetPlatform.iOS) {
+                      Haptics.selection();
+                    }
+                    onChanged(on);
+                  },
                 ),
               ],
             ),

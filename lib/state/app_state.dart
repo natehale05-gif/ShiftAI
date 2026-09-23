@@ -18,6 +18,7 @@ import '../models/models.dart';
 import '../theme/tokens.dart';
 import 'daily_rings.dart';
 import 'greetings.dart';
+import '../util/haptics.dart';
 
 /// Storage keys. Everything money related persists so a reload never resets
 /// the account. Nothing else writes these keys, and a key this app did not
@@ -188,7 +189,11 @@ class AppState extends ChangeNotifier {
   /// Callers are responsible for their own [_changed] — this can run in the
   /// middle of a write that already has one coming.
   void _closeRing(RingKind kind) {
-    rings = rings.rolledTo(DateTime.now()).close(kind);
+    final DailyRings today = rings.rolledTo(DateTime.now());
+    // A ring closing is the one moment in the day the app celebrates;
+    // felt as well as seen, and only the first time.
+    if (!today.isClosed(kind)) Haptics.success();
+    rings = today.close(kind);
   }
 
   /// Tells the engine roughly where this device is and applies whatever
