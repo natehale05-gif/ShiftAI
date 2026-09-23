@@ -1110,6 +1110,14 @@ class AppState extends ChangeNotifier {
     _writeTimer = Timer(const Duration(milliseconds: 400), _write);
   }
 
+  /// Writes the blob now instead of after the debounce, for a caller that
+  /// is about to reload the page and would otherwise lose the last change.
+  Future<void> flush() async {
+    _writeTimer?.cancel();
+    _writeTimer = null;
+    await _write();
+  }
+
   Future<void> _write() async {
     final Map<String, String> unlocked = <String, String>{
       for (final Trophy t in trophies)

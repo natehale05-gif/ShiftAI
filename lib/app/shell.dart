@@ -13,6 +13,7 @@ import '../features/vault/vault_surface.dart';
 import '../state/app_state.dart';
 import '../theme/tokens.dart';
 import '../theme/type.dart';
+import '../util/system_bars.dart';
 import '../widgets/common.dart';
 import 'modes.dart';
 
@@ -40,8 +41,11 @@ class _ShiftShellState extends State<ShiftShell> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     // Covers a cold start; didChangeAppLifecycleState covers every reopen
-    // after this one.
-    WidgetsBinding.instance.addPostFrameCallback((_) => _showRings());
+    // after this one. A reload for a theme change (on an iPhone home-screen
+    // app, see relaunchForTheme) is not a launch, so it skips them.
+    if (!consumeThemeRelaunch()) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _showRings());
+    }
   }
 
   @override
@@ -286,8 +290,9 @@ class SidebarNav extends StatelessWidget {
       // One flat colour, edge to edge and top to bottom: the rail is a
       // single panel, not a strip sitting under a bar.
       color: c.surface,
+      // The colour runs under the gesture bar; the account row at the
+      // bottom stops above it.
       child: SafeArea(
-        bottom: false,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[

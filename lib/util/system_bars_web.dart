@@ -1,3 +1,7 @@
+import 'dart:js_interop';
+import 'dart:js_interop_unsafe';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart';
 import 'package:web/web.dart' as web;
 
@@ -61,4 +65,84 @@ String _css(Color colour) {
   final String hex =
       (argb & 0xFFFFFF).toRadixString(16).padLeft(6, '0').toUpperCase();
   return '#$hex';
+}
+
+/// How far the page runs under the gesture bar or home indicator, in
+/// logical pixels. Flutter's web engine does not read the CSS safe-area
+/// insets, so MediaQuery's bottom padding is always zero on the web.
+final ValueNotifier<double> _bottomInset = ValueNotifier<double>(0);
+final ValueListenable<double> browserBottomInset = _bottomInset;
+
+/// Draws the page under Android's gesture bar in Chrome, as the native
+/// app does, and tells Flutter how much of it is covered.
+///
+/// Chrome only draws a page edge to edge, instead of painting a solid bar
+/// under the gesture pill, when the page sets `viewport-fit=cover` and
+/// its CSS uses `env(safe-area-inset-bottom)`, so the page can keep
+/// content clear. Flutter draws on a canvas and never uses that CSS, so
+/// the bar stayed solid. The probe below is that use: an invisible element
+/// as tall as the inset. Its measured height becomes the bottom padding
+/// that app.dart adds to MediaQuery, which the composer's SafeArea reads.
+/// iOS home-screen apps draw under the home indicator the same way.
+void watchBrowserInsets() {
+  const String id = 'shift-safe-area';
+  web.HTMLElement? probe = web.document.getElementById(id) as web.HTMLElement?;
+  if (probe == null) {
+    probe = web.document.createElement('div') as web.HTMLElement
+      ..id = id
+      ..setAttribute(
+        'style',
+        'position:fixed;left:0;bottom:0;width:0;visibility:hidden;'
+            'pointer-events:none;height:env(safe-area-inset-bottom,0px)',
+      );
+    web.document.body?.appendChild(probe);
+  }
+  final web.HTMLElement element = probe;
+  void read() =>
+      _bottomInset.value = element.getBoundingClientRect().height.toDouble();
+  read();
+  // The inset changes with rotation, and when Chrome switches between
+  // drawing under the bar and not.
+  web.window.addEventListener('resize', ((web.Event _) => read()).toJS);
+  web.window.visualViewport
+      ?.addEventListener('resize', ((web.Event _) => read()).toJS);
+}
+
+/// An iPhone home-screen web app reads its status bar colour from the
+/// theme-color tag when it opens and ignores changes after that. Changing
+/// the theme recoloured everything but the bar until the app was swiped
+/// away and reopened. There is no call that makes iOS read the tag again,
+/// so on iOS alone a theme change reloads the page.
+///
+/// `navigator.standalone` exists only in Safari on iOS, and is true only
+/// for an app opened from the home screen.
+bool get barsNeedRelaunchForTheme {
+  final JSAny? standalone =
+      (web.window.navigator as JSObject).getProperty('standalone'.toJS);
+  return standalone.isA<JSBoolean>() && (standalone! as JSBoolean).toDart;
+}
+
+const String _relaunchKey = 'shift-theme-relaunch';
+
+/// Reloads the page, leaving a note so the reload does not reopen the
+/// daily rings as if it were a fresh launch.
+void relaunchForTheme() {
+  try {
+    web.window.sessionStorage.setItem(_relaunchKey, '1');
+  } on Object {
+    // Storage refused (private mode): the rings show once. No harm.
+  }
+  web.window.location.reload();
+}
+
+/// True once, on the launch [relaunchForTheme] caused.
+bool consumeThemeRelaunch() {
+  try {
+    final bool relaunched =
+        web.window.sessionStorage.getItem(_relaunchKey) != null;
+    web.window.sessionStorage.removeItem(_relaunchKey);
+    return relaunched;
+  } on Object {
+    return false;
+  }
 }

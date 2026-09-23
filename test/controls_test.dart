@@ -9,6 +9,7 @@ import 'package:shift_ai/data/seed_repository.dart';
 import 'package:shift_ai/models/models.dart';
 import 'package:shift_ai/data/auth/token_store.dart';
 import 'package:shift_ai/state/app_state.dart';
+import 'package:shift_ai/theme/tokens.dart';
 
 /// The rings screen opens on its own the moment `ShiftShell` mounts — see
 /// `ShiftShell._showRings` — so a test that then taps something underneath
@@ -129,6 +130,20 @@ Future<AppState> _state({ShiftRepository? repo}) async {
 }
 
 void main() {
+  test('flush writes the theme now, not after the debounce', () async {
+    // An iPhone home-screen app reloads straight after a theme change, well
+    // inside the 400ms debounce. Without the flush it came back on the old
+    // theme.
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    final AppState state =
+        await AppState.load(tokenStore: MemoryTokenStore());
+    addTearDown(state.dispose);
+    state.setTheme(ShiftThemeId.retroLight);
+    await state.flush();
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    expect(prefs.getString(StoreKeys.app), contains('"theme":"retroLight"'));
+  });
+
   group('a write the engine refuses is undone and reported', () {
     test('every mutation answers false and puts the screen back', () async {
       final AppState state = await _state(repo: _RefusingRepository());

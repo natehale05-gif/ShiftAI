@@ -1,5 +1,21 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart';
 
 /// Off the web there is no meta tag to keep in step — iOS and Android draw
 /// their own bars from the app's theme through the engine.
 void applyBrowserChrome(Color background, {required String theme}) {}
+
+/// Off the web the engine reports the system insets itself, through
+/// MediaQuery, so there is nothing to add.
+final ValueListenable<double> browserBottomInset = ValueNotifier<double>(0);
+
+void watchBrowserInsets() {}
+
+/// Only an iPhone home-screen web app needs to reload to recolour its
+/// status bar.
+bool get barsNeedRelaunchForTheme => false;
+
+void relaunchForTheme() {}
+
+/// Whether this launch is that reload. Never, off the web.
+bool consumeThemeRelaunch() => false;

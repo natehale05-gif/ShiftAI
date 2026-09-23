@@ -121,9 +121,19 @@ cat > index.html <<'HTML'
       font: 500 11px/14px ui-monospace, "SF Mono", Menlo, Consolas, monospace;
       letter-spacing: 0.16em;
     }
+    /* Chrome for Android only draws a page under the gesture bar, in
+       place of a solid bar, when the page uses this inset. Flutter paints
+       on a canvas and never would, so this invisible probe does, and
+       lib/util/system_bars_web.dart measures it to pad the app. */
+    #shift-safe-area {
+      position: fixed; left: 0; bottom: 0; width: 0;
+      height: env(safe-area-inset-bottom, 0px);
+      visibility: hidden; pointer-events: none;
+    }
   </style>
 </head>
 <body>
+  <div id="shift-safe-area"></div>
   <div id="boot">LOADING SHIFT AI</div>
   <script>
     document.body.style.backgroundColor = window.__shiftBootBg;

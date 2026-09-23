@@ -60,4 +60,19 @@ void main() {
     // shared_preferences on the web prefixes every key with "flutter.".
     expect(script, contains("'flutter.${StoreKeys.app}'"));
   });
+
+  test('both pages opt in to drawing under the gesture bar', () {
+    // Chrome draws the page under Android's gesture bar, in place of a
+    // solid bar, only with viewport-fit=cover and CSS that uses the
+    // bottom inset. Flutter's canvas never would, so the probe does.
+    for (final String path in <String>[
+      'tool/build_web_hosted.sh',
+      'web/index.html',
+    ]) {
+      final String page = File(path).readAsStringSync();
+      expect(page, contains('viewport-fit=cover'), reason: path);
+      expect(page, contains('env(safe-area-inset-bottom'), reason: path);
+      expect(page, contains('<div id="shift-safe-area"></div>'), reason: path);
+    }
+  });
 }
