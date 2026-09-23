@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 
 import '../../app/modes.dart';
 import '../../app/shell.dart';
@@ -134,7 +135,10 @@ class _StandingsBoard extends StatelessWidget {
         // the cards above are the highlights, this is the board itself,
         // and a board with a hole where you should be is a worse thing to
         // read. Saying which is which is what the heading is for.
-        Text('Standings', style: ShiftType.sectionTitle(c.text)),
+        Semantics(
+          header: true,
+          child: Text('Standings', style: ShiftType.sectionTitle(c.text)),
+        ),
         const SizedBox(height: Space.x3),
         // One grouped list rather than loose rows, hairlines inset to the
         // names so the ranks and faces read as a single column.
@@ -333,11 +337,14 @@ class _LeagueHeader extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        Text(
-          league.regionLabel,
-          style: ShiftType.sectionTitle(c.text),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
+        Semantics(
+          header: true,
+          child: Text(
+            league.regionLabel,
+            style: ShiftType.sectionTitle(c.text),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
         Text(
           '${league.division.label} league$rule',
@@ -397,20 +404,41 @@ class _ClockRowState extends State<_ClockRow> {
           crossAxisAlignment: CrossAxisAlignment.baseline,
           textBaseline: TextBaseline.alphabetic,
           children: <Widget>[
-            Text(
-              'Week ${clock.weekNumber}',
-              style: ShiftType.sectionTitle(c.text),
-            ),
-            const Spacer(),
-            if (countdown == null)
-              Text('Locked', style: ShiftType.caption(c.textMuted))
-            else ...<Widget>[
-              Text('Ends in ', style: ShiftType.caption(c.textMuted)),
-              Text(
-                countdown,
-                style: ShiftType.figures(c.text, size: 15),
+            Semantics(
+              header: true,
+              child: Text(
+                'Week ${clock.weekNumber}',
+                style: ShiftType.sectionTitle(c.text),
               ),
-            ],
+            ),
+            const SizedBox(width: Space.x3),
+            // One paragraph that can wrap, not two fixed pieces: at a large
+            // text size "Week 39" and "Ends in 5d 08:16:30" together ran
+            // 52px off a phone's edge.
+            Expanded(
+              child: Text.rich(
+                TextSpan(
+                  children: countdown == null
+                      ? <InlineSpan>[
+                          TextSpan(
+                            text: 'Locked',
+                            style: ShiftType.caption(c.textMuted),
+                          ),
+                        ]
+                      : <InlineSpan>[
+                          TextSpan(
+                            text: 'Ends in ',
+                            style: ShiftType.caption(c.textMuted),
+                          ),
+                          TextSpan(
+                            text: countdown,
+                            style: ShiftType.figures(c.text, size: 15),
+                          ),
+                        ],
+                ),
+                textAlign: TextAlign.right,
+              ),
+            ),
           ],
         ),
         if (detail.isNotEmpty) ...<Widget>[
@@ -540,78 +568,86 @@ class _PodiumSpot extends StatelessWidget {
     final bool lead = row.rank == 1;
     final Color medal = _medal(c);
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: <Widget>[
-        SizedBox(
-          height: 22,
-          child: lead
-              ? Icon(Icons.emoji_events_rounded, size: 20, color: medal)
-              : null,
-        ),
-        Center(
-          child: _Face(row: row, size: lead ? 64 : 52, ring: medal),
-        ),
-        const SizedBox(height: Space.x3),
-        Text(
-          row.name,
-          maxLines: 1,
-          textAlign: TextAlign.center,
-          overflow: TextOverflow.ellipsis,
-          style: ShiftType.bodySm(c.text),
-        ),
-        const SizedBox(height: 2),
-        Text(
-          Fmt.money(row.earnings),
-          textAlign: TextAlign.center,
-          style: ShiftType.figures(c.textMuted, size: 13, weight: 500),
-        ),
-        const SizedBox(height: Space.x3),
-        // Pedestals meet in the middle with no gap, so the three read as
-        // one block of steps rather than three floating tiles. Each is its
-        // medal washed thin, lit along the top edge like a step catching
-        // the light.
-        //
-        // The lit edge is its own strip rather than a top-only Border: a
-        // borderRadius on a border that is not the same on every side is
-        // an assertion in Flutter, not a style.
-        ClipRRect(
-          borderRadius: const BorderRadius.vertical(top: Radii.sm),
-          child: SizedBox(
-            height: height,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: <Widget>[
-                ColoredBox(color: medal, child: const SizedBox(height: 2)),
-                Expanded(
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: <Color>[
-                          medal.withValues(alpha: 0.30),
-                          medal.withValues(alpha: 0.06),
-                        ],
+    return Semantics(
+      container: true,
+      // Read first, second, third, not in the order the steps stand.
+      sortKey: OrdinalSortKey(row.rank.toDouble()),
+      label: '${_place(row.rank)} place, ${_who(row)}, '
+          '${Fmt.money(row.earnings)}',
+      excludeSemantics: true,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          SizedBox(
+            height: 22,
+            child: lead
+                ? Icon(Icons.emoji_events_rounded, size: 20, color: medal)
+                : null,
+          ),
+          Center(
+            child: _Face(row: row, size: lead ? 64 : 52, ring: medal),
+          ),
+          const SizedBox(height: Space.x3),
+          Text(
+            row.name,
+            maxLines: 1,
+            textAlign: TextAlign.center,
+            overflow: TextOverflow.ellipsis,
+            style: ShiftType.bodySm(c.text),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            Fmt.money(row.earnings),
+            textAlign: TextAlign.center,
+            style: ShiftType.figures(c.textMuted, size: 13, weight: 500),
+          ),
+          const SizedBox(height: Space.x3),
+          // Pedestals meet in the middle with no gap, so the three read as
+          // one block of steps rather than three floating tiles. Each is its
+          // medal washed thin, lit along the top edge like a step catching
+          // the light.
+          //
+          // The lit edge is its own strip rather than a top-only Border: a
+          // borderRadius on a border that is not the same on every side is
+          // an assertion in Flutter, not a style.
+          ClipRRect(
+            borderRadius: const BorderRadius.vertical(top: Radii.sm),
+            child: SizedBox(
+              height: height,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: <Widget>[
+                  ColoredBox(color: medal, child: const SizedBox(height: 2)),
+                  Expanded(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: <Color>[
+                            medal.withValues(alpha: 0.30),
+                            medal.withValues(alpha: 0.06),
+                          ],
+                        ),
                       ),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.only(top: Space.x2 - 2),
-                      child: Text(
-                        '${row.rank}',
-                        textAlign: TextAlign.center,
-                        style: ShiftType.subheading(medal)
-                            .copyWith(fontSize: lead ? 22 : 18),
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: Space.x2 - 2),
+                        child: Text(
+                          '${row.rank}',
+                          textAlign: TextAlign.center,
+                          style: ShiftType.subheading(medal)
+                              .copyWith(fontSize: lead ? 22 : 18),
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -627,13 +663,19 @@ class _YouCard extends StatelessWidget {
     final bool up = you.movement > 0;
     final bool flat = you.movement == 0;
 
-    return LayoutBuilder(
-      builder: (BuildContext context, BoxConstraints constraints) {
-        // On a phone the money and the rank move matter; "this week" is
-        // the part that goes, rather than either of them truncating.
-        final bool roomForWeek = constraints.maxWidth >= 420;
-        return _buildCard(context, c, up: up, flat: flat, week: roomForWeek);
-      },
+    return Semantics(
+      container: true,
+      label: 'You are ${_place(you.rank)}, '
+          '${Fmt.money(you.earnings)} this week, ${_moved(you.movement)}',
+      excludeSemantics: true,
+      child: LayoutBuilder(
+        builder: (BuildContext context, BoxConstraints constraints) {
+          // On a phone the money and the rank move matter; "this week" is
+          // the part that goes, rather than either of them truncating.
+          final bool roomForWeek = constraints.maxWidth >= 420;
+          return _buildCard(context, c, up: up, flat: flat, week: roomForWeek);
+        },
+      ),
     );
   }
 
@@ -791,34 +833,40 @@ class _GapLine extends StatelessWidget {
   Widget build(BuildContext context) {
     final ShiftColors c = ShiftColors.of(context);
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: Space.x4,
-        vertical: Space.x3,
-      ),
-      child: Row(
-        children: <Widget>[
-          Icon(icon, size: 16, color: tone),
-          const SizedBox(width: Space.x3),
-          _Face(row: row, size: 28),
-          const SizedBox(width: Space.x3),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Text(
-                  row.name,
-                  style: ShiftType.bodyStrong(c.text),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                Text(label, style: ShiftType.caption(c.textMuted)),
-              ],
+    return Semantics(
+      container: true,
+      label: '${label.split(' · ').first}: ${row.name}, '
+          '${_place(row.rank)}, $gap',
+      excludeSemantics: true,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: Space.x4,
+          vertical: Space.x3,
+        ),
+        child: Row(
+          children: <Widget>[
+            Icon(icon, size: 16, color: tone),
+            const SizedBox(width: Space.x3),
+            _Face(row: row, size: 28),
+            const SizedBox(width: Space.x3),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(
+                    row.name,
+                    style: ShiftType.bodyStrong(c.text),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(label, style: ShiftType.caption(c.textMuted)),
+                ],
+              ),
             ),
-          ),
-          const SizedBox(width: Space.x3),
-          Text(gap, style: ShiftType.figures(tone, size: 14)),
-        ],
+            const SizedBox(width: Space.x3),
+            Text(gap, style: ShiftType.figures(tone, size: 14)),
+          ],
+        ),
       ),
     );
   }
@@ -842,98 +890,130 @@ class _Row extends StatelessWidget {
     final bool flat = row.movement == 0;
     final bool mine = row.isYou;
 
-    return LayoutBuilder(
-      builder: (BuildContext context, BoxConstraints constraints) {
-        final bool roomForTier = constraints.maxWidth >= 520;
-        return Container(
-          padding: const EdgeInsets.symmetric(
-            horizontal: Space.x4,
-            vertical: 10,
-          ),
-          // Your own row is tinted rather than ruled off, so scrolling the
-          // board lands on it without hunting for the number.
-          color: mine ? c.accentSoft : null,
-          child: Row(
-            children: <Widget>[
-              SizedBox(
-                width: 24,
-                child: Text(
-                  '${row.rank}',
-                  textAlign: TextAlign.right,
-                  style: ShiftType.figures(
-                    mine ? c.accent : c.textMuted,
-                    size: 15,
-                    weight: mine ? 700 : 500,
-                  ),
-                ),
-              ),
-              // Beside the rank, not beside the money: a variable-width
-              // thing in the middle of the row is what was eating the
-              // names, and the move belongs with the number it moved.
-              SizedBox(
-                width: 22,
-                child: flat
-                    ? null
-                    : Icon(
-                        up
-                            ? Icons.arrow_drop_up_rounded
-                            : Icons.arrow_drop_down_rounded,
-                        size: 18,
-                        color: up ? c.success : c.danger,
-                      ),
-              ),
-              _Face(row: row, size: 30),
-              const SizedBox(width: Space.x3),
-              // Expanded, not Flexible beside a Spacer: those two split
-              // the leftover width between them, so the name gave up half
-              // the row to empty space and then ellipsised — which is why
-              // half the board read 'Leo Font…' with a gap beside it.
-              Expanded(
-                child: Text(
-                  mine ? 'You' : row.name,
-                  // One size for every name, you included — the weight is
-                  // the only difference. "You" was 15 against everyone
-                  // else's 17, so the row meant to stand out looked
-                  // smaller than its neighbours.
-                  style: ShiftType.copy(
-                    c.text,
-                    size: 16,
-                    weight: mine ? 600 : 400,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              if (row.tier != null && roomForTier) ...<Widget>[
-                const SizedBox(width: Space.x3),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: Space.x2,
-                    vertical: 3,
-                  ),
-                  decoration: BoxDecoration(
-                    color: c.surfaceRaised,
-                    borderRadius: Radii.smAll,
-                  ),
+    return Semantics(
+      container: true,
+      label: '${_place(row.rank)}, ${_who(row)}, '
+          '${Fmt.money(row.earnings)}, ${_moved(row.movement)}',
+      excludeSemantics: true,
+      child: LayoutBuilder(
+        builder: (BuildContext context, BoxConstraints constraints) {
+          final bool roomForTier = constraints.maxWidth >= 520;
+          return Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: Space.x4,
+              vertical: 10,
+            ),
+            // Your own row is tinted rather than ruled off, so scrolling the
+            // board lands on it without hunting for the number.
+            color: mine ? c.accentSoft : null,
+            child: Row(
+              children: <Widget>[
+                SizedBox(
+                  width: 24,
                   child: Text(
-                    row.tier!.label,
-                    style: ShiftType.copy(
-                      row.tier!.colorOn(c),
-                      size: 12,
-                      weight: 600,
+                    '${row.rank}',
+                    textAlign: TextAlign.right,
+                    style: ShiftType.figures(
+                      mine ? c.accent : c.textMuted,
+                      size: 15,
+                      weight: mine ? 700 : 500,
                     ),
                   ),
                 ),
+                // Beside the rank, not beside the money: a variable-width
+                // thing in the middle of the row is what was eating the
+                // names, and the move belongs with the number it moved.
+                SizedBox(
+                  width: 22,
+                  child: flat
+                      ? null
+                      : Icon(
+                          up
+                              ? Icons.arrow_drop_up_rounded
+                              : Icons.arrow_drop_down_rounded,
+                          size: 18,
+                          color: up ? c.success : c.danger,
+                        ),
+                ),
+                _Face(row: row, size: 30),
+                const SizedBox(width: Space.x3),
+                // Expanded, not Flexible beside a Spacer: those two split
+                // the leftover width between them, so the name gave up half
+                // the row to empty space and then ellipsised — which is why
+                // half the board read 'Leo Font…' with a gap beside it.
+                Expanded(
+                  child: Text(
+                    mine ? 'You' : row.name,
+                    // One size for every name, you included — the weight is
+                    // the only difference. "You" was 15 against everyone
+                    // else's 17, so the row meant to stand out looked
+                    // smaller than its neighbours.
+                    style: ShiftType.copy(
+                      c.text,
+                      size: 16,
+                      weight: mine ? 600 : 400,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (row.tier != null && roomForTier) ...<Widget>[
+                  const SizedBox(width: Space.x3),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: Space.x2,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: c.surfaceRaised,
+                      borderRadius: Radii.smAll,
+                    ),
+                    child: Text(
+                      row.tier!.label,
+                      style: ShiftType.copy(
+                        row.tier!.colorOn(c),
+                        size: 12,
+                        weight: 600,
+                      ),
+                    ),
+                  ),
+                ],
+                const SizedBox(width: Space.x3),
+                Text(
+                  Fmt.money(row.earnings),
+                  style: ShiftType.figures(c.text, size: 15),
+                ),
               ],
-              const SizedBox(width: Space.x3),
-              Text(
-                Fmt.money(row.earnings),
-                style: ShiftType.figures(c.text, size: 15),
-              ),
-            ],
-          ),
-        );
-      },
+            ),
+          );
+        },
+      ),
     );
   }
 }
+
+/// What a screen reader says for a place: "1st", "2nd", "23rd".
+///
+/// The board used to reach VoiceOver as one long run of text, podium
+/// steps in the order they stand (second, first, third) and every face's
+/// initials spelled out as letters. Each person on it is now one line.
+String _place(int rank) {
+  final int lastTwo = rank % 100;
+  final String suffix = lastTwo >= 11 && lastTwo <= 13
+      ? 'th'
+      : switch (rank % 10) {
+          1 => 'st',
+          2 => 'nd',
+          3 => 'rd',
+          _ => 'th',
+        };
+  return '$rank$suffix';
+}
+
+String _who(StandingRow row) => row.isYou ? 'you' : row.name;
+
+String _moved(int movement) => movement > 0
+    ? 'up $movement'
+    : movement < 0
+        ? 'down ${-movement}'
+        : 'no change';

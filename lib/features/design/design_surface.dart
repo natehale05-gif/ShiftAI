@@ -210,7 +210,7 @@ class _SearchRow extends StatelessWidget {
           // A filled search field, as a list's search bar is drawn, not an
           // outlined capsule.
           child: Container(
-            height: 40,
+            height: 44,
             padding: const EdgeInsets.symmetric(horizontal: Space.x3),
             decoration: BoxDecoration(
               color: c.surfaceRaised,

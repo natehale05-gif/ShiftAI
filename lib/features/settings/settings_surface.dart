@@ -85,35 +85,13 @@ class _AppearanceCard extends StatelessWidget {
         children: <Widget>[
           const Eyebrow('Appearance'),
           const SizedBox(height: Space.x3),
-          Row(
-            children: <Widget>[
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Text(
-                      'Match system',
-                      style: ShiftType.copy(c.text, size: 16, weight: 600),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      state.themeId.isRetro
-                          ? 'Retro light by day, Retro neon by night, '
-                              'with your phone.'
-                          : 'Light by day, Dark by night, with your phone.',
-                      style: ShiftType.caption(c.textMuted),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: Space.x3),
-              CupertinoSwitch(
-                value: state.followSystem,
-                activeTrackColor: c.accent,
-                inactiveTrackColor: c.surfaceRaised,
-                onChanged: state.setFollowSystem,
-              ),
-            ],
+          _SwitchRow(
+            title: 'Match system',
+            subtitle: state.themeId.isRetro
+                ? 'Retro light by day, Retro neon by night, with your phone.'
+                : 'Light by day, Dark by night, with your phone.',
+            value: state.followSystem,
+            onChanged: state.setFollowSystem,
           ),
           const SizedBox(height: Space.x4),
           // Picking one by hand turns Match system off: a swatch is an
@@ -194,6 +172,67 @@ class _ThemeSwatch extends StatelessWidget {
   }
 }
 
+/// A setting that is on or off: a title, a line under it, and the iOS
+/// switch in the theme's accent.
+///
+/// The whole row is the control, as it is in Settings on an iPhone. The
+/// switch alone is 59 by 39, under the 44-point minimum, and on its own
+/// it was announced as a toggle with no name. Merged, the row reads as
+/// one labelled switch and takes the tap anywhere along it.
+class _SwitchRow extends StatelessWidget {
+  const _SwitchRow({
+    required this.title,
+    required this.subtitle,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final String title;
+  final String subtitle;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final ShiftColors c = ShiftColors.of(context);
+    return MergeSemantics(
+      child: InkWell(
+        onTap: () => onChanged(!value),
+        borderRadius: Radii.mdAll,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 44),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: Space.x1),
+            child: Row(
+              children: <Widget>[
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(title, style: ShiftType.bodyStrong(c.text)),
+                      const SizedBox(height: 2),
+                      Text(subtitle, style: ShiftType.caption(c.textMuted)),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: Space.x3),
+                // Material's switch has an outlined off state and an inset
+                // thumb, and on a phone it looked borrowed.
+                CupertinoSwitch(
+                  value: value,
+                  activeTrackColor: c.accent,
+                  inactiveTrackColor: c.surfaceRaised,
+                  onChanged: onChanged,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// The switches that hide whole sections of the app.
 ///
 /// Off means gone, not greyed out: the sidebar row, the surface and every
@@ -220,40 +259,11 @@ class _FeaturesCard extends StatelessWidget {
           ),
           const SizedBox(height: Space.x3),
           for (final ShiftFeature feature in ShiftFeature.values)
-            Padding(
-              padding: const EdgeInsets.only(bottom: Space.x2),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: <Widget>[
-                        Text(
-                          feature.label,
-                          style: ShiftType.bodyStrong(c.text),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          feature.description,
-                          style: ShiftType.caption(c.textMuted),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: Space.x3),
-                  // The iOS switch, in the theme's accent. Material's has an
-                  // outlined off state and an inset thumb, and on a phone it
-                  // is the one control on this screen that looks borrowed.
-                  CupertinoSwitch(
-                    value: state.isEnabled(feature),
-                    activeTrackColor: c.accent,
-                    inactiveTrackColor: c.surfaceRaised,
-                    onChanged: (bool on) =>
-                        state.setFeatureEnabled(feature, on),
-                  ),
-                ],
-              ),
+            _SwitchRow(
+              title: feature.label,
+              subtitle: feature.description,
+              value: state.isEnabled(feature),
+              onChanged: (bool on) => state.setFeatureEnabled(feature, on),
             ),
         ],
       ),
@@ -788,7 +798,7 @@ class _AvatarTile extends StatelessWidget {
                 color: c.textMuted.withValues(alpha: 0.7),
               ),
               style: IconButton.styleFrom(
-                minimumSize: const Size(32, 32),
+                minimumSize: const Size(44, 44),
                 padding: EdgeInsets.zero,
               ),
             ),

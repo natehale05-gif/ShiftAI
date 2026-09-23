@@ -193,7 +193,7 @@ class _MasonryGrid extends StatelessWidget {
           // The tile clamps its height, so the bookkeeping has to clamp too
           // or the columns come out ragged.
           heights[shortest] += (columnWidth / item.aspect).clamp(150, 420) +
-              _VaultTile.captionHeight +
+              _VaultTile.captionHeightFor(context) +
               Space.x5;
         }
 
@@ -252,9 +252,14 @@ class _VaultTile extends StatelessWidget {
   final VoidCallback onTap;
 
   /// The caption under the art: a gap, one line of title, one of detail.
-  /// Fixed, so the masonry's arithmetic and the tile agree on how tall a
-  /// tile is and the columns come out level.
-  static const double captionHeight = Space.x2 + 22 + 18;
+  /// Computed in one place, so the masonry's arithmetic and the tile agree
+  /// on how tall a tile is and the columns come out level. It grows with
+  /// the text size: a fixed 48 overflowed by 20px at 1.5x text and 40px
+  /// at 2x.
+  static double captionHeightFor(BuildContext context) {
+    final TextScaler scale = MediaQuery.textScalerOf(context);
+    return Space.x2 + scale.scale(22) + scale.scale(18);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -303,7 +308,7 @@ class _VaultTile extends StatelessWidget {
               ),
             ),
             SizedBox(
-              height: captionHeight,
+              height: captionHeightFor(context),
               child: Padding(
                 padding: const EdgeInsets.only(top: Space.x2),
                 child: Column(

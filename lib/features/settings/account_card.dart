@@ -33,24 +33,32 @@ class AccountCard extends StatelessWidget {
             children: <Widget>[
               Text(state.creator.name, style: ShiftType.bodyStrong(c.text)),
               Text(state.creator.email, style: ShiftType.bodySm(c.textMuted)),
-              const SizedBox(height: Space.x1),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: <Widget>[
-                  Text(
-                    '@${state.creator.bareHandle}',
-                    style: ShiftType.bodySm(c.textMuted),
-                  ),
-                  const SizedBox(width: Space.x1),
-                  InkWell(
-                    onTap: () => _renameHandle(context),
-                    borderRadius: Radii.smAll,
-                    child: Padding(
-                      padding: const EdgeInsets.all(Space.x1),
-                      child: Icon(Icons.edit, size: 14, color: c.textMuted),
+              // The handle and its pencil are one button, 44 tall. The
+              // pencil alone was a 22-point target with no label, so a
+              // screen reader announced a nameless button.
+              Semantics(
+                button: true,
+                label: 'Change username, @${state.creator.bareHandle}',
+                excludeSemantics: true,
+                child: InkWell(
+                  onTap: () => _renameHandle(context),
+                  borderRadius: Radii.smAll,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(minHeight: 44),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        Text(
+                          '@${state.creator.bareHandle}',
+                          style: ShiftType.bodySm(c.textMuted),
+                        ),
+                        const SizedBox(width: Space.x2),
+                        Icon(Icons.edit, size: 14, color: c.textMuted),
+                        const SizedBox(width: Space.x2),
+                      ],
                     ),
                   ),
-                ],
+                ),
               ),
             ],
           ),
