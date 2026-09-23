@@ -124,7 +124,7 @@ void main() {
 
     await tester.tap(find.text('Working'));
     await tester.pumpAndSettle();
-    expect(find.text('Nothing is working right now.'), findsOneWidget);
+    expect(find.text('Nothing working'), findsOneWidget);
 
     await tester.tap(find.text('Working'));
     await tester.pumpAndSettle();

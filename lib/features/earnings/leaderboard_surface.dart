@@ -181,41 +181,22 @@ class _NoBoardYet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final AppState state = AppScope.of(context);
-    final ShiftColors c = ShiftColors.of(context);
     final bool failed = state.lastError != null;
 
-    return ShiftCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Icon(
-            failed ? Icons.cloud_off_rounded : Icons.bar_chart_rounded,
-            size: 28,
-            color: c.textMuted,
-          ),
-          const SizedBox(height: Space.x4),
-          Text(
-            failed ? 'The board did not load' : 'No board yet',
-            style: ShiftType.subheading(c.text),
-          ),
-          const SizedBox(height: Space.x2),
-          Text(
-            failed
-                ? state.lastError!.message
-                : 'Publish something this week and you are on it. Standings '
-                    'settle when the week closes.',
-            style: ShiftType.bodySm(c.textMuted),
-          ),
-          if (failed) ...<Widget>[
-            const SizedBox(height: Space.x4),
-            OutlinedButton(
-              onPressed: state.refreshing ? null : state.refresh,
-              child: const Text('Try again'),
-            ),
-          ],
-        ],
-      ),
-    );
+    return failed
+        ? EmptyState(
+            icon: Icons.cloud_off_rounded,
+            title: 'The board did not load',
+            message: state.lastError!.message,
+            actionLabel: 'Try again',
+            onAction: state.refreshing ? null : state.refresh,
+          )
+        : const EmptyState(
+            icon: Icons.leaderboard_rounded,
+            title: 'No board yet',
+            message: 'Publish something this week and you are on it. '
+                'Standings settle when the week closes.',
+          );
   }
 }
 

@@ -80,29 +80,22 @@ class _NoShelfYet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ShiftColors c = ShiftColors.of(context);
-    final bool failed = AppScope.of(context).lastError != null;
-    return ShiftCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Icon(Icons.emoji_events_outlined, size: 28, color: c.textMuted),
-          const SizedBox(height: Space.x4),
-          Text(
-            failed ? 'The shelf did not load' : 'Nothing on the shelf yet',
-            style: ShiftType.subheading(c.text),
-          ),
-          const SizedBox(height: Space.x2),
-          Text(
-            failed
-                ? 'Trophies live on the engine. Once it answers they are '
-                    'here, earned ones and all.'
-                : 'Make your first piece and the first one is yours.',
-            style: ShiftType.bodySm(c.textMuted),
-          ),
-        ],
-      ),
-    );
+    final AppState state = AppScope.of(context);
+    final bool failed = state.lastError != null;
+    return failed
+        ? EmptyState(
+            icon: Icons.cloud_off_rounded,
+            title: 'The shelf did not load',
+            message: 'Trophies live on the engine. Once it answers they are '
+                'here, earned ones and all.',
+            actionLabel: 'Try again',
+            onAction: state.refreshing ? null : state.refresh,
+          )
+        : const EmptyState(
+            icon: Icons.emoji_events_outlined,
+            title: 'Nothing on the shelf yet',
+            message: 'Make your first piece and the first trophy is yours.',
+          );
   }
 }
 

@@ -1359,3 +1359,80 @@ class PullToRefresh extends StatelessWidget {
     );
   }
 }
+
+/// What a screen says when it has nothing to show: a symbol, a title, a
+/// line on what goes here, and the one thing to do next.
+///
+/// These used to be a sentence of grey text, which is most of what a brand
+/// new account sees on its first day. [compact] is for an empty filter or
+/// search inside a screen that otherwise has content.
+class EmptyState extends StatelessWidget {
+  const EmptyState({
+    required this.icon,
+    required this.title,
+    required this.message,
+    this.actionLabel,
+    this.onAction,
+    this.compact = false,
+    super.key,
+  });
+
+  final IconData icon;
+  final String title;
+  final String message;
+  final String? actionLabel;
+  final VoidCallback? onAction;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final ShiftColors c = ShiftColors.of(context);
+    final double disc = compact ? 52 : 72;
+    return Padding(
+      padding: EdgeInsets.symmetric(
+        vertical: compact ? Space.x5 : Space.x7,
+        horizontal: Space.x4,
+      ),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 340),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Container(
+                width: disc,
+                height: disc,
+                decoration: BoxDecoration(
+                  color: c.accentSoft,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, size: disc * 0.46, color: c.accent),
+              ),
+              SizedBox(height: compact ? Space.x3 : Space.x4),
+              Semantics(
+                header: true,
+                child: Text(
+                  title,
+                  textAlign: TextAlign.center,
+                  style: compact
+                      ? ShiftType.copy(c.text, size: 17, weight: 600)
+                      : ShiftType.sectionTitle(c.text),
+                ),
+              ),
+              const SizedBox(height: Space.x2),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: ShiftType.bodySm(c.textMuted),
+              ),
+              if (actionLabel != null && onAction != null) ...<Widget>[
+                const SizedBox(height: Space.x5),
+                FilledButton(onPressed: onAction, child: Text(actionLabel!)),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

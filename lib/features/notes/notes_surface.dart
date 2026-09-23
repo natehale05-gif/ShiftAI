@@ -52,12 +52,18 @@ class NotesSurface extends StatelessWidget {
                             const SizedBox(height: Space.x4),
                             const EngineBanner(),
                             if (state.notes.isEmpty)
-                              Padding(
-                                padding: const EdgeInsets.only(top: Space.x6),
-                                child: Text(
-                                  'Nothing written down yet.',
-                                  style: ShiftType.body(c.textMuted),
-                                ),
+                              EmptyState(
+                                icon: Icons.edit_note_rounded,
+                                title: 'No notes yet',
+                                message: 'Write one down in the bar below, '
+                                    'or start a blank page.',
+                                actionLabel: 'New note',
+                                onAction: () async {
+                                  final Note? note = await state.addNote();
+                                  if (note != null && context.mounted) {
+                                    await _openNote(context, note);
+                                  }
+                                },
                               )
                             else
                               GroupedList(

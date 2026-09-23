@@ -150,21 +150,37 @@ class _MasonryGrid extends StatelessWidget {
     final AppState state = AppScope.of(context);
 
     if (items.isEmpty) {
-      final ShiftColors c = ShiftColors.of(context);
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(Space.x6),
-          child: Text(
-            state.lastError != null
-                ? 'Your vault is on the engine, and it did not answer. '
-                    'Nothing here is missing — it just has not arrived.'
-                : state.vaultScope == VaultScope.mine
-                    ? 'Nothing in your vault yet. Anything you make lands '
-                        'here, and so does anything you heart in EcoVault.'
-                    : 'Nothing published to EcoVault yet.',
-            textAlign: TextAlign.center,
-            style: ShiftType.body(c.textMuted),
-          ),
+      // Scrollable even when empty, so it can still be pulled to reload.
+      return PullToRefresh(
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          children: <Widget>[
+            if (state.lastError != null)
+              EmptyState(
+                icon: Icons.cloud_off_rounded,
+                title: 'Your vault did not load',
+                message: 'It is on the engine, and the engine did not '
+                    'answer. Nothing here is missing; it has not arrived.',
+                actionLabel: 'Try again',
+                onAction: state.refreshing ? null : state.refresh,
+              )
+            else if (state.vaultScope == VaultScope.mine)
+              EmptyState(
+                icon: Icons.collections_outlined,
+                title: 'Nothing in your vault yet',
+                message: 'Anything you make lands here, and so does '
+                    'anything you heart in EcoVault.',
+                actionLabel: 'Browse EcoVault',
+                onAction: () => state.setVaultScope(VaultScope.eco),
+              )
+            else
+              const EmptyState(
+                icon: Icons.public_rounded,
+                title: 'Nothing in EcoVault yet',
+                message: 'When people publish, their work shows up here '
+                    'for you to heart.',
+              ),
+          ],
         ),
       );
     }
