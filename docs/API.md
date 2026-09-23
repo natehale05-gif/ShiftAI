@@ -267,8 +267,14 @@ case like every other display string.
 ### `/v1/week`
 
 ```json
-{ "pool": 53497, "payoutLine": "Top earners cash out Friday" }
+{ "pool": 53497, "payoutLine": "Pools pay Friday" }
 ```
+
+The week itself is not sent: the client computes it, and the rule is the
+Suite's. A week runs **Tuesday 10 PM Central to the next Tuesday 10 PM
+Central** (`lib/util/week.dart`). Pools pay on Friday, which is not the
+close, so copy should never call Friday the end of the week. No income
+claims ("you will earn") in anything the server sends for display.
 
 ### `/v1/league`
 
