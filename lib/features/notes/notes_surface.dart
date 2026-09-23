@@ -106,7 +106,8 @@ class NotesSurface extends StatelessWidget {
         ),
         Positioned(
           right: Space.x6,
-          bottom: 104,
+          // Above the composer, which rises by the bottom inset.
+          bottom: 104 + MediaQuery.paddingOf(context).bottom,
           child: FloatingActionButton(
             onPressed: () async {
               final Note? note = await state.addNote();

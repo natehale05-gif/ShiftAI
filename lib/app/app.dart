@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -25,6 +27,7 @@ class _ShiftAppState extends State<ShiftApp> {
     // to be told about a theme change rather than rebuilt into one.
     widget.state.addListener(_syncBrowserChrome);
     _syncBrowserChrome();
+    watchBrowserInsets();
   }
 
   @override
@@ -59,9 +62,15 @@ class _ShiftAppState extends State<ShiftApp> {
             // change with the theme. The web ignores all of this;
             // applyBrowserChrome covers it there.
             builder: (BuildContext context, Widget? child) =>
-                AnnotatedRegion<SystemUiOverlayStyle>(
-              value: _barsFor(c),
-              child: child ?? const SizedBox.shrink(),
+                ValueListenableBuilder<double>(
+              valueListenable: browserBottomInset,
+              builder: (BuildContext context, double inset, _) => MediaQuery(
+                data: _withBottomInset(MediaQuery.of(context), inset),
+                child: AnnotatedRegion<SystemUiOverlayStyle>(
+                  value: _barsFor(c),
+                  child: child ?? const SizedBox.shrink(),
+                ),
+              ),
             ),
             home: widget.state.signedIn
                 ? const ShiftShell()
@@ -87,5 +96,20 @@ SystemUiOverlayStyle _barsFor(ShiftColors c) {
     // No grey scrim laid over the gesture pill on top of the theme's
     // ground.
     systemNavigationBarContrastEnforced: false,
+  );
+}
+
+/// The web's bottom inset (see watchBrowserInsets) folded into MediaQuery,
+/// so SafeArea works there as it does natively. `padding` drops to zero
+/// behind an open keyboard, which covers the bar anyway, the same way
+/// the engine reports it on a phone.
+MediaQueryData _withBottomInset(MediaQueryData mq, double inset) {
+  if (inset <= 0) return mq;
+  final double viewPadding = math.max(mq.viewPadding.bottom, inset);
+  return mq.copyWith(
+    viewPadding: mq.viewPadding.copyWith(bottom: viewPadding),
+    padding: mq.padding.copyWith(
+      bottom: math.max(0, viewPadding - mq.viewInsets.bottom),
+    ),
   );
 }

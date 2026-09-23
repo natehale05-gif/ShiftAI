@@ -16,6 +16,7 @@ import 'package:shift_ai/state/app_state.dart';
 import 'package:shift_ai/theme/tokens.dart';
 import 'package:shift_ai/util/file_pick.dart';
 import 'package:shift_ai/util/prompt.dart';
+import 'package:shift_ai/util/system_bars.dart';
 
 Future<AppState> _freshState() async {
   SharedPreferences.setMockInitialValues(<String, Object>{});
@@ -184,6 +185,37 @@ void main() {
     final double flush = await fieldBottom(inset: 0);
     final double inset = await fieldBottom(inset: 34);
     expect(flush - inset, closeTo(34, 0.5));
+  });
+
+  testWidgets('the web page inset lifts the composer, except over a keyboard',
+      (WidgetTester tester) async {
+    // On the web the inset comes from a CSS probe, not the engine. Off the
+    // web the listenable is a plain notifier, so a test can stand in for
+    // Chrome reporting the gesture bar.
+    final ValueNotifier<double> inset =
+        browserBottomInset as ValueNotifier<double>;
+    addTearDown(() => inset.value = 0);
+    final AppState state = await _freshState();
+    await tester.pumpWidget(ShiftApp(state: state));
+    await tester.pump();
+    await _dismissRingsSheet(tester);
+    double field() => tester.getRect(find.byType(TextField).last).bottom;
+
+    final double flush = field();
+    inset.value = 34;
+    await tester.pump();
+    expect(flush - field(), closeTo(34, 0.5));
+
+    // An open keyboard already covers the bar, so nothing is added on top.
+    tester.view.viewInsets = FakeViewPadding(
+      bottom: 300 * tester.view.devicePixelRatio,
+    );
+    addTearDown(tester.view.resetViewInsets);
+    await tester.pump();
+    final double overKeyboard = field();
+    inset.value = 0;
+    await tester.pump();
+    expect(field(), closeTo(overKeyboard, 0.5));
   });
 
   testWidgets('the sidebar starts closed and the hamburger opens it',

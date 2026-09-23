@@ -286,8 +286,9 @@ class SidebarNav extends StatelessWidget {
       // One flat colour, edge to edge and top to bottom: the rail is a
       // single panel, not a strip sitting under a bar.
       color: c.surface,
+      // The colour runs under the gesture bar; the account row at the
+      // bottom stops above it.
       child: SafeArea(
-        bottom: false,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[

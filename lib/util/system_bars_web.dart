@@ -1,3 +1,6 @@
+import 'dart:js_interop';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart';
 import 'package:web/web.dart' as web;
 
@@ -61,4 +64,45 @@ String _css(Color colour) {
   final String hex =
       (argb & 0xFFFFFF).toRadixString(16).padLeft(6, '0').toUpperCase();
   return '#$hex';
+}
+
+/// How far the page runs under the gesture bar or home indicator, in
+/// logical pixels. Flutter's web engine does not read the CSS safe-area
+/// insets, so MediaQuery's bottom padding is always zero on the web.
+final ValueNotifier<double> _bottomInset = ValueNotifier<double>(0);
+final ValueListenable<double> browserBottomInset = _bottomInset;
+
+/// Draws the page under Android's gesture bar in Chrome, as the native
+/// app does, and tells Flutter how much of it is covered.
+///
+/// Chrome only draws a page edge to edge, instead of painting a solid bar
+/// under the gesture pill, when the page sets `viewport-fit=cover` and
+/// its CSS uses `env(safe-area-inset-bottom)`, so the page can keep
+/// content clear. Flutter draws on a canvas and never uses that CSS, so
+/// the bar stayed solid. The probe below is that use: an invisible element
+/// as tall as the inset. Its measured height becomes the bottom padding
+/// that app.dart adds to MediaQuery, which the composer's SafeArea reads.
+/// iOS home-screen apps draw under the home indicator the same way.
+void watchBrowserInsets() {
+  const String id = 'shift-safe-area';
+  web.HTMLElement? probe = web.document.getElementById(id) as web.HTMLElement?;
+  if (probe == null) {
+    probe = web.document.createElement('div') as web.HTMLElement
+      ..id = id
+      ..setAttribute(
+        'style',
+        'position:fixed;left:0;bottom:0;width:0;visibility:hidden;'
+            'pointer-events:none;height:env(safe-area-inset-bottom,0px)',
+      );
+    web.document.body?.appendChild(probe);
+  }
+  final web.HTMLElement element = probe;
+  void read() =>
+      _bottomInset.value = element.getBoundingClientRect().height.toDouble();
+  read();
+  // The inset changes with rotation, and when Chrome switches between
+  // drawing under the bar and not.
+  web.window.addEventListener('resize', ((web.Event _) => read()).toJS);
+  web.window.visualViewport
+      ?.addEventListener('resize', ((web.Event _) => read()).toJS);
 }
