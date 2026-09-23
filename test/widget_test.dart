@@ -218,6 +218,23 @@ void main() {
     expect(field(), closeTo(overKeyboard, 0.5));
   });
 
+  testWidgets('an avatar with no preview is a portrait, not a spinner',
+      (WidgetTester tester) async {
+    // The demo's "Everyday" is ready with no preview URL, and "Studio
+    // lighting" is training. Both used to spin forever.
+    final AppState state = await _freshState();
+    await tester.pumpWidget(ShiftApp(state: state));
+    await tester.pump();
+    await _dismissRingsSheet(tester);
+    state.setSurface(Surface.settings);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Everyday'), findsOneWidget);
+    expect(find.text('Studio lighting'), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.byIcon(Icons.hourglass_top_rounded), findsOneWidget);
+  });
+
   testWidgets('the sidebar starts closed and the hamburger opens it',
       (WidgetTester tester) async {
     tester.view.physicalSize = const Size(1440, 1024);

@@ -80,7 +80,7 @@ class ShiftAvatar extends StatelessWidget {
         ),
         child: Text(
           initials,
-          style: ShiftType.mono(c.accent, size: size * 0.33),
+          style: ShiftType.copy(c.accent, size: size * 0.36, weight: 600),
         ),
       );
 

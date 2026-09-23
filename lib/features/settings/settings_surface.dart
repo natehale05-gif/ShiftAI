@@ -588,6 +588,89 @@ class _AvatarsCardState extends State<_AvatarsCard> {
   }
 }
 
+/// An avatar's face in its gallery card.
+///
+/// Only a preview the server has sent is a picture. Before, anything that
+/// was not a ready avatar with a URL got a spinner, so a ready avatar whose
+/// preview had not arrived, like the demo's "Everyday", spun forever and
+/// read as broken. Now a face with no picture is a portrait in its own
+/// colours, seeded by the avatar like a vault poster. Training dims it and
+/// marks it with an hourglass rather than a spinner that never finishes.
+class _AvatarFace extends StatelessWidget {
+  const _AvatarFace({required this.avatar});
+
+  final Avatar avatar;
+
+  static const double _size = 64;
+
+  @override
+  Widget build(BuildContext context) {
+    final ShiftColors c = ShiftColors.of(context);
+    final String? url = avatar.previewUrl;
+
+    final Widget portrait = Stack(
+      fit: StackFit.expand,
+      children: <Widget>[
+        PosterArt(seed: avatar.id),
+        Icon(
+          Icons.person_rounded,
+          size: _size * 0.62,
+          color: Colors.white.withValues(alpha: 0.85),
+        ),
+      ],
+    );
+
+    final Widget face = switch (avatar.status) {
+      AvatarStatus.failed => ColoredBox(
+          color: c.surface,
+          child: Icon(Icons.error_outline_rounded, color: c.danger),
+        ),
+      AvatarStatus.ready when url != null && url.isNotEmpty => Image.network(
+          url,
+          fit: BoxFit.cover,
+          errorBuilder: (BuildContext context, Object _, StackTrace? __) =>
+              portrait,
+        ),
+      AvatarStatus.ready => portrait,
+      AvatarStatus.training => Opacity(opacity: 0.45, child: portrait),
+    };
+
+    return Semantics(
+      label: '${avatar.name}, ${avatar.status.name}',
+      image: true,
+      excludeSemantics: true,
+      child: SizedBox.square(
+        dimension: _size,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: <Widget>[
+            Positioned.fill(child: ClipOval(child: face)),
+            if (avatar.status == AvatarStatus.training)
+              Positioned(
+                right: -2,
+                bottom: -2,
+                child: Container(
+                  width: 24,
+                  height: 24,
+                  decoration: BoxDecoration(
+                    color: c.surface,
+                    shape: BoxShape.circle,
+                  ),
+                  alignment: Alignment.center,
+                  child: Icon(
+                    Icons.hourglass_top_rounded,
+                    size: 14,
+                    color: c.textMuted,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _AvatarTile extends StatelessWidget {
   const _AvatarTile({required this.avatar});
 
@@ -621,46 +704,16 @@ class _AvatarTile extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
-          Center(
-            child: Container(
-              width: 64,
-              height: 64,
-              alignment: Alignment.center,
-              clipBehavior: Clip.antiAlias,
-              decoration:
-                  BoxDecoration(shape: BoxShape.circle, color: c.surface),
-              child: switch (avatar.status) {
-                AvatarStatus.ready when avatar.previewUrl != null =>
-                  Image.network(
-                    avatar.previewUrl!,
-                    fit: BoxFit.cover,
-                    width: 64,
-                    height: 64,
-                    errorBuilder: (BuildContext context, Object _,
-                            StackTrace? __) =>
-                        Icon(Icons.person_outline_rounded, color: c.textMuted),
-                  ),
-                AvatarStatus.failed =>
-                  Icon(Icons.error_outline_rounded, color: c.danger),
-                _ => SizedBox.square(
-                    dimension: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(c.accent),
-                    ),
-                  ),
-              },
-            ),
-          ),
+          Center(child: _AvatarFace(avatar: avatar)),
           const SizedBox(height: Space.x2),
           Text(
             avatar.name,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             textAlign: TextAlign.center,
-            style: ShiftType.bodySm(c.text),
+            style: ShiftType.copy(c.text, size: 15, weight: 600),
           ),
-          const SizedBox(height: Space.x1),
+          const SizedBox(height: 2),
           Text(
             avatar.personal
                 ? 'Personal'
@@ -694,7 +747,7 @@ class _AvatarTile extends StatelessWidget {
               icon: Icon(
                 Icons.delete_outline_rounded,
                 size: 18,
-                color: c.danger,
+                color: c.textMuted.withValues(alpha: 0.7),
               ),
               style: IconButton.styleFrom(
                 minimumSize: const Size(32, 32),
