@@ -1,4 +1,4 @@
-# SHIFT AI — Flutter client
+# ShiftAi — Flutter client
 
 ### ▶ Live app: <https://natehale05-gif.github.io/ShiftAI/>
 
@@ -6,7 +6,7 @@ Deployed from `main` on every push by `.github/workflows/pages.yml`.
 
 ---
 
-The SHIFT AI product as a Flutter app: one shell, four modes, seven surfaces,
+The ShiftAi product as a Flutter app: one shell, four modes, seven surfaces,
 four themes, responsive from a 390px phone to a 1440px desktop.
 
 The mode menu is **Suite, Agents, Design, Notes**. Everything else — chat,
@@ -76,7 +76,7 @@ assets/brand/                the lockup, on dark and on light
 
 ## Design system
 
-Colours, type, spacing and radii come from the SHIFT AI design system and
+Colours, type, spacing and radii come from the ShiftAi design system and
 are carried on `ThemeData` as a `ShiftColors` extension — no widget holds a
 literal hex. Three themes (`dark`, `light`, `retro`) define every token, so
 any screen built on them switches over with no new code.

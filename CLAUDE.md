@@ -1,4 +1,4 @@
-# SHIFT AI — orientation for whoever picks this up
+# ShiftAi — orientation for whoever picks this up
 
 A Flutter creator suite: chat, vault, agents, design, notes, a weekly
 leaderboard and a trophy shelf.

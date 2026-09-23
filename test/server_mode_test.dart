@@ -412,13 +412,13 @@ void main() {
       // "@@shiftai".
       const Creator withAt = Creator(
         handle: '@shiftai',
-        name: 'SHIFT AI',
+        name: 'ShiftAi',
         email: 'demo@shiftai.club',
         initials: 'SA',
       );
       const Creator without = Creator(
         handle: 'shiftai',
-        name: 'SHIFT AI',
+        name: 'ShiftAi',
         email: 'demo@shiftai.club',
         initials: 'SA',
       );

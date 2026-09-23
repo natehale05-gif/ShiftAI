@@ -75,7 +75,7 @@ class ShiftLogo extends StatelessWidget {
     final String? themed = ShiftLockup.forInk(c.text);
 
     return Semantics(
-      label: 'SHIFT ai',
+      label: 'ShiftAi',
       child: themed != null
           ? SvgPicture.string(themed, width: width, height: height)
           : SvgPicture.asset(ShiftLockup.asset, width: width, height: height),

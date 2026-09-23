@@ -66,7 +66,7 @@ cat > index.html <<'HTML'
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="description" content="SHIFT AI — the creator suite: chat, earnings, vault, trophies, notes, agents.">
+  <meta name="description" content="ShiftAi — the creator suite: chat, earnings, vault, trophies, notes, agents.">
   <!--
     The live theme-color tag is what Chrome reads, in real time, for the
     status bar. An installed app's navigation bar ignores it and takes the
@@ -77,11 +77,11 @@ cat > index.html <<'HTML'
   <meta name="theme-color" content="#0A0A0F">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="SHIFT AI">
+  <meta name="apple-mobile-web-app-title" content="ShiftAi">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
   <link rel="icon" type="image/png" href="favicon.png">
   <link rel="manifest" href="manifest.json">
-  <title>SHIFT AI</title>
+  <title>ShiftAi</title>
   <script>
     // Before any Dart runs: link the manifest for the theme this person
     // last chose, and paint the first frame in it. Chrome colours an
@@ -134,7 +134,7 @@ cat > index.html <<'HTML'
 </head>
 <body>
   <div id="shift-safe-area"></div>
-  <div id="boot">LOADING SHIFT AI</div>
+  <div id="boot">LOADING ShiftAi</div>
   <script>
     document.body.style.backgroundColor = window.__shiftBootBg;
     document.getElementById('boot').style.backgroundColor = window.__shiftBootBg;

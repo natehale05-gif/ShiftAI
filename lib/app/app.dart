@@ -64,7 +64,7 @@ class _ShiftAppState extends State<ShiftApp> {
         builder: (BuildContext context, _) {
           final ShiftColors c = ShiftColors.forTheme(widget.state.themeId);
           return MaterialApp(
-            title: 'SHIFT AI',
+            title: 'ShiftAi',
             debugShowCheckedModeBanner: false,
             theme: ShiftTheme.build(widget.state.themeId),
             // The native builds' own status and navigation bars, set from

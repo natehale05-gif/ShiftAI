@@ -2,7 +2,7 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <!-- SHIFT AI does not track, and does not sell or share anything with
+  <!-- ShiftAi does not track, and does not sell or share anything with
        data brokers. If that ever changes this file changes with it, in the
        same submission. -->
   <key>NSPrivacyTracking</key>

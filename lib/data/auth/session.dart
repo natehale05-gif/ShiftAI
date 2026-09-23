@@ -48,16 +48,8 @@ class Session {
       handle: json['handle'] as String? ?? '',
       name: name,
       email: json['email'] as String? ?? '',
-      initials: json['initials'] as String? ?? _initials(name),
+      initials: json['initials'] as String? ?? initialsOf(name),
     );
-  }
-
-  static String _initials(String name) {
-    final List<String> words =
-        name.split(RegExp(r'\s+')).where((String w) => w.isNotEmpty).toList();
-    if (words.isEmpty) return '';
-    if (words.length == 1) return words.first[0].toUpperCase();
-    return '${words.first[0]}${words.last[0]}'.toUpperCase();
   }
 
   /// Only ever written to secure storage, never to the preferences blob.

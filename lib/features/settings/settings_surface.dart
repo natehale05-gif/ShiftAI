@@ -291,7 +291,7 @@ class _ConnectionsCard extends StatelessWidget {
           const SizedBox(height: Space.x3),
           Text(
             live.isEmpty
-                ? 'Nothing connected yet. Browse all to see what SHIFT can '
+                ? 'Nothing connected yet. Browse all to see what ShiftAi can '
                     'talk to, and authorise the ones you use.'
                 : 'The other ${all.length - live.length} are listed and '
                     'ready to authorise. Logos are placeholders until the '

@@ -194,7 +194,7 @@ class _SignInScreenState extends State<SignInScreen> {
                                   style: ShiftType.subheading(d.text),
                                 ),
                                 content: Text(
-                                  'Membership is handled by SHIFT support. '
+                                  'Membership is handled by ShiftAi support. '
                                   'Mail support@shiftai.club with the address '
                                   'on your account and they can reset it.',
                                   style: ShiftType.bodySm(d.text),

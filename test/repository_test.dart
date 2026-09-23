@@ -39,7 +39,7 @@ http.Response _snapshotRoute(http.BaseRequest request) {
     '/v1/me' => http.Response(
         _json(<String, dynamic>{
           'handle': 'shiftai',
-          'name': 'SHIFT AI',
+          'name': 'ShiftAi',
           'email': 'demo@shiftai.club',
         }),
         200,
@@ -187,7 +187,7 @@ void main() {
       );
 
       final ShiftSnapshot snap = await repo.load();
-      expect(snap.creator.name, 'SHIFT AI');
+      expect(snap.creator.name, 'ShiftAi');
       // Initials are derived when the server does not send them.
       expect(snap.creator.initials, 'SA');
       expect(snap.standings.length, 2);
@@ -338,7 +338,7 @@ void main() {
         (http.BaseRequest r) => http.Response(
           _json(<String, dynamic>{
             'handle': 'shiftai2',
-            'name': 'SHIFT AI',
+            'name': 'ShiftAi',
             'email': 'demo@shiftai.club',
           }),
           200,

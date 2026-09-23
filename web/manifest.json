@@ -1,11 +1,11 @@
 {
-    "name": "SHIFT AI",
-    "short_name": "SHIFT AI",
+    "name": "ShiftAi",
+    "short_name": "ShiftAi",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0A0A0F",
     "theme_color": "#0A0A0F",
-    "description": "SHIFT AI \u2014 the creator suite: chat, earnings, vault, trophies, notes, agents.",
+    "description": "ShiftAi \u2014 the creator suite: chat, earnings, vault, trophies, notes, agents.",
     "prefer_related_applications": false,
     "icons": [
         {

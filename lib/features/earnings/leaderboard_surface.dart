@@ -235,7 +235,7 @@ class _LocalLeagueSectionState extends State<_LocalLeagueSection> {
       if (!mounted) return;
       setState(() {
         _requesting = false;
-        _problem = 'Turn on location access for SHIFT AI to see who is '
+        _problem = 'Turn on location access for ShiftAi to see who is '
             'near you.';
       });
       return;
