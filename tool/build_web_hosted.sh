@@ -101,12 +101,25 @@ cat > index.html <<'HTML'
         dark: '#F2F5FA', light: '#0E1628',
         retro: '#FFFFFF', retroLight: '#0A0A0F'
       };
-      var theme = 'retro';
+      // The same choice AppState makes: the theme picked by hand, or,
+      // following the system (a new account's default), that theme's
+      // day or night partner.
+      var picked = 'retro', follow = true;
       try {
         var raw = localStorage.getItem('flutter.shift.app.v1');
-        var saved = raw && JSON.parse(JSON.parse(raw)).theme;
-        if (BG.hasOwnProperty(saved)) theme = saved;
+        var saved = raw ? JSON.parse(JSON.parse(raw)) : {};
+        if (BG.hasOwnProperty(saved.theme)) picked = saved.theme;
+        follow = typeof saved.themeAuto === 'boolean'
+          ? saved.themeAuto : !saved.theme;
       } catch (e) { /* nothing saved, or unreadable: the default */ }
+      var theme = picked;
+      if (follow) {
+        var night = window.matchMedia &&
+          window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var retro = picked === 'retro' || picked === 'retroLight';
+        theme = retro ? (night ? 'retro' : 'retroLight')
+                      : (night ? 'dark' : 'light');
+      }
       document.querySelector('link[rel="manifest"]')
         .setAttribute('href', 'manifest-' + theme + '.json');
       document.querySelector('meta[name="theme-color"]')

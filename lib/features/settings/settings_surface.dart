@@ -85,6 +85,39 @@ class _AppearanceCard extends StatelessWidget {
         children: <Widget>[
           const Eyebrow('Appearance'),
           const SizedBox(height: Space.x3),
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      'Match system',
+                      style: ShiftType.copy(c.text, size: 16, weight: 600),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      state.themeId.isRetro
+                          ? 'Retro light by day, Retro neon by night, '
+                              'with your phone.'
+                          : 'Light by day, Dark by night, with your phone.',
+                      style: ShiftType.caption(c.textMuted),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: Space.x3),
+              CupertinoSwitch(
+                value: state.followSystem,
+                activeTrackColor: c.accent,
+                inactiveTrackColor: c.surfaceRaised,
+                onChanged: state.setFollowSystem,
+              ),
+            ],
+          ),
+          const SizedBox(height: Space.x4),
+          // Picking one by hand turns Match system off: a swatch is an
+          // override, and the check marks what is showing either way.
           Wrap(
             spacing: Space.x3,
             runSpacing: Space.x3,
@@ -92,13 +125,18 @@ class _AppearanceCard extends StatelessWidget {
               for (final ShiftThemeId id in ShiftThemeId.values)
                 _ThemeSwatch(
                   id: id,
-                  selected: state.themeId == id,
+                  selected: state.activeTheme == id,
                   onTap: () => state.setTheme(id),
                 ),
             ],
           ),
           const SizedBox(height: Space.x3),
-          Text(state.themeId.label, style: ShiftType.bodyStrong(c.text)),
+          Text(
+            state.followSystem
+                ? '${state.activeTheme.label} · matching your phone'
+                : state.activeTheme.label,
+            style: ShiftType.bodyStrong(c.text),
+          ),
         ],
       ),
     );

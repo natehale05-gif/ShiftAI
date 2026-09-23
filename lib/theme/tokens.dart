@@ -15,6 +15,19 @@ extension ShiftThemeIdLabel on ShiftThemeId {
 
   String get storageValue => name;
 
+  /// The retro pair, or the house pair.
+  bool get isRetro =>
+      this == ShiftThemeId.retro || this == ShiftThemeId.retroLight;
+
+  /// This theme's partner for [brightness], within its own pair: Retro
+  /// neon and Retro light, or Dark and Light. Following the system keeps
+  /// the style someone picked and only changes day for night.
+  ShiftThemeId forBrightness(Brightness brightness) {
+    final bool dark = brightness == Brightness.dark;
+    if (isRetro) return dark ? ShiftThemeId.retro : ShiftThemeId.retroLight;
+    return dark ? ShiftThemeId.dark : ShiftThemeId.light;
+  }
+
   /// Retro neon is the default a new account opens on. An account that
   /// has already chosen a theme keeps it: its name is in the blob and is
   /// matched here, so this fallback only applies when nothing was stored.

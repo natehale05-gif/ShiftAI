@@ -20,13 +20,14 @@ class ShiftApp extends StatefulWidget {
   State<ShiftApp> createState() => _ShiftAppState();
 }
 
-class _ShiftAppState extends State<ShiftApp> {
+class _ShiftAppState extends State<ShiftApp> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
     // The browser's own chrome is not part of the widget tree, so it has
     // to be told about a theme change rather than rebuilt into one.
-    _barsTheme = widget.state.themeId;
+    _barsTheme = widget.state.activeTheme;
+    WidgetsBinding.instance.addObserver(this);
     widget.state.addListener(_syncBrowserChrome);
     _syncBrowserChrome();
     watchBrowserInsets();
@@ -35,15 +36,25 @@ class _ShiftAppState extends State<ShiftApp> {
   /// The theme the system bars were last painted for.
   late ShiftThemeId _barsTheme;
 
+  /// The device went light or dark. Matters only while the theme follows
+  /// the system; AppState ignores it otherwise.
+  @override
+  void didChangePlatformBrightness() {
+    widget.state.setSystemBrightness(
+      WidgetsBinding.instance.platformDispatcher.platformBrightness,
+    );
+  }
+
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     widget.state.removeListener(_syncBrowserChrome);
     widget.state.dispose();
     super.dispose();
   }
 
   void _syncBrowserChrome() {
-    final ShiftThemeId theme = widget.state.themeId;
+    final ShiftThemeId theme = widget.state.activeTheme;
     applyBrowserChrome(ShiftColors.forTheme(theme).bg, theme: theme.name);
     if (theme == _barsTheme) return;
     _barsTheme = theme;
@@ -62,11 +73,12 @@ class _ShiftAppState extends State<ShiftApp> {
       child: AnimatedBuilder(
         animation: widget.state,
         builder: (BuildContext context, _) {
-          final ShiftColors c = ShiftColors.forTheme(widget.state.themeId);
+          final ShiftThemeId theme = widget.state.activeTheme;
+          final ShiftColors c = ShiftColors.forTheme(theme);
           return MaterialApp(
             title: 'ShiftAi',
             debugShowCheckedModeBanner: false,
-            theme: ShiftTheme.build(widget.state.themeId),
+            theme: ShiftTheme.build(theme),
             // The native builds' own status and navigation bars, set from
             // the theme showing on every rebuild. Nothing set them before,
             // so they kept whatever the platform launched with, whichever
