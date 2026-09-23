@@ -125,6 +125,6 @@ exploratory, branch.
 flutter analyze && flutter test
 ```
 
-186 tests. They have caught every regression listed above at least once,
+200 tests. They have caught every regression listed above at least once,
 including several of mine. If one fails, read it before changing it —
 twice now the test was right and my expectation was wrong.
