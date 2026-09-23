@@ -58,7 +58,10 @@ server's.
 
 **The local cache is keyed to an account.** The signed-in email is
 written into the `shift.app.v1` blob and the blob is refused for a
-different account. Sign-out empties it.
+different account. Sign-out empties it. Offline, the account to match is
+the one in the Keychain / Keystore session, so you open on your own
+last-seen copy (`showingCached`); a failed load with no session, or a
+blob naming anyone else, still gets nothing.
 
 **`state.you` is nullable.** It used to resolve to `standings.last`,
 which threw on an empty board and pointed at a stranger's row when it

@@ -544,7 +544,13 @@ class EngineBanner extends StatelessWidget {
           Icon(Icons.cloud_off_rounded, size: 20, color: c.warning),
           const SizedBox(width: Space.x3),
           Expanded(
-            child: Text(error.message, style: ShiftType.bodySm(c.text)),
+            child: Text(
+              state.showingCached
+                  ? '${error.message} Showing what was last loaded on this '
+                      'device.'
+                  : error.message,
+              style: ShiftType.bodySm(c.text),
+            ),
           ),
           if (error.retryable) ...<Widget>[
             const SizedBox(width: Space.x3),

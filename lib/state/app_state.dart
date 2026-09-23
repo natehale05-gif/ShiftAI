@@ -135,6 +135,10 @@ class AppState extends ChangeNotifier {
   /// True while a refresh is in flight.
   bool refreshing = false;
 
+  /// The engine did not answer at launch, and the screens are this
+  /// account's last-seen copy from the device, not a fresh one.
+  bool showingCached = false;
+
   /// Re-reads everything from the engine. Local edits that have not been
   /// pushed are overwritten, which is the point — the server is the truth.
   Future<void> refresh() async {
@@ -154,6 +158,7 @@ class AppState extends ChangeNotifier {
       designs = List<DesignDoc>.of(_snap.designs);
       avatars = List<Avatar>.of(_snap.avatars);
       league = _snap.league;
+      showingCached = false;
     } on ShiftApiException catch (error) {
       // Keep what is on screen. An empty list would read as "you have
       // nothing", which is a different and wrong statement.
@@ -262,14 +267,23 @@ class AppState extends ChangeNotifier {
     }
 
     // The cached blob is keyed to an account. It is read back only when
-    // it belongs to the account that just answered — a device that two
+    // it belongs to the account that is signed in: a device that two
     // people have signed into must never show one of them the other's
-    // vault, and a failed load has no account to check against, so it
-    // gets nothing.
+    // vault.
+    //
+    // Which account that is comes from the engine's answer when there is
+    // one. When there is not (offline, or the engine is down) it comes
+    // from the session in the Keychain / Keystore, which names the
+    // person signed in on this device. That is what lets the app open
+    // offline on your own last-seen vault and notes. A failed load with no
+    // session, or a blob naming anyone else, still gets nothing.
+    bool cachedWhileOffline = false;
     if (!seeded) {
-      final bool sameAccount = failure == null &&
-          snapshot.creator.email.isNotEmpty &&
-          blob['account'] == snapshot.creator.email;
+      final String who = failure == null
+          ? snapshot.creator.email
+          : backend.auth.creator?.email ?? '';
+      final bool sameAccount = who.isNotEmpty && blob['account'] == who;
+      cachedWhileOffline = failure != null && sameAccount;
       if (!sameAccount) {
         blob = Map<String, dynamic>.of(blob)
           ..remove('vault')
@@ -283,6 +297,7 @@ class AppState extends ChangeNotifier {
 
     final AppState state = AppState._(prefs, blob, repo, snapshot);
     state.lastError = failure;
+    state.showingCached = cachedWhileOffline;
     state.seededDemo = seeded;
     state._auth = backend.auth;
     if (!seeded) state.signedIn = backend.auth.signedIn;
