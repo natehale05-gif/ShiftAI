@@ -571,7 +571,8 @@ class DesignDoc {
   final String title;
   final int versions;
 
-  /// What shows on the thumbnail: PAGE, DECK, BRAND.
+  /// Which kind of thing it is, in sentence case: Page, Deck or Brand.
+  /// The thumbnail draws that shape.
   final String kindLabel;
 
   String get versionLabel =>

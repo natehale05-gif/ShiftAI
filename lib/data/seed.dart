@@ -354,17 +354,24 @@ abstract final class Seed {
   // Design --------------------------------------------------------------
 
   static const List<DesignDoc> designs = <DesignDoc>[
+    // One of each kind the thumbnails draw.
     DesignDoc(
       id: 'd-palette',
       title: 'Palette reference sheet',
       versions: 2,
-      kindLabel: 'Page',
+      kindLabel: 'Brand',
     ),
     DesignDoc(
       id: 'd-tide',
       title: 'Tide clock landing page',
       versions: 1,
       kindLabel: 'Page',
+    ),
+    DesignDoc(
+      id: 'd-recap',
+      title: 'Launch week recap',
+      versions: 3,
+      kindLabel: 'Deck',
     ),
   ];
 
