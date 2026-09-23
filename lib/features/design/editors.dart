@@ -42,6 +42,9 @@ class _DesignEditorScreenState extends State<DesignEditorScreen> {
   /// Whether the preview has anything in it yet.
   bool _filled = false;
 
+  /// On a phone, which pane is showing: the chat (0) or the preview (1).
+  int _pane = 0;
+
   @override
   Widget build(BuildContext context) {
     final ShiftColors c = ShiftColors.of(context);
@@ -65,27 +68,77 @@ class _DesignEditorScreenState extends State<DesignEditorScreen> {
               onMake: () => setState(() => _filled = true),
             );
 
+            // On a phone the two panes are a segmented choice, the same
+            // control the rest of the app uses, not Material's underlined
+            // tabs. Both stay built, so a half-written message survives a
+            // look at the preview.
             if (!split) {
-              return DefaultTabController(
-                length: 2,
-                child: Column(
-                  children: <Widget>[
-                    TabBar(
-                      dividerColor: c.border,
-                      indicatorColor: c.accent,
-                      labelColor: c.text,
-                      unselectedLabelColor: c.textMuted,
-                      labelStyle: ShiftType.bodyStrong(c.text),
-                      tabs: <Widget>[
-                        const Tab(text: 'Chat'),
-                        Tab(text: kind.paneLabel),
+              final Widget phoneChat = _ChatPane(
+                kind: kind,
+                title: widget.title,
+                chatOpen: true,
+                onToggleChat: () {},
+                onMake: () => setState(() => _filled = true),
+                showHeader: false,
+              );
+              return Column(
+                children: <Widget>[
+                  // Back first, then the switch: on an iPhone the way out
+                  // is always the top-left corner.
+                  SizedBox(
+                    height: 52,
+                    child: Row(
+                      children: <Widget>[
+                        const SizedBox(width: Space.x1),
+                        IconButton(
+                          tooltip: 'Back to Design',
+                          onPressed: () => Navigator.of(context).maybePop(),
+                          icon: Icon(
+                            Icons.chevron_left_rounded,
+                            size: 30,
+                            color: c.accent,
+                          ),
+                          style: IconButton.styleFrom(
+                            minimumSize: const Size(44, 44),
+                          ),
+                        ),
+                        Expanded(
+                          child: Text(
+                            widget.title ?? kind.untitled,
+                            overflow: TextOverflow.ellipsis,
+                            style: ShiftType.copy(
+                              c.text,
+                              size: 17,
+                              weight: 600,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: Space.x4),
                       ],
                     ),
-                    Expanded(
-                      child: TabBarView(children: <Widget>[chat, preview]),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      Space.x4,
+                      Space.x2,
+                      Space.x4,
+                      0,
                     ),
-                  ],
-                ),
+                    child: SegmentedPills<int>(
+                      options: const <int>[0, 1],
+                      labelOf: (int i) => i == 0 ? 'Chat' : kind.paneLabel,
+                      selected: _pane,
+                      onChanged: (int i) => setState(() => _pane = i),
+                      expand: true,
+                    ),
+                  ),
+                  Expanded(
+                    child: IndexedStack(
+                      index: _pane,
+                      children: <Widget>[phoneChat, preview],
+                    ),
+                  ),
+                ],
               );
             }
 
@@ -141,7 +194,12 @@ class _ChatPane extends StatelessWidget {
     required this.onToggleChat,
     required this.onMake,
     this.title,
+    this.showHeader = true,
   });
+
+  /// Off on a phone, where the back button and title sit above the
+  /// Chat / preview switch instead of inside one of its panes.
+  final bool showHeader;
 
   final DesignKind kind;
   final String? title;
@@ -155,73 +213,91 @@ class _ChatPane extends StatelessWidget {
 
     return Column(
       children: <Widget>[
-        SizedBox(
-          height: 60,
-          child: Row(
-            children: <Widget>[
-              const SizedBox(width: Space.x2),
-              IconButton(
-                tooltip: 'Back',
-                onPressed: () => Navigator.of(context).maybePop(),
-                icon: Icon(Icons.arrow_back_rounded, size: 20, color: c.text),
-                style: IconButton.styleFrom(minimumSize: const Size(44, 44)),
-              ),
-              Flexible(
-                child: Text(
-                  title ?? kind.untitled,
-                  style: ShiftType.body(c.text),
-                  overflow: TextOverflow.ellipsis,
+        if (showHeader)
+          SizedBox(
+            height: 60,
+            child: Row(
+              children: <Widget>[
+                const SizedBox(width: Space.x2),
+                IconButton(
+                  tooltip: 'Back to Design',
+                  onPressed: () => Navigator.of(context).maybePop(),
+                  icon: Icon(
+                    Icons.chevron_left_rounded,
+                    size: 30,
+                    color: c.accent,
+                  ),
+                  style: IconButton.styleFrom(minimumSize: const Size(44, 44)),
                 ),
-              ),
-              Icon(
-                Icons.keyboard_arrow_down_rounded,
-                size: 20,
-                color: c.textMuted,
-              ),
-              const Spacer(),
-              IconButton(
-                tooltip: 'Hide this pane',
-                onPressed: onToggleChat,
-                icon: Icon(
-                  Icons.view_sidebar_outlined,
-                  size: 20,
-                  color: c.accent,
-                ),
-                style: IconButton.styleFrom(minimumSize: const Size(44, 44)),
-              ),
-              IconButton(
-                tooltip: 'Open in a new window',
-                onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text(
-                      'A second window needs the desktop build — hide the '
-                      'chat pane for the full width here.',
-                    ),
+                Flexible(
+                  child: Text(
+                    title ?? kind.untitled,
+                    style: ShiftType.copy(c.text, size: 17, weight: 600),
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                icon: Icon(
-                  Icons.open_in_new_rounded,
+                Icon(
+                  Icons.keyboard_arrow_down_rounded,
                   size: 20,
-                  color: c.accent,
+                  color: c.textMuted,
                 ),
-                style: IconButton.styleFrom(minimumSize: const Size(44, 44)),
-              ),
-              const SizedBox(width: Space.x2),
-            ],
+                const Spacer(),
+                IconButton(
+                  tooltip: 'Hide this pane',
+                  onPressed: onToggleChat,
+                  icon: Icon(
+                    Icons.view_sidebar_outlined,
+                    size: 20,
+                    color: c.accent,
+                  ),
+                  style: IconButton.styleFrom(minimumSize: const Size(44, 44)),
+                ),
+                IconButton(
+                  tooltip: 'Open in a new window',
+                  onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'A second window needs the desktop build — hide the '
+                        'chat pane for the full width here.',
+                      ),
+                    ),
+                  ),
+                  icon: Icon(
+                    Icons.open_in_new_rounded,
+                    size: 20,
+                    color: c.accent,
+                  ),
+                  style: IconButton.styleFrom(minimumSize: const Size(44, 44)),
+                ),
+                const SizedBox(width: Space.x2),
+              ],
+            ),
           ),
-        ),
         Expanded(
           child: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: Space.x6),
             child: Column(
               children: <Widget>[
                 const SizedBox(height: Space.x8),
-                Icon(kind.icon, size: 40, color: c.textMuted),
+                // The same accent disc the empty screens use, and a title
+                // set like one, rather than a 40pt light headline.
+                Container(
+                  width: 72,
+                  height: 72,
+                  decoration: BoxDecoration(
+                    color: c.accentSoft,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(kind.icon, size: 32, color: c.accent),
+                ),
                 const SizedBox(height: Space.x5),
-                Text(
-                  kind.prompt,
-                  textAlign: TextAlign.center,
-                  style: ShiftType.displayL(c.text),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 360),
+                  child: Text(
+                    kind.prompt,
+                    textAlign: TextAlign.center,
+                    style: ShiftType.largeTitle(c.text).copyWith(fontSize: 28),
+                  ),
                 ),
                 const SizedBox(height: Space.x6),
                 if (kind.startsFromBrand)
