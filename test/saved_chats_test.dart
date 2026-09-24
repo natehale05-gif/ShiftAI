@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:flutter/widgets.dart' show Size;
+import 'package:flutter/material.dart' show Scrollable, Size, TextField;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -16,6 +16,8 @@ import 'package:shift_ai/data/seed.dart';
 import 'package:shift_ai/data/seed_repository.dart';
 import 'package:shift_ai/models/models.dart';
 import 'package:shift_ai/state/app_state.dart';
+import 'package:shift_ai/util/thread_search.dart';
+import 'package:shift_ai/app/shell.dart';
 
 /// Answers every message, and records what it was asked to keep.
 class _Engine extends SeedRepository {
@@ -370,5 +372,97 @@ void main() {
     expect(state.messages.map((ChatMessage m) => m.body),
         <String>['Plan the ferry shoot', 'Reply 1']);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      'Recents searches every saved chat, the ones past the first 30 too',
+      (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(412 * 3, 1400 * 3);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.reset);
+    final (AppState state, _) = await _signedIn();
+    await tester.pumpWidget(ShiftApp(state: state));
+    await tester.pumpAndSettle();
+    final Finder close = find.byTooltip('Close');
+    if (close.evaluate().isNotEmpty) {
+      await tester.tap(close.first);
+      await tester.pumpAndSettle();
+    }
+
+    // 40 chats, newest first; the oldest is the one about the ferry.
+    state.threads = <ChatThread>[
+      for (int i = 0; i < 40; i++)
+        ChatThread(
+          id: 'chat-$i',
+          title: i == 39 ? 'Launch week' : 'Chat $i',
+          updatedAt: DateTime.utc(2026, 9, 24).subtract(Duration(days: i)),
+          messages: <ChatMessage>[
+            ChatMessage(
+              id: 'you-$i',
+              author: MessageAuthor.you,
+              body: i == 39 ? 'A caption for the ferry clip' : 'Hello $i',
+            ),
+          ],
+        ),
+    ];
+    state.clearThread();
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Open navigation'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+        find.text('10 older chats. Search to find one.'), 300,
+        scrollable: find
+            .descendant(
+              of: find.byType(SidebarNav),
+              matching: find.byType(Scrollable),
+            )
+            .first);
+    expect(find.text('Launch week'), findsNothing,
+        reason: 'only the newest 30 are listed');
+
+    await tester.enterText(
+      find.descendant(
+        of: find.byType(SidebarNav),
+        matching: find.byType(TextField),
+      ),
+      'ferry caption',
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Launch week'), findsOneWidget,
+        reason: 'found by what was said in it, not its title');
+    expect(find.text('Chat 0'), findsNothing);
+
+    await tester.tap(find.text('Launch week'));
+    await tester.pumpAndSettle();
+    expect(state.currentThreadId, 'chat-39');
+    expect(tester.takeException(), isNull);
+  });
+
+  test('a search keeps chats with every word, in title or messages', () {
+    final List<ChatThread> threads = <ChatThread>[
+      ChatThread(
+        id: 'a',
+        title: 'Ferry shoot',
+        updatedAt: DateTime.utc(2026, 9, 24),
+        messages: const <ChatMessage>[
+          ChatMessage(id: 'x', author: MessageAuthor.shift, body: 'Dawn light'),
+        ],
+      ),
+      ChatThread(
+        id: 'b',
+        title: 'Poster',
+        updatedAt: DateTime.utc(2026, 9, 23),
+        messages: const <ChatMessage>[
+          ChatMessage(id: 'y', author: MessageAuthor.you, body: 'For Friday'),
+        ],
+      ),
+    ];
+    expect(threadMatches(threads, 'FERRY dawn').map((ChatThread t) => t.id),
+        <String>['a']);
+    expect(threadMatches(threads, 'friday').map((ChatThread t) => t.id),
+        <String>['b']);
+    expect(threadMatches(threads, 'ferry friday'), isEmpty);
+    expect(threadMatches(threads, '  '), threads);
   });
 }
