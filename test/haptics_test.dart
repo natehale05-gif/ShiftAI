@@ -1,4 +1,5 @@
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart' show Scrollable;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shift_ai/app/app.dart';
@@ -60,6 +61,14 @@ void main() {
     state.setSurface(Surface.vault);
     await tester.pumpAndSettle();
     await tester.tap(find.text('EcoVault'));
+    await tester.pumpAndSettle();
+    // EcoVault is a feed: the first post not yet saved may be further
+    // down, built only once it is scrolled to.
+    await tester.scrollUntilVisible(
+      find.byTooltip('Save to your vault'),
+      300,
+      scrollable: find.byType(Scrollable).last,
+    );
     await tester.pumpAndSettle();
     felt.clear();
     await tester.tap(find.byTooltip('Save to your vault').first);

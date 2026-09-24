@@ -286,6 +286,19 @@ needs:
   never returned by `GET /v1/avatars` and is never anyone's `personal`
   avatar.
 
+## 6b. EcoVault is a feed now: two optional fields
+
+EcoVault shows as an Instagram-style feed. Each `/v1/ecovault` row can
+carry:
+
+- `hearts`: the number of people who have hearted it. It is shown as
+  "1,284 hearts". Leave it out and no count is shown.
+- `byAvatarUrl`: the maker's personal avatar still (its `previewUrl`).
+  Initials are shown without it.
+
+Everything else in the feed (handle, model, title, prompt, date) comes
+from the fields the rows already carry.
+
 ## 7. `DELETE /v1/me` (blocks the App Store)
 
 Apple rejects any app that lets people create an account but not delete

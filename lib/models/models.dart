@@ -461,7 +461,9 @@ class VaultItem {
     this.height,
     this.byHandle,
     this.byName,
+    this.byAvatarUrl,
     this.saved = false,
+    this.hearts,
     MediaType? mediaType,
     this.mediaUrl,
     this.thumbnailUrl,
@@ -500,6 +502,14 @@ class VaultItem {
   final String? byHandle;
   final String? byName;
 
+  /// The maker's face in the EcoVault feed: their personal avatar's still.
+  /// Optional; initials stand in without it.
+  final String? byAvatarUrl;
+
+  /// How many people have hearted it, when the engine says. Shown under a
+  /// post in the feed; never guessed, so absent means no line at all.
+  final int? hearts;
+
   /// Whether *the person looking* has hearted it. This is a fact about
   /// the viewer, not about the piece, which is why the same row can come
   /// back saved for one account and not for another.
@@ -515,7 +525,12 @@ class VaultItem {
     return '$width × $height';
   }
 
-  VaultItem copyWith({String? title, bool? published, bool? saved}) =>
+  VaultItem copyWith({
+    String? title,
+    bool? published,
+    bool? saved,
+    int? hearts,
+  }) =>
       VaultItem(
         id: id,
         title: title ?? this.title,
@@ -531,7 +546,9 @@ class VaultItem {
         height: height,
         byHandle: byHandle,
         byName: byName,
+        byAvatarUrl: byAvatarUrl,
         saved: saved ?? this.saved,
+        hearts: hearts ?? this.hearts,
         // Carried through, or renaming a piece would lose its picture.
         mediaType: _mediaType,
         mediaUrl: mediaUrl,
@@ -556,7 +573,9 @@ class VaultItem {
         'thumbnailUrl': thumbnailUrl,
         'byHandle': byHandle,
         'byName': byName,
+        'byAvatarUrl': byAvatarUrl,
         'saved': saved,
+        'hearts': hearts,
       };
 
   factory VaultItem.fromJson(Map<String, dynamic> json) {
@@ -588,7 +607,9 @@ class VaultItem {
       height: (json['height'] as num?)?.toInt(),
       byHandle: json['byHandle'] as String?,
       byName: json['byName'] as String?,
+      byAvatarUrl: url('byAvatarUrl'),
       saved: json['saved'] as bool? ?? false,
+      hearts: (json['hearts'] as num?)?.toInt(),
     );
   }
 }

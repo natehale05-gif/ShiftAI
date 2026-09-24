@@ -150,6 +150,16 @@ Three fields carry the gallery:
   the person asking, not about the piece, so the same row comes back
   `true` for one account and `false` for another. Default false.
 
+Two more, optional, draw EcoVault as a feed (one post at a time, the
+maker above, the heart and the prompt below, like Instagram):
+
+- **`hearts`** — how many people have hearted it. Shown as "1,284
+  hearts" under the post, moved by one straight away when the viewer
+  hearts it. Omit it and there is no count line at all; the app never
+  guesses one.
+- **`byAvatarUrl`** — the maker's face: the `previewUrl` of their
+  personal avatar, a still image. Initials stand in without it.
+
 `/v1/ecovault` includes the viewer's own published pieces, so the gallery
 reads the same for everyone. Their `saved` is ignored: your own work is
 in your vault because you made it, not because you hearted it.

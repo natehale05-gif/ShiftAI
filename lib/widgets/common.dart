@@ -692,27 +692,37 @@ class HeartButton extends StatelessWidget {
     );
   }
 
-  Future<void> _toggle(BuildContext context, AppState state) async {
-    final bool wasOn = item.saved;
-    final ScaffoldMessengerState bar = ScaffoldMessenger.of(context);
-    Haptics.light();
-    final bool took = await state.toggleSaved(item.id);
-    if (!took) {
-      bar.showSnackBar(
-        SnackBar(
-          content: Text(
-            state.lastError?.message ?? 'Could not save it just now.',
-          ),
+  Future<void> _toggle(BuildContext context, AppState state) =>
+      toggleHeart(context, state, item);
+}
+
+/// Hearts [item] or takes the heart off, and says so: a refusal with its
+/// reason, a save with where it went. The heart button and the feed's
+/// heart and double-tap all go through this.
+Future<void> toggleHeart(
+  BuildContext context,
+  AppState state,
+  VaultItem item,
+) async {
+  final bool wasOn = item.saved;
+  final ScaffoldMessengerState bar = ScaffoldMessenger.of(context);
+  Haptics.light();
+  final bool took = await state.toggleSaved(item.id);
+  if (!took) {
+    bar.showSnackBar(
+      SnackBar(
+        content: Text(
+          state.lastError?.message ?? 'Could not save it just now.',
         ),
-      );
-      return;
-    }
-    // Only on the way in: an un-save needs no announcement.
-    if (!wasOn) {
-      bar.showSnackBar(
-        const SnackBar(content: Text('Saved — it is in your vault now.')),
-      );
-    }
+      ),
+    );
+    return;
+  }
+  // Only on the way in: an un-save needs no announcement.
+  if (!wasOn) {
+    bar.showSnackBar(
+      const SnackBar(content: Text('Saved — it is in your vault now.')),
+    );
   }
 }
 

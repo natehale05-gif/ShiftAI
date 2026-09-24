@@ -900,7 +900,16 @@ class AppState extends ChangeNotifier {
     final List<VaultItem> beforeEco = ecoVault;
     final List<VaultItem> beforeMine = vault;
 
-    VaultItem apply(VaultItem v) => v.id == id ? v.copyWith(saved: next) : v;
+    // The count moves with the heart, when there is one: the feed's
+    // "12 hearts" should not wait on the server to say 13.
+    VaultItem apply(VaultItem v) => v.id != id
+        ? v
+        : v.copyWith(
+            saved: next,
+            hearts: v.hearts == null
+                ? null
+                : (v.hearts! + (next ? 1 : -1)).clamp(0, 1 << 31),
+          );
     ecoVault = ecoVault.map(apply).toList();
     vault = vault.map(apply).toList();
     _changed();
