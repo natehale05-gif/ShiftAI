@@ -6,6 +6,7 @@ import '../../theme/tokens.dart';
 import '../../theme/type.dart';
 import '../../widgets/common.dart';
 import 'editors.dart';
+import '../../widgets/alert.dart';
 
 /// The Design hub: four things you can start, then everything you have
 /// already made.
@@ -590,35 +591,15 @@ class _DesignCard extends StatelessWidget {
 
 Future<void> _confirmDelete(BuildContext context, DesignDoc doc) async {
   final AppState state = AppScope.read(context);
-  final bool? yes = await showDialog<bool>(
-    context: context,
-    builder: (BuildContext context) {
-      final ShiftColors c = ShiftColors.of(context);
-      return AlertDialog(
-        backgroundColor: c.surface,
-        shape: const RoundedRectangleBorder(borderRadius: Radii.lgAll),
-        title: Text('Delete this design?', style: ShiftType.subheading(c.text)),
-        content: Text(
-          '“${doc.title}” and its ${doc.versionLabel.toLowerCase()} go for '
-          'good.',
-          style: ShiftType.bodySm(c.textMuted),
-        ),
-        actions: <Widget>[
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: c.danger,
-              foregroundColor: c.onStatus,
-            ),
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Delete'),
-          ),
-        ],
-      );
-    },
+  final bool? yes = await showShiftAlert<bool>(
+    context,
+    title: 'Delete this design?',
+    message: '“${doc.title}” and its ${doc.versionLabel.toLowerCase()} go for '
+        'good.',
+    actions: const <ShiftAlertAction<bool>>[
+      ShiftAlertAction<bool>('Cancel', value: false, isDefault: true),
+      ShiftAlertAction<bool>('Delete', value: true, destructive: true),
+    ],
   );
   if (!(yes ?? false) || !context.mounted) return;
   final ScaffoldMessengerState bar = ScaffoldMessenger.of(context);

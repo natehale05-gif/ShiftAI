@@ -10,6 +10,7 @@ import '../../util/choices.dart';
 import '../../util/haptics.dart';
 import '../../widgets/common.dart';
 import 'failure_card.dart';
+import '../../widgets/alert.dart';
 
 /// Create: one question, one composer. The thread only appears once you
 /// have asked for something.
@@ -782,36 +783,20 @@ Future<void> _editLastAsk(BuildContext context, AppState state) async {
     return;
   }
 
-  final TextEditingController controller = TextEditingController(text: asked);
-  final String? next = await showDialog<String>(
-    context: context,
-    builder: (BuildContext context) {
-      final ShiftColors c = ShiftColors.of(context);
-      return AlertDialog(
-        backgroundColor: c.surface,
-        shape: const RoundedRectangleBorder(borderRadius: Radii.lgAll),
-        title: Text('Edit and send again', style: ShiftType.subheading(c.text)),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          minLines: 2,
-          maxLines: 8,
-          style: ShiftType.bodySm(c.text),
-        ),
-        actions: <Widget>[
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(controller.text),
-            child: const Text('Send'),
-          ),
-        ],
-      );
-    },
+  final String? next = await showShiftAlert<String>(
+    context,
+    title: 'Edit and send again',
+    field: ShiftAlertField(initial: asked, minLines: 2, maxLines: 8),
+    actions: <ShiftAlertAction<String>>[
+      const ShiftAlertAction<String>('Cancel'),
+      ShiftAlertAction<String>(
+        'Send',
+        isDefault: true,
+        valueOf: (String typed) => typed,
+        enabled: (String typed) => typed.trim().isNotEmpty,
+      ),
+    ],
   );
-  controller.dispose();
   if (next != null && next.trim().isNotEmpty) state.sendMessage(next.trim());
 }
 

@@ -4,6 +4,7 @@ import '../../state/app_state.dart';
 import '../../theme/tokens.dart';
 import '../../theme/type.dart';
 import '../../widgets/common.dart';
+import '../../widgets/alert.dart';
 
 /// The gate. One card, email and password, and a plain line about what the
 /// membership already covers.
@@ -180,34 +181,16 @@ class _SignInScreenState extends State<SignInScreen> {
                       const SizedBox(height: Space.x4),
                       Center(
                         child: TextButton(
-                          onPressed: () => showDialog<void>(
-                            context: context,
-                            builder: (BuildContext context) {
-                              final ShiftColors d = ShiftColors.of(context);
-                              return AlertDialog(
-                                backgroundColor: d.surface,
-                                shape: const RoundedRectangleBorder(
-                                  borderRadius: Radii.lgAll,
-                                ),
-                                title: Text(
-                                  'Trouble signing in',
-                                  style: ShiftType.subheading(d.text),
-                                ),
-                                content: Text(
-                                  'Membership is handled by ShiftAi support. '
-                                  'Mail support@shiftai.club with the address '
-                                  'on your account and they can reset it.',
-                                  style: ShiftType.bodySm(d.text),
-                                ),
-                                actions: <Widget>[
-                                  FilledButton(
-                                    onPressed: () =>
-                                        Navigator.of(context).pop(),
-                                    child: const Text('Close'),
-                                  ),
-                                ],
-                              );
-                            },
+                          onPressed: () => showShiftAlert<void>(
+                            context,
+                            title: 'Trouble signing in',
+                            message:
+                                'Membership is handled by ShiftAi support. '
+                                'Mail support@shiftai.club with the address '
+                                'on your account and they can reset it.',
+                            actions: const <ShiftAlertAction<void>>[
+                              ShiftAlertAction<void>('OK', isDefault: true),
+                            ],
                           ),
                           child: Text(
                             'Trouble signing in?',

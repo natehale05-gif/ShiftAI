@@ -5,6 +5,7 @@ import '../../theme/tokens.dart';
 import '../../theme/type.dart';
 import '../../widgets/common.dart';
 import 'avatar.dart';
+import '../../widgets/alert.dart';
 
 /// The account, and the one line that matters about billing: there is no
 /// separate plan to buy.
@@ -132,36 +133,20 @@ class DeleteAccountCard extends StatelessWidget {
 Future<void> _renameHandle(BuildContext context) async {
   final AppState state = AppScope.read(context);
   // The field sits behind a '@' prefix, so it holds the bare handle.
-  final TextEditingController controller =
-      TextEditingController(text: state.creator.bareHandle);
-  final String? next = await showDialog<String>(
-    context: context,
-    builder: (BuildContext context) {
-      final ShiftColors c = ShiftColors.of(context);
-      return AlertDialog(
-        backgroundColor: c.surface,
-        shape: const RoundedRectangleBorder(borderRadius: Radii.lgAll),
-        title: Text('Change username', style: ShiftType.subheading(c.text)),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          style: ShiftType.bodySm(c.text),
-          decoration: const InputDecoration(prefixText: '@'),
-        ),
-        actions: <Widget>[
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(controller.text),
-            child: const Text('Save'),
-          ),
-        ],
-      );
-    },
+  final String? next = await showShiftAlert<String>(
+    context,
+    title: 'Change username',
+    field: ShiftAlertField(initial: state.creator.bareHandle, prefixText: '@'),
+    actions: <ShiftAlertAction<String>>[
+      const ShiftAlertAction<String>('Cancel'),
+      ShiftAlertAction<String>(
+        'Save',
+        isDefault: true,
+        valueOf: (String typed) => typed,
+        enabled: (String typed) => typed.trim().isNotEmpty,
+      ),
+    ],
   );
-  controller.dispose();
   // A typed-in '@' is dropped rather than sent: the engine stores the
   // bare handle, and every screen adds the '@' back when it draws one.
   String trimmed = (next ?? '').trim();
@@ -188,65 +173,23 @@ Future<void> _renameHandle(BuildContext context) async {
 /// than a two-button dialog, because this one does not come back.
 Future<void> _deleteAccount(BuildContext context) async {
   final AppState state = AppScope.read(context);
-  final TextEditingController typed = TextEditingController();
-
-  final bool? sure = await showDialog<bool>(
-    context: context,
-    builder: (BuildContext context) {
-      final ShiftColors c = ShiftColors.of(context);
-      return StatefulBuilder(
-        builder: (BuildContext context, StateSetter setSheet) {
-          final bool matches = typed.text.trim().toUpperCase() == 'DELETE';
-          return AlertDialog(
-            backgroundColor: c.surface,
-            shape: const RoundedRectangleBorder(borderRadius: Radii.lgAll),
-            title: Text(
-              'Delete your account?',
-              style: ShiftType.subheading(c.text),
-            ),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Text(
-                  'Your vault, your notes, your designs and your place on '
-                  'the board go with it. This cannot be undone and support '
-                  'cannot restore it.',
-                  style: ShiftType.bodySm(c.textMuted),
-                ),
-                const SizedBox(height: Space.x4),
-                Text('Type DELETE to confirm',
-                    style: ShiftType.caption(c.textMuted)),
-                const SizedBox(height: Space.x2),
-                TextField(
-                  controller: typed,
-                  autofocus: true,
-                  style: ShiftType.bodySm(c.text),
-                  onChanged: (_) => setSheet(() {}),
-                ),
-              ],
-            ),
-            actions: <Widget>[
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('Cancel'),
-              ),
-              FilledButton(
-                style: FilledButton.styleFrom(
-                  backgroundColor: c.danger,
-                  foregroundColor: c.onStatus,
-                ),
-                onPressed:
-                    matches ? () => Navigator.of(context).pop(true) : null,
-                child: const Text('Delete account'),
-              ),
-            ],
-          );
-        },
-      );
-    },
+  final bool? sure = await showShiftAlert<bool>(
+    context,
+    title: 'Delete your account?',
+    message: 'Your vault, your notes, your designs and your place on the '
+        'board go with it. This cannot be undone and support cannot '
+        'restore it.\n\nType DELETE to confirm.',
+    field: const ShiftAlertField(placeholder: 'DELETE'),
+    actions: <ShiftAlertAction<bool>>[
+      const ShiftAlertAction<bool>('Cancel', value: false, isDefault: true),
+      ShiftAlertAction<bool>(
+        'Delete account',
+        value: true,
+        destructive: true,
+        enabled: (String typed) => typed.trim().toUpperCase() == 'DELETE',
+      ),
+    ],
   );
-  typed.dispose();
   if (!(sure ?? false) || !context.mounted) return;
 
   final ScaffoldMessengerState bar = ScaffoldMessenger.of(context);

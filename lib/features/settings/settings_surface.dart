@@ -16,6 +16,7 @@ import 'account_card.dart';
 import 'avatar.dart';
 import 'connectors.dart';
 import '../../util/haptics.dart';
+import '../../widgets/alert.dart';
 
 /// The avatar maker and the account first, then appearance, sections and
 /// connections — who you are before how the app looks and behaves.
@@ -924,37 +925,17 @@ class _AvatarTile extends StatelessWidget {
 
 Future<void> _confirmDeleteAvatar(BuildContext context, Avatar avatar) async {
   final AppState state = AppScope.read(context);
-  final bool? yes = await showDialog<bool>(
-    context: context,
-    builder: (BuildContext context) {
-      final ShiftColors c = ShiftColors.of(context);
-      return AlertDialog(
-        backgroundColor: c.surface,
-        shape: const RoundedRectangleBorder(borderRadius: Radii.lgAll),
-        title: Text('Delete this avatar?', style: ShiftType.subheading(c.text)),
-        content: Text(
-          avatar.personal
-              ? '"${avatar.name}" goes for good, and your profile picture '
-                  'and leaderboard face fall back to initials.'
-              : '"${avatar.name}" goes for good.',
-          style: ShiftType.bodySm(c.textMuted),
-        ),
-        actions: <Widget>[
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: c.danger,
-              foregroundColor: c.onStatus,
-            ),
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Delete'),
-          ),
-        ],
-      );
-    },
+  final bool? yes = await showShiftAlert<bool>(
+    context,
+    title: 'Delete this avatar?',
+    message: avatar.personal
+        ? '"${avatar.name}" goes for good, and your profile picture and '
+            'leaderboard face fall back to initials.'
+        : '"${avatar.name}" goes for good.',
+    actions: const <ShiftAlertAction<bool>>[
+      ShiftAlertAction<bool>('Cancel', value: false, isDefault: true),
+      ShiftAlertAction<bool>('Delete', value: true, destructive: true),
+    ],
   );
   if (!(yes ?? false) || !context.mounted) return;
   final ScaffoldMessengerState bar = ScaffoldMessenger.of(context);
