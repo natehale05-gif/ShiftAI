@@ -405,9 +405,18 @@ account, just on a smaller board.
 ```
 
 `avatarId` is optional and names one of this creator's own avatars —
-generate as that likeness rather than in whatever voice the engine
-answers in by default. An id that is not theirs, not found, or not yet
-`ready` is a `badRequest`, with a sentence for it.
+generate as that likeness. An id that is not theirs, not found, or not
+yet `ready` is a `badRequest`, with a sentence for it.
+
+**No `avatarId` means the built-in avatar, `shiftai-default`.** She ships
+with the app (`assets/avatars/shiftai-default.jpg`) and is what the Suite
+generates as until someone picks one of their own, like HeyGen's stock
+presenters. Train her once on the server from the full-size original,
+`docs/avatars/shiftai-default-1024.jpg` (AI-generated for ShiftAi, not a
+real person, so no likeness consent applies), and use her whenever
+`avatarId` is absent or is `"shiftai-default"`. She is never in
+`GET /v1/avatars` and never anyone's `personal` avatar or leaderboard
+face: those stay the person's own.
 
 Answer with one or more messages, in the order they should appear:
 

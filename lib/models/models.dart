@@ -296,6 +296,7 @@ class Avatar {
     this.previewUrl,
     this.clipUrl,
     this.failureReason,
+    this.asset,
   });
 
   final String id;
@@ -320,6 +321,10 @@ class Avatar {
   /// says. Only meaningful when [status] is `failed`.
   final String? failureReason;
 
+  /// A picture bundled with the app, for [BuiltInAvatars] only. Every
+  /// avatar the server sends is drawn from [previewUrl] instead.
+  final String? asset;
+
   bool get ready => status == AvatarStatus.ready;
 
   Avatar copyWith({
@@ -335,7 +340,24 @@ class Avatar {
         previewUrl: previewUrl ?? this.previewUrl,
         clipUrl: clipUrl,
         failureReason: failureReason,
+        asset: asset,
       );
+}
+
+/// The avatar that ships with the app: what the Suite generates as until
+/// someone picks one of their own, the way HeyGen has stock presenters.
+///
+/// She is AI-generated for ShiftAi, not a photo of a real person. She is
+/// never anyone's profile picture or leaderboard face, and she is not in
+/// [AppState.avatars]: those are the person's own. Choosing her sends no
+/// `avatarId` at all, which docs/API.md defines as generating as her.
+abstract final class BuiltInAvatars {
+  static const Avatar shiftai = Avatar(
+    id: 'shiftai-default',
+    name: 'ShiftAi default',
+    status: AvatarStatus.ready,
+    asset: 'assets/avatars/shiftai-default.jpg',
+  );
 }
 
 /// A small board of people near this account in both rank and location —

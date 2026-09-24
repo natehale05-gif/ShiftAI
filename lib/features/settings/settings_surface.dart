@@ -665,6 +665,8 @@ class _AvatarsCardState extends State<_AvatarsCard> {
               children:
                   avatars.map((Avatar a) => _AvatarTile(avatar: a)).toList(),
             ),
+          const SizedBox(height: Space.x3),
+          const _BuiltInAvatarRow(),
           const SizedBox(height: Space.x4),
           if (_creating)
             _CreateAvatarFlow(onDone: () => setState(() => _creating = false))
@@ -678,6 +680,57 @@ class _AvatarsCardState extends State<_AvatarsCard> {
                 foregroundColor: c.text,
               ),
             ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The avatar that ships with the app, shown under your own so it is
+/// clear who the Suite generates as before you have picked one. It is
+/// not a tile: it cannot be made personal or deleted, and it is never
+/// your profile picture.
+class _BuiltInAvatarRow extends StatelessWidget {
+  const _BuiltInAvatarRow();
+
+  @override
+  Widget build(BuildContext context) {
+    final ShiftColors c = ShiftColors.of(context);
+    const Avatar builtIn = BuiltInAvatars.shiftai;
+    final bool choosingOwn = AppScope.of(context).activeAvatarId != null;
+    return Semantics(
+      container: true,
+      label: '${builtIn.name}, built in',
+      child: Row(
+        children: <Widget>[
+          ClipOval(
+            child: Image.asset(
+              builtIn.asset!,
+              width: 44,
+              height: 44,
+              fit: BoxFit.cover,
+              excludeFromSemantics: true,
+            ),
+          ),
+          const SizedBox(width: Space.x3),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  builtIn.name,
+                  style: ShiftType.copy(c.text, size: 15, weight: 600),
+                ),
+                Text(
+                  choosingOwn
+                      ? 'Built in. Pick her under "Generate as" in the Suite.'
+                      : 'Built in. The Suite generates as her until you pick '
+                          'one of yours.',
+                  style: ShiftType.caption(c.textMuted),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );

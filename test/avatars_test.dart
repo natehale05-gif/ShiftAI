@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -38,6 +39,22 @@ class _Engine extends SeedRepository {
   List<Avatar> list;
   int reads = 0;
   final List<String> uploads = <String>[];
+  final List<String?> sentAs = <String?>[];
+
+  @override
+  Future<List<ChatMessage>> send(
+    String prompt, {
+    bool private = false,
+    String? avatarId,
+    String? model,
+    List<ChatTurn> history = const <ChatTurn>[],
+  }) async {
+    sentAs.add(avatarId);
+    return <ChatMessage>[
+      ChatMessage(
+          id: 'r${sentAs.length}', author: MessageAuthor.shift, body: 'Done'),
+    ];
+  }
 
   @override
   Future<ShiftSnapshot> load() async {
@@ -360,6 +377,89 @@ void main() {
           mimeType: 'text/plain')))!;
       expect(p.bytes, isNull);
       expect(p.problem, contains('Could not read notes.txt'));
+    });
+  });
+
+  group('the built-in avatar', () {
+    test('ships with the app, ready, and is nobody\'s own', () async {
+      const Avatar builtIn = BuiltInAvatars.shiftai;
+      expect(builtIn.ready, isTrue);
+      expect(builtIn.personal, isFalse);
+      expect(builtIn.asset, 'assets/avatars/shiftai-default.jpg');
+
+      // Not in the person's list, so never their profile picture or
+      // leaderboard face: with no avatar of their own, that stays initials.
+      final (AppState state, _) = await _signedIn(<Avatar>[]);
+      expect(state.avatars, isEmpty);
+      expect(state.personalAvatar, isNull);
+    });
+
+    testWidgets('the gallery shows her, built in, under your own',
+        (WidgetTester tester) async {
+      final (AppState state, _) = await _signedIn(<Avatar>[]);
+      await _openSettings(tester, state);
+      expect(find.text('No avatars yet'), findsOneWidget);
+      expect(find.text('ShiftAi default'), findsOneWidget);
+      expect(find.textContaining('generates as her until you pick'),
+          findsOneWidget);
+      expect(
+        find.byWidgetPredicate((Widget w) =>
+            w is Image &&
+            w.image is AssetImage &&
+            (w.image as AssetImage).assetName ==
+                'assets/avatars/shiftai-default.jpg'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets(
+        '"Generate as" offers her first; choosing her sends no avatarId, '
+        'choosing yours sends its id', (WidgetTester tester) async {
+      final (AppState state, _Engine engine) = await _signedIn(<Avatar>[
+        const Avatar(id: 'a2', name: 'Everyday', status: AvatarStatus.ready),
+      ]);
+      await tester.pumpWidget(ShiftApp(state: state));
+      await tester.pumpAndSettle();
+      final Finder close = find.byTooltip('Close');
+      if (close.evaluate().isNotEmpty) {
+        await tester.tap(close.first);
+        await tester.pumpAndSettle();
+      }
+
+      await tester.tap(find.byTooltip('Generating as ShiftAi default'));
+      await tester.pumpAndSettle();
+      expect(find.text('ShiftAi default'), findsOneWidget);
+      expect(find.text('Built in'), findsOneWidget);
+      expect(find.text('Everyday'), findsOneWidget);
+      // She is above your own, and ticked while nothing else is chosen.
+      expect(
+        tester.getTopLeft(find.text('ShiftAi default')).dy,
+        lessThan(tester.getTopLeft(find.text('Everyday')).dy),
+      );
+      expect(
+        find.descendant(
+          of: find.ancestor(
+              of: find.text('ShiftAi default'),
+              matching: find.byType(ListTile)),
+          matching: find.byIcon(Icons.check_rounded),
+        ),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.text('ShiftAi default'));
+      await tester.pumpAndSettle();
+      expect(state.sendMessage('Make an intro'), isTrue);
+      await tester.pumpAndSettle();
+      expect(engine.sentAs.last, isNull);
+
+      await tester.tap(find.byTooltip('Generating as ShiftAi default'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Everyday'));
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Generating as Everyday'), findsOneWidget);
+      state.sendMessage('Another');
+      await tester.pumpAndSettle();
+      expect(engine.sentAs.last, 'a2');
     });
   });
 }

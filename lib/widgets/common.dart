@@ -1050,7 +1050,7 @@ class _PillComposerState extends State<PillComposer> {
                       if (showAvatarButton)
                         IconButton(
                           tooltip: active == null
-                              ? 'Choose an avatar to generate as'
+                              ? 'Generating as ${BuiltInAvatars.shiftai.name}'
                               : 'Generating as ${active.name}',
                           onPressed: () => _pickAvatar(state),
                           // A plain glyph, same family as the "+" beside it —
@@ -1156,6 +1156,7 @@ class _AvatarGlyph extends StatelessWidget {
       return Icon(Icons.face_outlined, size: size, color: c.textMuted);
     }
     final String? previewUrl = avatar!.previewUrl;
+    final String? asset = avatar!.asset;
     Widget face() =>
         Icon(Icons.face_rounded, size: size - 4, color: c.onAccent);
     return Container(
@@ -1165,25 +1166,28 @@ class _AvatarGlyph extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
           shape: BoxShape.circle, border: Border.all(color: c.accent)),
-      child: previewUrl == null
-          ? face()
-          : Image.network(
-              previewUrl,
-              fit: BoxFit.cover,
-              width: size,
-              height: size,
-              errorBuilder: (BuildContext context, Object _, StackTrace? __) =>
-                  face(),
-            ),
+      child: asset != null
+          ? Image.asset(asset, fit: BoxFit.cover, width: size, height: size)
+          : previewUrl == null
+              ? face()
+              : Image.network(
+                  previewUrl,
+                  fit: BoxFit.cover,
+                  width: size,
+                  height: size,
+                  errorBuilder:
+                      (BuildContext context, Object _, StackTrace? __) =>
+                          face(),
+                ),
     );
   }
 }
 
-/// What tapping the composer's avatar button opens: this ask's default
-/// voice, plus every avatar that has finished training. Training ones are
-/// not offered — sending as one that is not ready is what `docs/API.md`
-/// calls a `badRequest`, and a picker should not offer choices the engine
-/// would refuse.
+/// What tapping the composer's avatar button opens: the built-in ShiftAi
+/// avatar, plus every one of yours that has finished training. Training
+/// ones are not offered — sending as one that is not ready is what
+/// `docs/API.md` calls a `badRequest`, and a picker should not offer
+/// choices the engine would refuse.
 class _AvatarSheet extends StatelessWidget {
   const _AvatarSheet({required this.state, required this.onPicked});
 
@@ -1213,8 +1217,13 @@ class _AvatarSheet extends StatelessWidget {
               child: Text('Generate as', style: ShiftType.caption(c.textMuted)),
             ),
             const SizedBox(height: Space.x2),
+            // The built-in one first, and the choice when nothing else
+            // is: until you make an avatar, this is who the Suite
+            // generates as.
             _AvatarOption(
-              name: 'No avatar',
+              avatar: BuiltInAvatars.shiftai,
+              name: BuiltInAvatars.shiftai.name,
+              subtitle: 'Built in',
               selected: state.activeAvatarId == null,
               onTap: () => choose(null),
             ),
@@ -1238,10 +1247,12 @@ class _AvatarOption extends StatelessWidget {
     required this.selected,
     required this.onTap,
     this.avatar,
+    this.subtitle,
   });
 
   final Avatar? avatar;
   final String name;
+  final String? subtitle;
   final bool selected;
   final VoidCallback onTap;
 
@@ -1251,6 +1262,9 @@ class _AvatarOption extends StatelessWidget {
     return ListTile(
       leading: _AvatarGlyph(avatar: avatar, size: 32),
       title: Text(name, style: ShiftType.body(c.text)),
+      subtitle: subtitle == null
+          ? null
+          : Text(subtitle!, style: ShiftType.caption(c.textMuted)),
       trailing: selected ? Icon(Icons.check_rounded, color: c.accent) : null,
       onTap: onTap,
     );
