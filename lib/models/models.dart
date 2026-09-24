@@ -294,6 +294,8 @@ class Avatar {
     required this.status,
     this.personal = false,
     this.previewUrl,
+    this.clipUrl,
+    this.failureReason,
   });
 
   final String id;
@@ -304,9 +306,19 @@ class Avatar {
   /// just reflects whichever one it last said was.
   final bool personal;
 
-  /// A still or looping clip HeyGen rendered for it. Null while [status]
-  /// is `training`.
+  /// A still picture of it: the profile picture, the leaderboard face and
+  /// the gallery tile. Always an image — every place that draws it is an
+  /// `Image.network`, which cannot draw a video. Null while [status] is
+  /// `training`.
   final String? previewUrl;
+
+  /// The looping clip HeyGen rendered, when there is one. Kept apart from
+  /// [previewUrl] so a clip never lands where a picture is drawn.
+  final String? clipUrl;
+
+  /// Why training failed, in a sentence for the person, when the server
+  /// says. Only meaningful when [status] is `failed`.
+  final String? failureReason;
 
   bool get ready => status == AvatarStatus.ready;
 
@@ -321,6 +333,8 @@ class Avatar {
         status: status ?? this.status,
         personal: personal ?? this.personal,
         previewUrl: previewUrl ?? this.previewUrl,
+        clipUrl: clipUrl,
+        failureReason: failureReason,
       );
 }
 

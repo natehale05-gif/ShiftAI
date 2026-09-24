@@ -112,8 +112,31 @@ abstract final class Decode {
           orElse: () => AvatarStatus.training,
         ),
         personal: json['personal'] as bool? ?? false,
-        previewUrl: json['previewUrl'] as String?,
+        previewUrl: _still(json['previewUrl']),
+        clipUrl: _nonEmpty(json['clipUrl']) ??
+            (_isClip(json['previewUrl']) ? json['previewUrl'] as String : null),
+        failureReason: _nonEmpty(json['failureReason']),
       );
+
+  static String? _nonEmpty(Object? value) =>
+      value is String && value.trim().isNotEmpty ? value : null;
+
+  /// A video sent as `previewUrl` (the contract's first draft had an
+  /// `.mp4` there) cannot be drawn by `Image.network`: the personal avatar
+  /// silently fell back to initials everywhere. It is moved to `clipUrl`
+  /// instead, and the picture stays empty until the server sends a still.
+  static String? _still(Object? value) {
+    final String? url = _nonEmpty(value);
+    return url == null || _isClip(url) ? null : url;
+  }
+
+  static bool _isClip(Object? value) {
+    final String? url = _nonEmpty(value);
+    if (url == null) return false;
+    final String path = (Uri.tryParse(url)?.path ?? url).toLowerCase();
+    return <String>['.mp4', '.mov', '.webm', '.m4v', '.m3u8']
+        .any(path.endsWith);
+  }
 
   static Connector connector(Map<String, dynamic> json) => Connector(
         _require<String>(json, 'name'),
