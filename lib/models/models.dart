@@ -798,6 +798,7 @@ class ChatModel {
     required this.name,
     this.provider = '',
     this.isDefault = false,
+    this.bestFor = const <TaskKind>{},
   });
 
   final String id;
@@ -807,14 +808,98 @@ class ChatModel {
   /// The one that answers when nobody has picked.
   final bool isDefault;
 
-  factory ChatModel.fromJson(Map<String, dynamic> json) => ChatModel(
-        id: json['id'] as String,
-        name: (json['name'] as String?)?.trim().isNotEmpty ?? false
-            ? json['name'] as String
-            : json['id'] as String,
-        provider: json['provider'] as String? ?? '',
-        isDefault: json['default'] == true,
-      );
+  /// What this model is the right one for, as the server says (`bestFor`)
+  /// or, when it does not, as its name gives away: Sora and Veo are video,
+  /// DALL·E and Flux are images, Suno is audio. Empty for a general model,
+  /// which takes whatever no specialist does.
+  final Set<TaskKind> bestFor;
+
+  factory ChatModel.fromJson(Map<String, dynamic> json) {
+    final String id = json['id'] as String;
+    final String name = (json['name'] as String?)?.trim().isNotEmpty ?? false
+        ? json['name'] as String
+        : id;
+    final Object? raw =
+        json['bestFor'] ?? json['best_for'] ?? json['capabilities'];
+    final Set<TaskKind> said = raw is List
+        ? raw
+            .map((Object? k) => TaskKind.parse(k is String ? k : null))
+            .whereType<TaskKind>()
+            .toSet()
+        : <TaskKind>{};
+    return ChatModel(
+      id: id,
+      name: name,
+      provider: json['provider'] as String? ?? '',
+      isDefault: json['default'] == true,
+      bestFor: raw is List ? said : TaskKind.guessFor('$id $name'),
+    );
+  }
+}
+
+/// What a message asks for, which decides which model should answer it.
+enum TaskKind {
+  image,
+  video,
+  audio,
+  code,
+  writing,
+  research;
+
+  static TaskKind? parse(String? raw) {
+    final String k = (raw ?? '').trim().toLowerCase();
+    for (final TaskKind t in values) {
+      if (t.name == k) return t;
+    }
+    return switch (k) {
+      'images' || 'picture' || 'art' => image,
+      'music' || 'voice' || 'sound' || 'speech' => audio,
+      'search' || 'web' => research,
+      'text' || 'copy' => writing,
+      _ => null,
+    };
+  }
+
+  /// A model's specialities from its id and name, for a server that does
+  /// not send `bestFor`. Only names that say what they are count: a
+  /// general model (Claude, GPT, Gemini) gets none and takes the rest.
+  static Set<TaskKind> guessFor(String idAndName) {
+    final String n = idAndName.toLowerCase();
+    bool has(List<String> words) => words.any(n.contains);
+    return <TaskKind>{
+      if (has(<String>[
+        'sora',
+        'veo',
+        'runway',
+        'kling',
+        'pika',
+        'luma',
+        'video',
+        'hailuo',
+        'seedance'
+      ]))
+        video,
+      if (has(<String>[
+        'dall',
+        'imagen',
+        'flux',
+        'midjourney',
+        'stable-diff',
+        'stable diff',
+        'sdxl',
+        'ideogram',
+        'image',
+        'recraft'
+      ]))
+        image,
+      if (has(
+          <String>['suno', 'udio', 'eleven', 'music', 'voice', 'tts', 'audio']))
+        audio,
+      if (has(<String>['codex', 'coder', 'devstral', 'codestral', 'code']))
+        code,
+      if (has(<String>['perplexity', 'sonar', 'research', 'search'])) research,
+    };
+  }
 }
 
 /// One earlier turn of a conversation, as sent with the next message so
@@ -890,6 +975,7 @@ class ChatMessage {
         if (choices.isNotEmpty)
           'choices': choices.map((ChatChoice c) => c.toJson()).toList(),
         if (multiSelect) 'multiSelect': true,
+        if (attachment != null) 'attachment': attachment!.toJson(),
       };
 
   /// `choices` at the top level, or the `question: {options, multiSelect}`
@@ -930,6 +1016,66 @@ class ChatMessage {
       modelName: json['modelName'] as String?,
       choices: choices,
       multiSelect: multiSelect,
+      attachment: MessageAttachment.tryParse(json['attachment']),
+    );
+  }
+}
+
+/// A saved conversation: what "Recents" lists and opens again.
+///
+/// Kept on the device for the signed-in account (the cache is keyed to
+/// it), and on the server when it has `/v1/threads`. Private chats are
+/// never one of these. Failure notices are left out: they are the app's
+/// about a moment that has passed, not part of the conversation.
+@immutable
+class ChatThread {
+  const ChatThread({
+    required this.id,
+    required this.title,
+    required this.updatedAt,
+    required this.messages,
+  });
+
+  final String id;
+  final String title;
+  final DateTime updatedAt;
+  final List<ChatMessage> messages;
+
+  /// The first thing asked, on one line and short enough for a row.
+  static String titleFor(List<ChatMessage> messages) {
+    final String first = messages
+            .where((ChatMessage m) => m.author == MessageAuthor.you)
+            .map((ChatMessage m) => m.body.trim())
+            .where((String b) => b.isNotEmpty)
+            .firstOrNull ??
+        'New chat';
+    final String line = first.split('\n').first.trim();
+    return line.length <= 60 ? line : '${line.substring(0, 57).trimRight()}…';
+  }
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'title': title,
+        'updatedAt': updatedAt.toUtc().toIso8601String(),
+        'messages': messages.map((ChatMessage m) => m.toJson()).toList(),
+      };
+
+  static ChatThread? tryParse(Object? raw) {
+    if (raw is! Map<String, dynamic> || raw['id'] is! String) return null;
+    final List<ChatMessage> messages = <ChatMessage>[
+      for (final Object? m
+          in (raw['messages'] as List<Object?>?) ?? <Object?>[])
+        if (m is Map<String, dynamic> && m['id'] is String)
+          ChatMessage.fromJson(m),
+    ];
+    return ChatThread(
+      id: raw['id'] as String,
+      title: (raw['title'] as String?)?.trim().isNotEmpty ?? false
+          ? raw['title'] as String
+          : titleFor(messages),
+      updatedAt: DateTime.tryParse(raw['updatedAt'] as String? ?? '') ??
+          DateTime.fromMillisecondsSinceEpoch(0),
+      messages: messages,
     );
   }
 }
@@ -993,6 +1139,25 @@ class MessageAttachment {
   final String meta;
   final MediaKind kind;
   final String vaultItemId;
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'fileName': fileName,
+        'meta': meta,
+        'kind': kind.name,
+        'vaultItemId': vaultItemId,
+      };
+
+  static MessageAttachment? tryParse(Object? raw) {
+    if (raw is! Map<String, dynamic>) return null;
+    final Object? name = raw['fileName'];
+    if (name is! String) return null;
+    return MessageAttachment(
+      fileName: name,
+      meta: raw['meta'] as String? ?? '',
+      kind: raw['kind'] == 'video' ? MediaKind.video : MediaKind.image,
+      vaultItemId: raw['vaultItemId'] as String? ?? '',
+    );
+  }
 }
 
 /// The shape of the plan-check failure. A 503 here is
@@ -1004,11 +1169,17 @@ class FailureInfo {
     required this.sentence,
     required this.reassurance,
     required this.details,
+    this.offersAccount = true,
   });
 
   final String sentence;
   final String reassurance;
   final String details;
+
+  /// Whether signing in again or Settings could fix it. Not for "no image
+  /// model is connected": the person is signed in, and nothing in their
+  /// settings connects one.
+  final bool offersAccount;
 
   static const FailureInfo planCheckUnreachable = FailureInfo(
     sentence: 'Could not check your plan right now.',

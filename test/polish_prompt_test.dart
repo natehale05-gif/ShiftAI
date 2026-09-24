@@ -78,6 +78,14 @@ class _Client extends http.BaseClient {
   }
 }
 
+/// A chat answer from the engine, as /v1/messages sends one.
+http.Response _reply(String body) => http.Response(
+      jsonEncode(<Map<String, String>>[
+        <String, String>{'id': 'p1', 'author': 'shift', 'body': body},
+      ]),
+      200,
+    );
+
 HttpRepository _over(http.Response Function(http.Request) route) =>
     HttpRepository(ApiClient(
       baseUrl: 'https://api.example.com',
@@ -120,32 +128,43 @@ void main() {
     });
 
     test(
-        'an engine without a polisher still polishes: 404 and 405 fall back '
-        'to the brief written here', () async {
+        'an engine without a polisher: 404 and 405 are polished by the AI, '
+        'privately, through the chat route', () async {
       for (final int status in <int>[404, 405]) {
-        final HttpRepository repo =
-            _over((_) => http.Response('{"message":"no route"}', status));
+        final List<Map<String, dynamic>> chats = <Map<String, dynamic>>[];
+        final HttpRepository repo = _over((http.Request r) {
+          if (r.url.path == '/v1/messages') {
+            chats.add(jsonDecode(r.body) as Map<String, dynamic>);
+            return _reply('Write a 20 second vertical promo video.');
+          }
+          return http.Response('{"message":"no route"}', status);
+        });
         final String out = await repo.polish('make me a promo video');
-        expect(out, Prompt.polish('make me a promo video'), reason: '$status');
-        expect(Prompt.isPolished(out), isTrue);
+        expect(out, 'Write a 20 second vertical promo video.',
+            reason: '$status');
+        // One private message, nothing before it, carrying the prompt and
+        // the ask to reply with the rewrite alone.
+        final Map<String, dynamic> sent = chats.single;
+        expect(sent['private'], isTrue);
+        expect(sent['history'], isEmpty);
+        expect(sent['prompt'], contains('make me a promo video'));
+        expect(sent['prompt'], contains('Reply with the rewritten prompt'));
       }
     });
 
     test(
-        'an echo is no polish: "make a video of Miami" coming back as itself '
-        'gets the local brief, not "already a full brief"', () async {
+        'an echo is no polish: "What time is it" coming back as itself goes '
+        'to the AI, not to a template', () async {
       final HttpRepository repo = _over((http.Request r) {
+        if (r.url.path == '/v1/messages') {
+          return _reply('What time is it right now in my time zone?');
+        }
         final String sent =
             (jsonDecode(r.body) as Map<String, dynamic>)['prompt'] as String;
         return http.Response(jsonEncode(<String, String>{'prompt': sent}), 200);
       });
-      final String out = await repo.polish('make a video of Miami');
-      expect(out, Prompt.polish('make a video of Miami'));
-      expect(Prompt.isPolished(out), isTrue);
-
-      // Text that already is a brief does stay as it is.
-      final String brief = Prompt.polish('make a video of Miami');
-      expect(await repo.polish(brief), brief);
+      expect(await repo.polish('What time is it'),
+          'What time is it right now in my time zone?');
     });
 
     test('the rewrite is found whatever it is called, and inside data',
@@ -164,15 +183,56 @@ void main() {
       }
     });
 
-    test('an answer with nothing usable in it never blanks the bar', () async {
+    test('an answer with nothing usable in it goes to the AI too', () async {
       for (final String body in <String>['{}', '{"prompt":"  "}', '[]']) {
-        final HttpRepository repo = _over((_) => http.Response(body, 200));
-        expect(
-          await repo.polish('write a caption'),
-          Prompt.polish('write a caption'),
-          reason: body,
-        );
+        final HttpRepository repo = _over((http.Request r) =>
+            r.url.path == '/v1/messages'
+                ? _reply('Write a caption for the ferry clip.')
+                : http.Response(body, 200));
+        expect(await repo.polish('write a caption'),
+            'Write a caption for the ferry clip.',
+            reason: body);
       }
+    });
+
+    test('the AI\'s preamble, quotes and fences are taken off the rewrite', () {
+      for (final String raw in <String>[
+        'Here is the polished prompt: Write a caption.',
+        "Here's a rewritten version:\nWrite a caption.",
+        'Polished prompt:\n"Write a caption."',
+        '```\nWrite a caption.\n```',
+        '\u201cWrite a caption.\u201d',
+        'Sure! Here is your improved prompt: Write a caption.',
+      ]) {
+        expect(HttpRepository.cleanRewrite(raw), 'Write a caption.',
+            reason: raw);
+      }
+      expect(HttpRepository.cleanRewrite('  '), isNull);
+    });
+
+    test(
+        'when the AI refuses or sends nothing, the bar says so rather than '
+        'showing a template', () async {
+      final HttpRepository refused = _over((http.Request r) =>
+          r.url.path == '/v1/messages'
+              ? http.Response('{"message":"You are out of credits."}', 402)
+              : http.Response('{"message":"no route"}', 404));
+      await expectLater(
+        refused.polish('write a caption'),
+        throwsA(isA<ShiftApiException>().having(
+            (ShiftApiException e) => e.message,
+            'message',
+            'You are out of credits.')),
+      );
+
+      final HttpRepository silent = _over((http.Request r) =>
+          r.url.path == '/v1/messages'
+              ? _reply('   ')
+              : http.Response('{"message":"no route"}', 404));
+      await expectLater(
+        silent.polish('write a caption'),
+        throwsA(isA<ShiftApiException>()),
+      );
     });
 
     test('a real refusal is not hidden behind the local brief', () async {
@@ -346,5 +406,17 @@ void main() {
     expect(Prompt.isPolished(_text(tester)), isTrue);
     expect(tester.widget<TextField>(_field).readOnly, isFalse);
     expect(engine.asked, hasLength(1));
+  });
+
+  test('the demo\'s own brief keeps a question a question', () {
+    final String out = Prompt.polish('What time is it');
+    // It used to be "What time is it." with an audience and a tone.
+    expect(out, startsWith('What time is it?'));
+    expect(out, isNot(contains('Audience:')));
+    expect(Prompt.isPolished(out), isTrue);
+    expect(Prompt.polish(out), out);
+    // A request is still a brief.
+    expect(Prompt.polish('make me a promo video'), contains('Audience:'));
+    expect(Prompt.polish('Make a poster!'), startsWith('Make a poster!\n'));
   });
 }

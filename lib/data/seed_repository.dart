@@ -98,6 +98,14 @@ class SeedRepository implements ShiftRepository {
     _missing(what, id);
   }
 
+  // The demo keeps no chats beyond the device: it cannot chat at all
+  // without an account.
+  @override
+  Future<void> saveThread(ChatThread thread) async {}
+
+  @override
+  Future<void> deleteThread(String id) async {}
+
   @override
   Future<List<Avatar>> avatars() async => List<Avatar>.of(_avatars);
 

@@ -7,9 +7,9 @@
 #   - Debug symbol maps and the skwasm renderer are dropped; the JS build
 #     only ever loads canvaskit.
 #   - Flutter's own service worker is removed: it served a stale cache.
-#     offline_worker.js replaces it. It is network first, so online
-#     nothing changes, and it falls back to the last copy only when the
-#     network fails, which is what lets the installed app open offline.
+#     offline_worker.js replaces it: this build's files from this build's
+#     cache at once, the page from the network if it answers within 2 s
+#     and from its last copy otherwise. A new build clears the old cache.
 #   - AssetManifest.bin is copied to a .wasm name and a small shim in
 #     index.html points the engine at it, because hosts that allow-list
 #     extensions do not serve .bin.
@@ -59,18 +59,34 @@ PY
 cp assets/AssetManifest.bin assets/AssetManifest.bin.wasm
 
 cat > offline_worker.js <<'JS'
-// Network first, for this origin's GETs. Online, every request goes to
-// the network exactly as it would with no worker, and a good answer is
-// kept. Only when the network fails is the kept copy served, so the
-// installed app opens offline on the build it last loaded.
+// The app's files come from this build's own cache, straight away; only
+// the page itself asks the network first, and not for long.
 //
-// build_id.txt is never kept or served from here: it is how the page
-// notices a new build, and a cached one would say nothing ever changed.
-var KEEP = 'shiftai-offline';
+// It used to be network first for everything, with no time limit. Every
+// open waited on the network for all ~3.8 MB (CanvasKit, main.dart.js,
+// fonts) even when a copy was sitting in the cache, and on a weak signal
+// one request that stalled, never failing and never finishing, left the
+// page on its loading screen for good.
+//
+// The cache is named after the build, so a cached main.dart.js can never
+// be served beside a newer page: a new deploy ships a new worker (this
+// file changes with the build id), which clears the old build's cache as
+// it takes over. build_id.txt is never cached; it is how the page
+// notices a new build.
+var BUILD = '__BUILD_ID__';
+var KEEP = 'shiftai-' + BUILD;
+// How long the page waits on the network before opening on its last copy.
+var PAGE_WAIT_MS = 2000;
 
 self.addEventListener('install', function () { self.skipWaiting(); });
 self.addEventListener('activate', function (event) {
-  event.waitUntil(self.clients.claim());
+  event.waitUntil(caches.keys().then(function (names) {
+    return Promise.all(names.map(function (name) {
+      if (name.indexOf('shiftai') === 0 && name !== KEEP) {
+        return caches.delete(name);
+      }
+    }));
+  }).then(function () { return self.clients.claim(); }));
 });
 
 // The page's list of files it fetched before this worker controlled it.
@@ -78,12 +94,53 @@ self.addEventListener('message', function (event) {
   var urls = (event.data && event.data.keep) || [];
   event.waitUntil(caches.open(KEEP).then(function (cache) {
     return Promise.all(urls.map(function (u) {
-      return cache.match(u).then(function (hit) {
+      return cache.match(u, { ignoreSearch: true }).then(function (hit) {
         return hit || cache.add(u).catch(function () {});
       });
     }));
   }));
 });
+
+function keep(cache, req, res) {
+  if (res && res.ok) cache.put(req, res.clone());
+  return res;
+}
+
+// A file of this build: the cached copy if there is one, else the network.
+function fromBuild(req) {
+  return caches.open(KEEP).then(function (cache) {
+    return cache.match(req, { ignoreSearch: true }).then(function (hit) {
+      return hit || fetch(req).then(function (res) {
+        return keep(cache, req, res);
+      });
+    });
+  });
+}
+
+// The page: the network if it answers within PAGE_WAIT_MS, else the last
+// copy, so a new build is picked up when the signal allows and the app
+// still opens when it does not.
+function page(req) {
+  return caches.open(KEEP).then(function (cache) {
+    var network = fetch(req).then(function (res) { return keep(cache, req, res); });
+    var cached = cache.match(req, { ignoreSearch: true }).then(function (hit) {
+      return hit || cache.match('./', { ignoreSearch: true });
+    }).then(function (hit) {
+      return hit || cache.match('index.html', { ignoreSearch: true });
+    });
+    var late = new Promise(function (resolve) {
+      setTimeout(function () {
+        cached.then(function (hit) { if (hit) resolve(hit); });
+      }, PAGE_WAIT_MS);
+    });
+    return Promise.race([
+      network.catch(function () {
+        return cached.then(function (hit) { return hit || Response.error(); });
+      }),
+      late,
+    ]);
+  });
+}
 
 self.addEventListener('fetch', function (event) {
   var req = event.request;
@@ -91,27 +148,12 @@ self.addEventListener('fetch', function (event) {
   var url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
   if (url.pathname.endsWith('build_id.txt')) return;
-  event.respondWith(
-    fetch(req).then(function (res) {
-      if (res.ok) {
-        var copy = res.clone();
-        caches.open(KEEP).then(function (cache) { cache.put(req, copy); });
-      }
-      return res;
-    }).catch(function () {
-      return caches.match(req, { ignoreSearch: true }).then(function (hit) {
-        if (hit) return hit;
-        if (req.mode === 'navigate') {
-          return caches.match('./', { ignoreSearch: true }).then(function (page) {
-            return page || caches.match('index.html', { ignoreSearch: true });
-          });
-        }
-        return Response.error();
-      });
-    })
-  );
+  var isPage = req.mode === 'navigate' || url.pathname.endsWith('/') ||
+      url.pathname.endsWith('index.html');
+  event.respondWith(isPage ? page(req) : fromBuild(req));
 });
 JS
+sed -i "s/__BUILD_ID__/${BUILD_ID}/" offline_worker.js
 
 # Rewritten on every build with a fresh value; the page polls this while
 # open and reloads itself when it no longer matches what it booted with.
@@ -255,8 +297,9 @@ cat > index.html <<'HTML'
     });
   </script>
   <script>
-    // Offline. The worker is network first, so a page online is exactly
-    // what it was without one. On the very first visit the page loads
+    // Offline, and fast. The worker serves this build's files from its
+    // cache and the page from the network when it answers in time. On
+    // the very first visit the page loads
     // before the worker controls it, so once the app has drawn, the page
     // hands the worker the list of files it fetched and the worker keeps
     // a copy. The next open with no network then comes from that copy.

@@ -539,16 +539,90 @@ keeps private threads out of its own storage; honouring this server-side is
 the other half of that promise, and the claim is made to the person in the
 composer's hint text.
 
+
+#### Best fit: one model per message, the right one
+
+One model answers each message. With nothing picked by hand, the app
+chooses it (**Best fit**) and sends its id as `model`:
+
+- A message asking for a video, an image or audio goes to a model whose
+  `bestFor` includes `video`, `image` or `audio`; code, research and
+  writing likewise. "Write a caption for the clip" is writing, not video:
+  a piece of text is writing whatever it is for.
+- Anything no specialist covers ("make it shorter", a plain question)
+  stays with the model that answered last if that is a general model, and
+  otherwise goes to the `default` one.
+- **A chat model never answers a request for an image, a video or
+  audio.** Those go only to a model whose `bestFor` names them, even
+  over a chat model picked by hand. With none connected, the app sends
+  nothing and says "No image model is connected yet. Nothing was sent,
+  and nothing was charged." So list image, video and audio models with
+  `bestFor` (or names that say what they are), or those requests go
+  unanswered.
+- People can still pick one model by hand, and it then answers
+  everything it can make.
+- With no models listed at all the server chooses; there, too, an image
+  request must go to an image model and never come back as chat text.
+
+Say what each model is for in `/v1/models`:
+
+```json
+[{ "id": "claude-opus-5-5", "name": "Claude Opus 5.5", "provider": "Anthropic",
+   "default": true },
+ { "id": "veo-3", "name": "Veo 3", "provider": "Google", "bestFor": ["video"] },
+ { "id": "flux-pro", "name": "Flux Pro", "provider": "BFL", "bestFor": ["image"] }]
+```
+
+`bestFor` takes `image`, `video`, `audio`, `code`, `writing`, `research`.
+Without it the app guesses from the name (Sora, Veo, Runway, Kling → video;
+DALL·E, Imagen, Flux, Midjourney, Ideogram → image; Suno, Udio, Eleven →
+audio), and a model it cannot place is general. With no models listed at
+all, `model` is left out and the server picks.
+### Saved chats: `/v1/threads`
+
+Every chat that is not private is saved as it happens, so it can be
+opened again from Recents in the drawer. The device keeps a copy for the
+signed-in account; these routes keep one on the server so a chat follows
+the account to another device.
+
+| Method | Path | Body | Returns |
+|---|---|---|---|
+| GET | `/v1/threads` | — | this account's chats, newest first |
+| PUT | `/v1/threads/{id}` | the chat | the chat |
+| DELETE | `/v1/threads/{id}` | — | — |
+
+```json
+{ "id": "chat-1727178000000000", "title": "Plan a shoot at the ferry terminal",
+  "updatedAt": "2026-09-24T14:20:00Z",
+  "messages": [
+    { "id": "you-1", "author": "you", "body": "Plan a shoot at the ferry terminal" },
+    { "id": "m1", "author": "shift", "body": "…", "model": "claude-opus-5-5",
+      "modelName": "Claude Opus 5.5" }] }
+```
+
+- The id is the client's; `PUT` creates or replaces. It is sent after
+  each message and each answer, with the whole chat.
+- **Never store a message sent with `private: true`.** The client never
+  saves a private chat; the server must not either.
+- Optional: a 404 on any of these and the app keeps chats on the device
+  only, without an error. The app merges the server's list with the
+  device's by id, keeping the newer copy of each.
+- The Suite's own `chat/threads` routes can back these.
+
 ### `POST /v1/polish`
 
 The composer's sparkle, "Polish my prompt". Body `{ "prompt": "make a
 poster" }`; answer `{ "prompt": "<the fuller brief>" }`. The client puts
 the answer back in the bar with an Undo; it never sends it on its own.
 
-- **No polisher yet? Answer 404.** The client then writes the brief
-  itself (`lib/util/prompt.dart`), so the button still works. An answer
-  that is the prompt unchanged is treated the same way (it used to read
-  as "That is already a full brief" on a one-line ask).
+- **No polisher yet? Answer 404.** The client then asks the connected
+  AI itself, through `POST /v1/messages`: one `private: true` message
+  with no history, an instruction to rewrite the prompt and reply with
+  the rewrite only, and the prompt. The reply's `body` is the rewrite (a
+  "Here is the polished prompt:" preamble and quotes are taken off). An
+  answer here that is the prompt unchanged, or has no rewrite in it, is
+  treated the same way. Only with no server at all does the app write
+  its own template brief.
 - **Where the rewrite goes.** `{ "prompt": "..." }` is the shape. The
   client also reads `polished`, `polishedPrompt`, `result` or `text`,
   ahead of `prompt`, and looks inside a `data` envelope, so relaying the

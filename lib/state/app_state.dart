@@ -19,6 +19,7 @@ import '../theme/tokens.dart';
 import 'daily_rings.dart';
 import 'greetings.dart';
 import '../util/haptics.dart';
+import '../util/model_router.dart';
 
 /// Storage keys. Everything money related persists so a reload never resets
 /// the account. Nothing else writes these keys, and a key this app did not
@@ -82,6 +83,14 @@ class AppState extends ChangeNotifier {
       _snap.ecoVault,
     );
     notes = _listOr<Note>(blob['notes'], Note.fromJson, _snap.notes);
+    threads = _mergeThreads(
+      <ChatThread>[
+        for (final Object? t
+            in (blob['threads'] as List<Object?>?) ?? const <Object?>[])
+          if (ChatThread.tryParse(t) case final ChatThread thread) thread,
+      ],
+      _snap.threads,
+    );
 
     final Map<String, dynamic> unlocked =
         (blob['trophies'] as Map<String, dynamic>?) ?? <String, dynamic>{};
@@ -148,18 +157,7 @@ class AppState extends ChangeNotifier {
     lastError = null;
     notifyListeners();
     try {
-      _snap = await _repo.load();
-      standings = List<StandingRow>.of(_snap.standings);
-      ecoVault = List<VaultItem>.of(_snap.ecoVault);
-      trophies = List<Trophy>.of(_snap.trophies);
-      vault = List<VaultItem>.of(_snap.vault);
-      notes = List<Note>.of(_snap.notes);
-      agentRuns = List<AgentRun>.of(_snap.agentRuns);
-      jobs = List<JobRow>.of(_snap.jobs);
-      designs = List<DesignDoc>.of(_snap.designs);
-      avatars = List<Avatar>.of(_snap.avatars);
-      league = _snap.league;
-      showingCached = false;
+      _applySnapshot(await _repo.load());
     } on ShiftApiException catch (error) {
       // Keep what is on screen. An empty list would read as "you have
       // nothing", which is a different and wrong statement.
@@ -169,6 +167,47 @@ class AppState extends ChangeNotifier {
       _changed();
       unawaited(WidgetSync.push(this));
     }
+  }
+
+  /// Puts what the engine answered on screen, over whatever was there.
+  void _applySnapshot(ShiftSnapshot snap) {
+    _snap = snap;
+    standings = List<StandingRow>.of(_snap.standings);
+    ecoVault = List<VaultItem>.of(_snap.ecoVault);
+    trophies = List<Trophy>.of(_snap.trophies);
+    vault = List<VaultItem>.of(_snap.vault);
+    notes = List<Note>.of(_snap.notes);
+    threads = _mergeThreads(threads, _snap.threads);
+    agentRuns = List<AgentRun>.of(_snap.agentRuns);
+    jobs = List<JobRow>.of(_snap.jobs);
+    designs = List<DesignDoc>.of(_snap.designs);
+    avatars = List<Avatar>.of(_snap.avatars);
+    league = _snap.league;
+    showingCached = false;
+  }
+
+  /// The rest of a load that ran past [load]'s first-screen budget. It
+  /// lands like a refresh; a refusal leaves the last-seen copy showing
+  /// and says why, the same as a load that failed outright.
+  void _finishLoad(Future<ShiftSnapshot> pending) {
+    refreshing = true;
+    final int session = _signOuts;
+    unawaited(() async {
+      try {
+        final ShiftSnapshot snap = await pending;
+        // Signed out while it was on its way: it is the last account's.
+        if (session != _signOuts) return;
+        _applySnapshot(snap);
+        lastError = null;
+      } on ShiftApiException catch (error) {
+        if (session != _signOuts) return;
+        lastError = error;
+      } finally {
+        refreshing = false;
+        _changed();
+        unawaited(WidgetSync.push(this));
+      }
+    }());
   }
 
   /// Runs a write against the engine and rolls the screen back if it is
@@ -225,6 +264,7 @@ class AppState extends ChangeNotifier {
     ShiftRepository? repository,
     Backend? engine,
     TokenStore? tokenStore,
+    Duration firstScreenBudget = const Duration(seconds: 3),
   }) async {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     Map<String, dynamic> blob = <String, dynamic>{};
@@ -255,12 +295,23 @@ class AppState extends ChangeNotifier {
 
     ShiftSnapshot snapshot;
     ShiftApiException? failure;
+    // A load still running when the first screen is due. The app used to
+    // wait for all of it — sixteen requests, each allowed 20 seconds, a
+    // token refresh first if one was due — behind a spinner, which on a
+    // slow engine or a weak signal read as a load that never finished.
+    // Now it waits [firstScreenBudget], then opens on the last-seen copy
+    // for this account (or empty screens) and lets this land when it does.
+    Future<ShiftSnapshot>? pending;
     if (!seeded && !backend.auth.signedIn) {
       // Nothing to fetch and nobody to fetch it for. The gate is next.
       snapshot = emptySnapshot();
     } else {
+      final Future<ShiftSnapshot> loading = repo.load();
       try {
-        snapshot = await repo.load();
+        snapshot = await loading.timeout(firstScreenBudget);
+      } on TimeoutException {
+        pending = loading;
+        snapshot = emptySnapshot();
       } on ShiftApiException catch (error) {
         failure = error;
         snapshot = seeded ? await SeedRepository().load() : emptySnapshot();
@@ -280,11 +331,14 @@ class AppState extends ChangeNotifier {
     // session, or a blob naming anyone else, still gets nothing.
     bool cachedWhileOffline = false;
     if (!seeded) {
-      final String who = failure == null
-          ? snapshot.creator.email
-          : backend.auth.creator?.email ?? '';
+      // Still loading is like offline for this: the engine has not said
+      // who this is yet, so the session does.
+      final bool unanswered = failure != null || pending != null;
+      final String who = unanswered
+          ? backend.auth.creator?.email ?? ''
+          : snapshot.creator.email;
       final bool sameAccount = who.isNotEmpty && blob['account'] == who;
-      cachedWhileOffline = failure != null && sameAccount;
+      cachedWhileOffline = unanswered && sameAccount;
       if (!sameAccount) {
         blob = Map<String, dynamic>.of(blob)
           ..remove('vault')
@@ -292,6 +346,9 @@ class AppState extends ChangeNotifier {
           ..remove('notes')
           ..remove('standings')
           ..remove('trophies')
+          // Saved chats are the account's like the rest: someone else
+          // signing in on this device must not get this one's Recents.
+          ..remove('threads')
           ..remove('rings');
       }
     }
@@ -304,6 +361,7 @@ class AppState extends ChangeNotifier {
     if (!seeded) state.signedIn = backend.auth.signedIn;
     unawaited(WidgetSync.configure());
     unawaited(WidgetSync.push(state));
+    if (pending != null) state._finishLoad(pending);
     return state;
   }
 
@@ -352,6 +410,104 @@ class AppState extends ChangeNotifier {
   late List<DesignDoc> designs;
   late List<Avatar> avatars;
   late List<ChatMessage> messages;
+
+  /// Saved chats, newest first: what "Recents" lists. Every conversation
+  /// that is not private is one of these as soon as it has a message.
+  late List<ChatThread> threads;
+
+  /// The saved chat [messages] belongs to; null for a new one not yet
+  /// saved, and for a private one, which never is.
+  String? currentThreadId;
+
+  static const int _keptThreads = 100;
+
+  /// The device's copy and the server's, by id, the newer of each.
+  static List<ChatThread> _mergeThreads(
+    List<ChatThread> local,
+    List<ChatThread>? server,
+  ) {
+    final Map<String, ChatThread> byId = <String, ChatThread>{
+      for (final ChatThread t in local) t.id: t,
+    };
+    for (final ChatThread t in server ?? const <ChatThread>[]) {
+      final ChatThread? mine = byId[t.id];
+      if (mine == null || t.updatedAt.isAfter(mine.updatedAt)) byId[t.id] = t;
+    }
+    final List<ChatThread> out = byId.values.toList()
+      ..sort(
+          (ChatThread a, ChatThread b) => b.updatedAt.compareTo(a.updatedAt));
+    return out.take(_keptThreads).toList();
+  }
+
+  /// Saves the conversation on screen, on the device and on the server.
+  ///
+  /// Chats used to be kept nowhere: they lived in memory, and "New chat",
+  /// a reload or signing out lost them. A private chat still is kept
+  /// nowhere, which is its point.
+  void _saveThread() {
+    if (privateChat) return;
+    final List<ChatMessage> kept =
+        messages.where((ChatMessage m) => m.failure == null).toList();
+    if (!kept.any((ChatMessage m) => m.author == MessageAuthor.you)) return;
+    final String id =
+        currentThreadId ??= 'chat-${DateTime.now().microsecondsSinceEpoch}';
+    final ChatThread thread = ChatThread(
+      id: id,
+      title: ChatThread.titleFor(kept),
+      updatedAt: DateTime.now(),
+      messages: kept,
+    );
+    threads = <ChatThread>[
+      thread,
+      ...threads.where((ChatThread t) => t.id != id),
+    ].take(_keptThreads).toList();
+    // The device's copy is written with the rest of the state; the
+    // server's is best effort, and an engine without /v1/threads keeps
+    // none, which is fine.
+    unawaited(() async {
+      try {
+        await _repo.saveThread(thread);
+      } on Object catch (error) {
+        debugPrint('chat: not saved on the server — $error');
+      }
+    }());
+  }
+
+  /// Opens a saved chat to read or carry on. Whatever was on screen is
+  /// already saved, unless it was private.
+  void openThread(String id) {
+    final ChatThread? thread =
+        threads.where((ChatThread t) => t.id == id).firstOrNull;
+    if (thread == null) return;
+    _round++;
+    _reply?.ignore();
+    thinking = false;
+    privateChat = false;
+    messages = List<ChatMessage>.of(thread.messages);
+    currentThreadId = thread.id;
+    lastAsk = thread.messages
+        .where((ChatMessage m) => m.author == MessageAuthor.you)
+        .map((ChatMessage m) => m.body)
+        .lastOrNull;
+    surface = Surface.suite;
+    mode = ShiftMode.suite;
+    _changed();
+  }
+
+  /// Deletes a saved chat, here and on the server. The one on screen goes
+  /// back to a new chat.
+  void deleteThread(String id) {
+    threads = threads.where((ChatThread t) => t.id != id).toList();
+    if (currentThreadId == id) clearThread();
+    _changed();
+    unawaited(() async {
+      try {
+        await _repo.deleteThread(id);
+      } on Object catch (error) {
+        debugPrint('chat: not deleted on the server — $error');
+      }
+    }());
+  }
 
   /// The line the Suite shows over an empty thread. Held on the state
   /// rather than picked where it is drawn: the empty state rebuilds on
@@ -411,10 +567,13 @@ class AppState extends ChangeNotifier {
   /// The AIs the server has connected, in the order it lists them.
   List<ChatModel> get chatModels => _snap.models;
 
+  /// The model picked by hand, or null for Best fit. Anything else stored
+  /// here by an older build ("*every", "*auto") matches no model and so
+  /// reads as Best fit too.
   String? _chatModelId;
 
-  /// Who answers the next message: the one picked, if the server still has
-  /// it, or null for the server's own choice.
+  /// The model picked by hand, if the server still has it; null means Best
+  /// fit, which chooses per message.
   ChatModel? get chatModel {
     for (final ChatModel m in chatModels) {
       if (m.id == _chatModelId) return m;
@@ -422,8 +581,46 @@ class AppState extends ChangeNotifier {
     return null;
   }
 
-  /// Picks which AI answers from now on; null hands it back to the server.
-  /// The conversation is unchanged: the next model reads all of it.
+  /// "Best fit", or the name of the model picked by hand.
+  String get answeringLabel => chatModel?.name ?? 'Best fit';
+
+  /// Who answers [prompt]: the model picked by hand, or the one Best fit
+  /// chooses for it (ModelRouter), or null for the server's own choice
+  /// when it lists no models at all.
+  ///
+  /// One model answers each message. For a while every connected model
+  /// answered every message in turn, which was the wrong reading of "I'm
+  /// only getting responses from one model": the point was the right one
+  /// answering, not all of them.
+  ///
+  /// A request for an image, a video or audio only ever goes to a model
+  /// that makes them, even over a chat model picked by hand; see [routeFor].
+  ChatModel? answererFor(String prompt) => routeFor(prompt).model;
+
+  /// Where [prompt] goes, or what it asked for that nothing connected can
+  /// make.
+  ModelRoute routeFor(String prompt) => ModelRouter.route(
+        chatModels,
+        prompt,
+        picked: chatModel,
+        lastModelId: _lastAnswerer,
+      );
+
+  /// The model that wrote the latest real reply, so a follow-up ("make it
+  /// shorter") stays with it rather than hopping.
+  String? get _lastAnswerer {
+    for (final ChatMessage m in messages.reversed) {
+      if (m.author != MessageAuthor.you &&
+          m.failure == null &&
+          m.model != null) {
+        return m.model;
+      }
+    }
+    return null;
+  }
+
+  /// Picks which AI answers from now on; null is Best fit. The
+  /// conversation is unchanged: the next model reads all of it.
   void setChatModel(String? id) {
     if (_chatModelId == id) return;
     _chatModelId = id;
@@ -440,23 +637,23 @@ class AppState extends ChangeNotifier {
   /// and stay out.
   List<ChatTurn> get chatHistory => <ChatTurn>[
         for (final ChatMessage m in messages)
-          if (m.failure == null)
-            ChatTurn(
-              role: m.author == MessageAuthor.you ? 'user' : 'assistant',
-              body: <String>[
-                if (m.body.isNotEmpty) m.body,
-                ...m.bullets.map((String b) => '- $b'),
-                // The answers it offered, so the next model knows what
-                // "the second one" means.
-                ...m.choices.map((ChatChoice c) => c.description == null
-                    ? '- ${c.label}'
-                    : '- ${c.label}: ${c.description}'),
-                if (m.attachment != null)
-                  '[Attached: ${m.attachment!.fileName}]',
-              ].join('\n'),
-              model: m.model,
-            ),
+          if (m.failure == null) _turnOf(m),
       ];
+
+  static ChatTurn _turnOf(ChatMessage m) => ChatTurn(
+        role: m.author == MessageAuthor.you ? 'user' : 'assistant',
+        body: <String>[
+          if (m.body.isNotEmpty) m.body,
+          ...m.bullets.map((String b) => '- $b'),
+          // The answers it offered, so the next model knows what
+          // "the second one" means.
+          ...m.choices.map((ChatChoice c) => c.description == null
+              ? '- ${c.label}'
+              : '- ${c.label}: ${c.description}'),
+          if (m.attachment != null) '[Attached: ${m.attachment!.fileName}]',
+        ].join('\n'),
+        model: m.model,
+      );
 
   /// The connector catalogue the engine knows about.
   List<Connector> get connectors => _snap.connectors;
@@ -620,8 +817,13 @@ class AppState extends ChangeNotifier {
     _changed();
   }
 
+  /// Going private, or back, starts a fresh conversation. A private one
+  /// is never saved; carrying on a saved chat in private and switching
+  /// back would have saved the private part into it.
   void togglePrivateChat() {
-    privateChat = !privateChat;
+    final bool next = !privateChat;
+    clearThread();
+    privateChat = next;
     _changed();
   }
 
@@ -1044,6 +1246,7 @@ class AppState extends ChangeNotifier {
         league: _snap.league,
         boards: _snap.boards,
         models: _snap.models,
+        threads: _snap.threads,
       );
     }
   }
@@ -1090,11 +1293,20 @@ class AppState extends ChangeNotifier {
   /// Signing out empties the screens and the cache with them. Leaving a
   /// vault on the device for the next person to sign in is the same leak
   /// as showing them the seeded one.
+  /// Counts sign-outs, so an answer that was on its way for the last
+  /// account is not put on screen after it left.
+  int _signOuts = 0;
+
   Future<void> signOut() async {
+    _signOuts++;
     await _auth.signOut();
     signedIn = false;
     selectedVaultId = null;
     messages = <ChatMessage>[];
+    // Chats are the account's, like the vault: the next person on this
+    // device does not get this one's Recents.
+    threads = <ChatThread>[];
+    currentThreadId = null;
     if (!seededDemo) {
       vault = <VaultItem>[];
       ecoVault = <VaultItem>[];
@@ -1175,58 +1387,148 @@ class AppState extends ChangeNotifier {
     // Taken before the new message is added: the history is what came
     // before this prompt, and the prompt travels on its own.
     final List<ChatTurn> history = chatHistory;
-    final String? model = chatModel?.id;
+    final ModelRoute route = routeFor(body);
+    final ChatModel? answerer = route.model;
     messages = <ChatMessage>[
       ...messages,
       ChatMessage(id: 'you-$stamp', author: MessageAuthor.you, body: body),
     ];
+    _saveThread();
+    // An image (or video, or audio) with no model connected that makes
+    // one: nothing is sent. A chat model would only have written about
+    // the picture it cannot draw, and charged for it.
+    final TaskKind? missing = route.missing;
+    if (missing != null) {
+      _round++;
+      thinking = false;
+      messages = <ChatMessage>[
+        ...messages,
+        ChatMessage(
+          id: 'unmet-$stamp',
+          author: MessageAuthor.shift,
+          body: '',
+          failure: FailureInfo(
+            sentence: 'No ${_madeName(missing)} model is connected yet.',
+            reassurance: 'Nothing was sent, and nothing was charged.',
+            details: 'The Suite only hands ${_madeName(missing)} requests to '
+                'a model that makes ${_madeName(missing)}, never to a chat '
+                'model. Once one is connected, ask again.',
+            offersAccount: false,
+          ),
+        ),
+      ];
+      _changed();
+      return true;
+    }
     thinking = true;
     _changed();
+
+    // A newer message, or a cleared thread, ends this one: its late answer
+    // is not appended to a conversation that moved on.
+    final int round = ++_round;
+    bool current() => round == _round;
 
     // The answer comes from the engine. Private chat is passed through so
     // a server can be told not to retain it, on top of this client never
     // writing it down.
     _reply?.ignore();
     _reply = () async {
-      try {
-        final List<ChatMessage> answer = await _repo.send(
-          body,
-          private: privateChat,
-          avatarId: activeAvatarId,
-          model: model,
-          history: history,
-        );
-        messages = <ChatMessage>[...messages, ...answer];
-        lastError = null;
-        // Coming back with something made is the ring, whether or not it
-        // ever lands in the vault — a private ask still counts.
-        if (answer.any((ChatMessage m) => m.attachment != null)) {
-          _closeRing(RingKind.create);
-        }
-      } on ShiftApiException catch (error) {
-        lastError = error;
-        messages = <ChatMessage>[
-          ...messages,
-          ChatMessage(
-            id: 'error-$stamp',
-            author: MessageAuthor.shift,
-            body: error.message,
-            failure: FailureInfo(
-              sentence: 'That did not reach the server.',
-              reassurance: error.retryable
-                  ? 'Nothing was charged. The next try may well work.'
-                  : 'Nothing was charged.',
-              details: error.status == null
-                  ? error.message
-                  : '${error.status} · ${error.message}',
-            ),
-          ),
-        ];
-      }
+      await _answer(
+        stamp,
+        body,
+        model: answerer?.id,
+        history: history,
+        as: answerer,
+        stillCurrent: current,
+      );
+      if (!current()) return;
       thinking = false;
       _changed();
     }();
     return true;
+  }
+
+  int _round = 0;
+
+  static String _madeName(TaskKind kind) => switch (kind) {
+        TaskKind.image => 'image',
+        TaskKind.video => 'video',
+        TaskKind.audio => 'audio',
+        _ => kind.name,
+      };
+
+  /// One engine call for [sendMessage]: appends what comes back, or a
+  /// failure notice, and returns what was appended. [as] labels a reply
+  /// the engine did not label, so a panel's answers can always be told
+  /// apart.
+  Future<List<ChatMessage>> _answer(
+    String stamp,
+    String prompt, {
+    required String? model,
+    required List<ChatTurn> history,
+    ChatModel? as,
+    bool Function()? stillCurrent,
+  }) async {
+    try {
+      final List<ChatMessage> answer = (await _repo.send(
+        prompt,
+        private: privateChat,
+        avatarId: activeAvatarId,
+        model: model,
+        history: history,
+      ))
+          .map((ChatMessage a) => as == null || a.model != null
+              ? a
+              : ChatMessage(
+                  id: a.id,
+                  author: a.author,
+                  body: a.body,
+                  eyebrow: a.eyebrow,
+                  bullets: a.bullets,
+                  attachment: a.attachment,
+                  failure: a.failure,
+                  model: as.id,
+                  modelName: as.name,
+                  choices: a.choices,
+                  multiSelect: a.multiSelect,
+                ))
+          .toList();
+      if (!(stillCurrent?.call() ?? true)) return const <ChatMessage>[];
+      messages = <ChatMessage>[...messages, ...answer];
+      _saveThread();
+      lastError = null;
+      // Coming back with something made is the ring, whether or not it
+      // ever lands in the vault — a private ask still counts.
+      if (answer.any((ChatMessage m) => m.attachment != null)) {
+        _closeRing(RingKind.create);
+      }
+      _changed();
+      return answer;
+    } on ShiftApiException catch (error) {
+      if (!(stillCurrent?.call() ?? true)) return const <ChatMessage>[];
+      lastError = error;
+      final ChatMessage notice = ChatMessage(
+        id: 'error-$stamp',
+        author: MessageAuthor.shift,
+        body: error.message,
+        model: as?.id,
+        modelName: as?.name,
+        failure: FailureInfo(
+          sentence: as == null
+              ? 'That did not reach the server.'
+              : '${as.name} did not answer.',
+          reassurance: error.retryable
+              ? 'Nothing was charged. The next try may well work.'
+              : 'Nothing was charged.',
+          details: error.status == null
+              ? error.message
+              : '${error.status} · ${error.message}',
+        ),
+      );
+      messages = <ChatMessage>[...messages, notice];
+      _changed();
+      return <ChatMessage>[notice];
+    }
   }
 
   /// Rewrites what is in the composer into a fuller brief.
@@ -1247,9 +1549,12 @@ class AppState extends ChangeNotifier {
   }
 
   void clearThread() {
+    _round++;
     _reply?.ignore();
     thinking = false;
     messages = <ChatMessage>[];
+    // The chat that was on screen is already saved; this is a new one.
+    currentThreadId = null;
     lastAsk = null;
     greeting = Greetings.next(avoid: greeting);
     _changed();
@@ -1306,6 +1611,7 @@ class AppState extends ChangeNotifier {
       'vault': vault.map((VaultItem v) => v.toJson()).toList(),
       'ecoVault': ecoVault.map((VaultItem v) => v.toJson()).toList(),
       'notes': notes.map((Note n) => n.toJson()).toList(),
+      'threads': threads.map((ChatThread t) => t.toJson()).toList(),
       'rings': rings.toJson(),
     };
     await _prefs.setString(StoreKeys.app, jsonEncode(blob));

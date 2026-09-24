@@ -104,22 +104,24 @@ class _FailureCardState extends State<FailureCard> {
               ),
             ),
           ],
-          const SizedBox(height: Space.x4),
-          Wrap(
-            spacing: Space.x3,
-            runSpacing: Space.x2,
-            children: <Widget>[
-              FilledButton(
-                onPressed: state.signOut,
-                child: const Text('Sign in'),
-              ),
-              OutlinedButton(
-                onPressed: () => state.setSurface(Surface.settings),
-                child: Text('Settings',
-                    style: ShiftType.copy(c.text, size: 15, weight: 600)),
-              ),
-            ],
-          ),
+          if (widget.failure.offersAccount) ...<Widget>[
+            const SizedBox(height: Space.x4),
+            Wrap(
+              spacing: Space.x3,
+              runSpacing: Space.x2,
+              children: <Widget>[
+                FilledButton(
+                  onPressed: state.signOut,
+                  child: const Text('Sign in'),
+                ),
+                OutlinedButton(
+                  onPressed: () => state.setSurface(Surface.settings),
+                  child: Text('Settings',
+                      style: ShiftType.copy(c.text, size: 15, weight: 600)),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     );

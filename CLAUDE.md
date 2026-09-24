@@ -76,6 +76,13 @@ and release crashes the first time someone signs in or taps "+".
 reference, Runner group, and the Resources build phase. A manifest that
 is not in Copy Bundle Resources is one Apple never sees.
 
+**Nothing waits forever at startup.** The web app's offline worker
+serves each build's files from that build's cache and gives the network
+2 s for the page before opening on its last copy; it used to be network
+first with no limit, and a stalled request meant a loading screen for
+good. `AppState.load` gives the engine 3 s and then opens on the
+account's last-seen copy while the rest lands.
+
 **Bundle ids are `club.shiftai.app` on both platforms** and cannot change
 after the first upload.
 
@@ -114,6 +121,12 @@ media fields, the Suite's boards at `/v1/boards`, and several AIs in one
 conversation (`/v1/models`, and `model` + `history` on `/v1/messages`).
 Every earlier reply goes back as the assistant's own turn, whichever
 model wrote it; that is what lets them read each other as one model.
+One model answers each message: the one picked by hand, or with none
+picked, the one suited to it ("Best fit", `lib/util/model_router.dart`:
+a video to a video model, words to a general one, follow-ups staying put).
+A chat model never answers a request for an image, video or audio, even
+if picked by hand; with no model connected that makes one, nothing is
+sent and the thread says so.
 
 Not wired yet: `ANY /v1/studio/<path>`, which relays to the Suite's own
 `/api/studio/<path>` (chat, image, video, voice, music, deck and the
@@ -137,6 +150,12 @@ AI-generated face shipped in `assets/avatars/`), is who the Suite
 generates as until someone picks their own; no `avatarId` means her. She
 is never anyone's profile picture or leaderboard face.
 
+Chats are saved as they happen (`AppState.threads`, Recents in the
+drawer): on the device, in the account-keyed blob, and on the server via
+`/v1/threads` when it has it (404 means device only). A private chat is
+saved nowhere, and going private or back starts a fresh chat so a private
+part can never land in a saved one.
+
 `DELETE /v1/me` is store-blocking — Apple rejects account creation
 without in-app deletion (Guideline 5.1.1(v)). The button and the
 confirmation exist; they need something to call.
@@ -158,6 +177,6 @@ exploratory, branch.
 flutter analyze && flutter test
 ```
 
-281 tests. They have caught every regression listed above at least once,
+310 tests. They have caught every regression listed above at least once,
 including several of mine. If one fails, read it before changing it —
 twice now the test was right and my expectation was wrong.

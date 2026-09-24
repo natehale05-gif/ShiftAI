@@ -839,8 +839,7 @@ class _ModelLine extends StatelessWidget {
   Widget build(BuildContext context) {
     final AppState state = AppScope.of(context);
     final ShiftColors c = ShiftColors.of(context);
-    final ChatModel? picked = state.chatModel;
-    final String name = picked?.name ?? 'Auto';
+    final String name = state.answeringLabel;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(Space.x5, Space.x1, Space.x5, 0),
@@ -898,15 +897,15 @@ Future<void> _pickModel(BuildContext context, AppState state) {
     builder: (BuildContext context) {
       final ShiftColors c = ShiftColors.of(context);
       Widget option({
-        required String? id,
+        required bool on,
+        required VoidCallback pick,
         required String name,
         required String detail,
       }) {
-        final bool on = state.chatModel?.id == id;
         return InkWell(
           onTap: () {
             Haptics.selection();
-            state.setChatModel(id);
+            pick();
             Navigator.of(context).pop();
           },
           child: ConstrainedBox(
@@ -937,8 +936,6 @@ Future<void> _pickModel(BuildContext context, AppState state) {
         );
       }
 
-      final ChatModel? fallback =
-          state.chatModels.where((ChatModel m) => m.isDefault).firstOrNull;
       return SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(
@@ -960,22 +957,27 @@ Future<void> _pickModel(BuildContext context, AppState state) {
               ),
               const SizedBox(height: Space.x1),
               Text(
-                'Switch at any point. The next one reads the whole '
-                'conversation, every reply included, and carries on from it.',
+                'One AI answers each message. Switch at any point: the next '
+                'one reads the whole conversation and carries on from it.',
                 style: ShiftType.bodySm(c.textMuted),
               ),
               const SizedBox(height: Space.x4),
               GroupedList(
                 children: <Widget>[
                   option(
-                    id: null,
-                    name: 'Auto',
-                    detail: fallback == null
-                        ? 'The server picks'
-                        : 'The server picks · usually ${fallback.name}',
+                    on: state.chatModel == null,
+                    pick: () => state.setChatModel(null),
+                    name: 'Best fit',
+                    detail: 'The right AI for each message: images, video, '
+                        'code or words',
                   ),
                   for (final ChatModel m in state.chatModels)
-                    option(id: m.id, name: m.name, detail: m.provider),
+                    option(
+                      on: state.chatModel?.id == m.id,
+                      pick: () => state.setChatModel(m.id),
+                      name: m.name,
+                      detail: m.provider,
+                    ),
                 ],
               ),
             ],

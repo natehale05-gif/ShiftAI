@@ -16,6 +16,15 @@ import 'package:shift_ai/data/seed.dart';
 import 'package:shift_ai/data/seed_repository.dart';
 import 'package:shift_ai/models/models.dart';
 import 'package:shift_ai/state/app_state.dart';
+import 'package:shift_ai/util/model_router.dart';
+
+/// A server with specialists: a video and an image model beside two
+/// general ones.
+final List<ChatModel> _panel = <ChatModel>[
+  ..._models,
+  ChatModel.fromJson(const <String, String>{'id': 'veo', 'name': 'Veo 3'}),
+  ChatModel.fromJson(const <String, String>{'id': 'flux', 'name': 'Flux Pro'}),
+];
 
 const List<ChatModel> _models = <ChatModel>[
   ChatModel(
@@ -28,6 +37,11 @@ const List<ChatModel> _models = <ChatModel>[
 class _Engine extends SeedRepository {
   final List<({String prompt, String? model, List<ChatTurn> history})> sent =
       <({String prompt, String? model, List<ChatTurn> history})>[];
+
+  /// The model that refuses, for the round's failure test.
+  String? failFor;
+
+  List<ChatModel> models = _models;
 
   @override
   Future<ShiftSnapshot> load() async {
@@ -47,7 +61,7 @@ class _Engine extends SeedRepository {
       payoutLine: s.payoutLine,
       avatars: s.avatars,
       league: s.league,
-      models: _models,
+      models: models,
     );
   }
 
@@ -60,6 +74,9 @@ class _Engine extends SeedRepository {
     List<ChatTurn> history = const <ChatTurn>[],
   }) async {
     sent.add((prompt: prompt, model: model, history: history));
+    if (model != null && model == failFor) {
+      throw const ShiftApiException(ShiftApiErrorKind.server, 'Down.');
+    }
     final String id = model ?? 'claude';
     return <ChatMessage>[
       ChatMessage(
@@ -68,7 +85,10 @@ class _Engine extends SeedRepository {
         body: 'Answer ${sent.length} from $id',
         bullets: sent.length == 1 ? <String>['first point'] : <String>[],
         model: id,
-        modelName: _models.firstWhere((ChatModel m) => m.id == id).name,
+        modelName: models
+            .firstWhere((ChatModel m) => m.id == id,
+                orElse: () => ChatModel(id: id, name: id))
+            .name,
       ),
     ];
   }
@@ -150,11 +170,14 @@ void main() {
     );
   });
 
-  test('Auto sends no model, and a failure notice is never history', () async {
+  test(
+      'Best fit sends one model, the default for plain talk, and a failure '
+      'notice is never history', () async {
     final (AppState state, _Engine engine) = await _signedIn();
+    expect(state.answeringLabel, 'Best fit');
     state.sendMessage('Hello');
     await _settle();
-    expect(engine.sent.single.model, isNull);
+    expect(engine.sent.single.model, 'claude');
     state.messages = <ChatMessage>[
       ...state.messages,
       const ChatMessage(
@@ -266,8 +289,9 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    expect(find.text('Auto'), findsOneWidget);
-    await tester.tap(find.text('Auto'));
+    // Best fit, until one is picked.
+    expect(find.text('Best fit'), findsOneWidget);
+    await tester.tap(find.text('Best fit'));
     await tester.pumpAndSettle();
     expect(find.text('Who answers'), findsOneWidget);
     await tester.tap(find.text('Other model'));
@@ -279,6 +303,211 @@ void main() {
     // The label over the reply, and the picker naming the next answerer.
     expect(find.text('Other model'), findsNWidgets(2));
     expect(find.text('Answer 1 from other'), findsOneWidget);
+  });
+
+  group('Best fit: one model per message, the right one', () {
+    test('the message goes to the model suited to it, and only that one',
+        () async {
+      final (AppState state, _Engine engine) = await _signedIn();
+      engine.models = _panel;
+      await state.refresh();
+
+      state.sendMessage('Make a video of Miami at sunset');
+      await _settle();
+      expect(engine.sent.single.model, 'veo');
+
+      state.sendMessage('Now a poster for it');
+      await _settle();
+      expect(engine.sent.last.model, 'flux');
+
+      state.sendMessage('Write a caption for the clip');
+      await _settle();
+      expect(engine.sent.last.model, 'claude');
+      expect(engine.sent, hasLength(3), reason: 'one call per message');
+    });
+
+    test(
+        'a follow-up stays with the general model that answered; a question '
+        'after a specialist goes back to the default', () async {
+      final (AppState state, _Engine engine) = await _signedIn();
+      engine.models = _panel;
+      await state.refresh();
+
+      state.setChatModel('other');
+      state.sendMessage('Hello');
+      await _settle();
+      state.setChatModel(null);
+      state.sendMessage('Thanks, shorter please');
+      await _settle();
+      expect(engine.sent.last.model, 'other', reason: 'no hop for nothing');
+
+      state.sendMessage('Make a video of it');
+      await _settle();
+      expect(engine.sent.last.model, 'veo');
+      state.sendMessage('Why is the sky blue?');
+      await _settle();
+      expect(engine.sent.last.model, 'claude', reason: 'not the video model');
+    });
+
+    test(
+        'a model picked by hand answers all it can, never a video it cannot '
+        'make; null is Best fit again', () async {
+      final (AppState state, _Engine engine) = await _signedIn();
+      engine.models = _panel;
+      await state.refresh();
+      state.setChatModel('other');
+      state.sendMessage('Write a caption for Miami');
+      await _settle();
+      expect(engine.sent.last.model, 'other');
+      state.sendMessage('Make a video of Miami');
+      await _settle();
+      expect(engine.sent.last.model, 'veo', reason: 'a chat model cannot');
+      state.setChatModel(null);
+      expect(state.answeringLabel, 'Best fit');
+    });
+
+    test('an older build\'s stored "*every" reads as Best fit', () async {
+      final (AppState state, _) = await _signedIn(<String, Object>{
+        StoreKeys.app: jsonEncode(<String, Object>{'chatModel': '*every'}),
+      });
+      expect(state.chatModel, isNull);
+      expect(state.answeringLabel, 'Best fit');
+    });
+
+    test('with no models listed the server chooses', () async {
+      final (AppState state, _Engine engine) = await _signedIn();
+      engine.models = const <ChatModel>[];
+      await state.refresh();
+      state.sendMessage('Make a video');
+      await _settle();
+      expect(engine.sent.single.model, isNull);
+    });
+  });
+
+  group('a chat model never answers a request for an image', () {
+    test(
+        'with no image model connected nothing is sent, and the thread says '
+        'why', () async {
+      final (AppState state, _Engine engine) = await _signedIn();
+      // Two general models only: nobody here makes images.
+      expect(state.sendMessage('Make an image of a lighthouse'), isTrue);
+      await _settle();
+      expect(engine.sent, isEmpty, reason: 'not the chat model, not anyone');
+      expect(state.thinking, isFalse);
+      expect(state.messages.first.body, 'Make an image of a lighthouse');
+      expect(state.messages.last.failure?.sentence,
+          'No image model is connected yet.');
+      expect(state.messages.last.failure?.reassurance,
+          'Nothing was sent, and nothing was charged.');
+      // Signing in again would not connect an image model.
+      expect(state.messages.last.failure?.offersAccount, isFalse);
+      // The notice is the app's, not an answer: never history.
+      expect(state.chatHistory.map((ChatTurn t) => t.role), <String>['user']);
+
+      // Words still go to the chat model as ever.
+      state.sendMessage('Write a caption for a lighthouse photo');
+      await _settle();
+      expect(engine.sent.single.model, 'claude');
+    });
+
+    test('a chat model picked by hand hands the image to the image model',
+        () async {
+      final (AppState state, _Engine engine) = await _signedIn();
+      engine.models = _panel;
+      await state.refresh();
+      state.setChatModel('other');
+      state.sendMessage('Generate a logo for the café');
+      await _settle();
+      expect(engine.sent.single.model, 'flux');
+      // And everything else stays with the pick.
+      state.sendMessage('Thanks, what font would suit it?');
+      await _settle();
+      expect(engine.sent.last.model, 'other');
+    });
+
+    test('video and audio are held to the same rule', () async {
+      final (AppState state, _Engine engine) = await _signedIn();
+      state.sendMessage('Make a video of Miami');
+      state.sendMessage('Compose a jingle for the ad');
+      await _settle();
+      expect(engine.sent, isEmpty);
+      expect(
+        state.messages
+            .where((ChatMessage m) => m.failure != null)
+            .map((ChatMessage m) => m.failure!.sentence),
+        <String>[
+          'No video model is connected yet.',
+          'No audio model is connected yet.',
+        ],
+      );
+    });
+
+    test('the router never falls back to a chat model for a made thing', () {
+      expect(ModelRouter.pick(_models, 'a poster for Friday'), isNull);
+      final ModelRoute r = ModelRouter.route(_models, 'a poster for Friday');
+      expect(r.model, isNull);
+      expect(r.missing, TaskKind.image);
+      expect(
+          ModelRouter.route(_panel, 'a poster for Friday').model?.id, 'flux');
+      // With no list at all the server decides, as it always has.
+      expect(
+          ModelRouter.route(const <ChatModel>[], 'a poster').missing, isNull);
+    });
+  });
+
+  group('what a message asks for', () {
+    test('a medium when the thing itself is wanted, writing for words', () {
+      final Map<String, TaskKind?> cases = <String, TaskKind?>{
+        'make a video of Miami': TaskKind.video,
+        'a 15 second reel for the launch': TaskKind.video,
+        'generate a logo for the café': TaskKind.image,
+        'a poster for Friday': TaskKind.image,
+        'compose a jingle for the ad': TaskKind.audio,
+        'write a caption for the ferry clip': TaskKind.writing,
+        'make me a caption for the video': TaskKind.writing,
+        'a script for the promo video': TaskKind.writing,
+        'describe this photo': TaskKind.writing,
+        'fix this bug in my Dart function': TaskKind.code,
+        'find the latest news on the launch': TaskKind.research,
+        'draft an email to the venue': TaskKind.writing,
+        'thanks, shorter please': null,
+        'why is the sky blue?': null,
+      };
+      cases.forEach((String prompt, TaskKind? kind) {
+        expect(ModelRouter.kindOf(prompt), kind, reason: prompt);
+      });
+    });
+
+    test('a model says what it is for, or its name does', () {
+      expect(
+        ChatModel.fromJson(const <String, Object>{
+          'id': 'x',
+          'name': 'Studio',
+          'bestFor': <String>['video', 'images'],
+        }).bestFor,
+        <TaskKind>{TaskKind.video, TaskKind.image},
+      );
+      TaskKind? only(String id, String name) {
+        final Set<TaskKind> k =
+            ChatModel.fromJson(<String, String>{'id': id, 'name': name})
+                .bestFor;
+        return k.length == 1 ? k.single : null;
+      }
+
+      expect(only('veo-3', 'Veo 3'), TaskKind.video);
+      expect(only('sora-2', 'Sora'), TaskKind.video);
+      expect(only('flux-pro', 'Flux Pro'), TaskKind.image);
+      expect(only('dall-e-3', 'DALL·E 3'), TaskKind.image);
+      expect(only('suno-v4', 'Suno'), TaskKind.audio);
+      expect(
+        ChatModel.fromJson(const <String, String>{
+          'id': 'claude-opus-5-5',
+          'name': 'Claude Opus 5.5',
+        }).bestFor,
+        isEmpty,
+        reason: 'a general model takes whatever no specialist does',
+      );
+    });
   });
 }
 

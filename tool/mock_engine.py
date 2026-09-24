@@ -18,6 +18,8 @@ _next_id = [1]
 # What POST /v1/uploads was given, by id, so a trained avatar can show the
 # photo it was made from. Nothing is written to disk.
 UPLOADS = {}
+# Saved chats by id, the way /v1/threads keeps them.
+THREADS = {}
 # How long the stand-in "render" takes. Long enough to watch the gallery
 # poll, short enough to wait for: MOCK_TRAIN_SECONDS=5 for a quicker look.
 TRAIN_SECONDS = float(os.environ.get("MOCK_TRAIN_SECONDS", "20"))
@@ -83,6 +85,11 @@ def league_placement():
 MODELS = [
     {"id": "mock-a", "name": "Mock A", "provider": "Mock", "default": True},
     {"id": "mock-b", "name": "Mock B", "provider": "Mock"},
+    # Specialists, so Best fit has somewhere to send a video or an image.
+    {"id": "mock-video", "name": "Mock Video", "provider": "Mock",
+     "bestFor": ["video"]},
+    {"id": "mock-image", "name": "Mock Image", "provider": "Mock",
+     "bestFor": ["image"]},
 ]
 
 
@@ -98,6 +105,21 @@ def answer(body):
     names = {m["id"]: m["name"] for m in MODELS}
     model = body.get("model") or MODELS[0]["id"]
     history = body.get("history") or []
+    prompt = body.get("prompt") or ""
+    # The app's polish fallback: when an engine has no /v1/polish, the
+    # rewrite is asked for through this route. Answered with a preamble,
+    # the way models do, so the app's clean-up is exercised too.
+    if prompt.startswith("Rewrite the prompt below"):
+        original = prompt.split("Prompt:\n", 1)[-1].strip()
+        keep = original.rstrip(".?! ")
+        rewrite = (f"{keep} — answered for right now, where I am?"
+                   if original.endswith("?") or keep.lower().startswith(
+                       ("what", "when", "where", "who", "why", "how"))
+                   else f"{keep}. Vertical 1080 × 1920, about 20 seconds, "
+                        "for people seeing it for the first time.")
+        return [{"id": f"m{len(history) + 1}", "author": "shift",
+                 "model": model, "modelName": names.get(model, model),
+                 "body": f"Here is the polished prompt: {rewrite}"}]
     asked = ask(body, history)
     if asked is not None:
         asked.update({
@@ -115,7 +137,8 @@ def answer(body):
         wrote = names.get(last.get("model"), "an earlier answer")
         quoted = (last.get("body") or "")[:80]
         text += f" Carrying on from the last reply ({wrote}): \"{quoted}\""
-    text += f" You asked: \"{body.get('prompt', '')}\""
+    asked = body.get("prompt", "")
+    text += f" You asked: \"{asked}\""
     return [{
         "id": f"m{len(history) + 1}",
         "author": "shift",
@@ -197,7 +220,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "application/json")
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Headers", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET,POST,PATCH,DELETE,OPTIONS")
+        self.send_header("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS")
         self.send_header("Content-Length", str(len(raw)))
         self.end_headers()
         if raw:
@@ -210,6 +233,10 @@ class Handler(BaseHTTPRequestHandler):
         path = self.path.split("?")[0]
         if path == "/v1/league":
             return self._send(200, league_placement() if LOCATION["set"] else {})
+        if path == "/v1/threads":
+            return self._send(200, sorted(
+                THREADS.values(), key=lambda t: t.get("updatedAt", ""),
+                reverse=True))
         if path == "/v1/avatars":
             settle_avatars()
             return self._send(200, [public(a) for a in AVATARS])
@@ -326,8 +353,21 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, league_placement())
         self._send(404, {"message": f"No route {path}."})
 
+    def do_PUT(self):
+        path = self.path.split("?")[0]
+        if path.startswith("/v1/threads/"):
+            length = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(length) or b"{}")
+            body["id"] = path.split("/")[3]
+            THREADS[body["id"]] = body
+            return self._send(200, body)
+        self._send(404, {"message": f"No route {path}."})
+
     def do_DELETE(self):
         path = self.path.split("?")[0]
+        if path.startswith("/v1/threads/"):
+            THREADS.pop(path.split("/")[3], None)
+            return self._send(204)
         if path.startswith("/v1/ecovault/") and path.endswith("/save"):
             return self._send(200, {"id": path.split("/")[3], "saved": False})
         if path.startswith("/v1/avatars/"):

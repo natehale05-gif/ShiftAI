@@ -24,7 +24,12 @@ class ShiftSnapshot {
     this.league,
     this.boards,
     this.models = const <ChatModel>[],
+    this.threads,
   });
+
+  /// Saved conversations from `GET /v1/threads`, newest first. Null when
+  /// the engine keeps none; the device's copy is then all there is.
+  final List<ChatThread>? threads;
 
   /// The AIs the server has connected, from `GET /v1/models`. Empty for an
   /// engine that does not list them, and then it picks who answers.
@@ -115,6 +120,14 @@ abstract interface class ShiftRepository {
   /// Changes the signed-in creator's username. Whether it is taken is the
   /// server's call, reported back as [ShiftApiErrorKind.badRequest].
   Future<Creator> updateHandle(String handle);
+
+  // Saved chats -------------------------------------------------------------
+  /// Keeps [thread] on the server, replacing any copy with its id. An
+  /// engine without `/v1/threads` keeps nothing, and that is not an error:
+  /// the device's copy stands.
+  Future<void> saveThread(ChatThread thread);
+
+  Future<void> deleteThread(String id);
 
   // Avatars ----------------------------------------------------------------
   /// This creator's avatars, on their own: what the gallery re-reads while
