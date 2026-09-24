@@ -126,7 +126,9 @@ picked, the one suited to it ("Best fit", `lib/util/model_router.dart`:
 a video to a video model, words to a general one, follow-ups staying put).
 A chat model never answers a request for an image, video or audio, even
 if picked by hand; with no model connected that makes one, nothing is
-sent and the thread says so.
+sent and the thread says so. That includes a server that lists no models
+at all: the preview's chat model answered "generate an image of Miami"
+with "I can't generate images" before this.
 
 Not wired yet: `ANY /v1/studio/<path>`, which relays to the Suite's own
 `/api/studio/<path>` (chat, image, video, voice, music, deck and the

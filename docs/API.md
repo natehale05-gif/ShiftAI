@@ -561,8 +561,12 @@ chooses it (**Best fit**) and sends its id as `model`:
   unanswered.
 - People can still pick one model by hand, and it then answers
   everything it can make.
-- With no models listed at all the server chooses; there, too, an image
-  request must go to an image model and never come back as chat text.
+- With no models listed at all the server chooses who answers words,
+  but the app does not send it a request for an image, a video or audio:
+  it cannot tell which of the server's models make them, and left to
+  choose, the preview answered "generate an image of Miami" with its
+  chat model ("I can't generate images"). List those models with
+  `bestFor` and they are sent.
 
 Say what each model is for in `/v1/models`:
 
@@ -577,7 +581,8 @@ Say what each model is for in `/v1/models`:
 Without it the app guesses from the name (Sora, Veo, Runway, Kling → video;
 DALL·E, Imagen, Flux, Midjourney, Ideogram → image; Suno, Udio, Eleven →
 audio), and a model it cannot place is general. With no models listed at
-all, `model` is left out and the server picks.
+all, `model` is left out and the server picks, for words only (above).
+
 ### Saved chats: `/v1/threads`
 
 Every chat that is not private is saved as it happens, so it can be

@@ -327,11 +327,11 @@ void main() {
     await tester.pump();
     await _dismissRingsSheet(tester);
 
-    state.sendMessage('Cut a 20 second vertical promo');
+    state.sendMessage('Write a launch post');
     await tester.pump();
 
     expect(find.text(state.greeting), findsNothing);
-    expect(find.text('Cut a 20 second vertical promo'), findsOneWidget);
+    expect(find.text('Write a launch post'), findsOneWidget);
     // The answer lands a beat later, after the working indicator.
     expect(state.thinking, isTrue);
     await tester.pump(const Duration(milliseconds: 700));
@@ -646,8 +646,8 @@ void main() {
   test('retry and edit have the last ask to work from', () async {
     final AppState state = await _signedInState();
     expect(state.lastAsk, isNull);
-    state.sendMessage('Cut a 20 second vertical promo');
-    expect(state.lastAsk, 'Cut a 20 second vertical promo');
+    state.sendMessage('Write a launch post');
+    expect(state.lastAsk, 'Write a launch post');
     state.clearThread();
     expect(state.lastAsk, isNull);
   });
