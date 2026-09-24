@@ -10,10 +10,12 @@ import '../features/settings/avatar.dart';
 import '../features/settings/settings_surface.dart';
 import '../features/trophies/trophies_surface.dart';
 import '../features/vault/vault_surface.dart';
+import '../models/models.dart';
 import '../state/app_state.dart';
 import '../theme/tokens.dart';
 import '../theme/type.dart';
 import '../util/system_bars.dart';
+import '../widgets/alert.dart';
 import '../widgets/common.dart';
 import 'modes.dart';
 
@@ -384,6 +386,22 @@ class SidebarNav extends StatelessWidget {
                       ),
                     ),
                   ],
+                  // Saved chats, newest first, the way Claude and ChatGPT
+                  // keep them. Tap to open one again; hold to delete it.
+                  if (state.threads.isNotEmpty) ...<Widget>[
+                    const _GroupLabel('Recents', spaced: true),
+                    for (final ChatThread t in state.threads.take(30))
+                      _NavRow(
+                        key: ValueKey<String>('recent-${t.id}'),
+                        icon: Icons.chat_bubble_outline_rounded,
+                        label: t.title,
+                        height: rowHeight,
+                        active: state.surface == Surface.suite &&
+                            state.currentThreadId == t.id,
+                        onTap: () => go(() => state.openThread(t.id)),
+                        onLongPress: () => _confirmDeleteChat(context, t),
+                      ),
+                  ],
                 ],
               ),
             ),
@@ -461,14 +479,30 @@ class _GroupLabel extends StatelessWidget {
   }
 }
 
+Future<void> _confirmDeleteChat(BuildContext context, ChatThread t) async {
+  final AppState state = AppScope.read(context);
+  final bool? yes = await showShiftAlert<bool>(
+    context,
+    title: 'Delete this chat?',
+    message: '\u201c${t.title}\u201d goes for good.',
+    actions: const <ShiftAlertAction<bool>>[
+      ShiftAlertAction<bool>('Cancel', value: false, isDefault: true),
+      ShiftAlertAction<bool>('Delete', value: true, destructive: true),
+    ],
+  );
+  if (yes ?? false) state.deleteThread(t.id);
+}
+
 class _NavRow extends StatelessWidget {
   const _NavRow({
+    super.key,
     required this.icon,
     required this.label,
     required this.active,
     required this.onTap,
     required this.height,
     this.trailing,
+    this.onLongPress,
   });
 
   final IconData icon;
@@ -477,6 +511,7 @@ class _NavRow extends StatelessWidget {
   final VoidCallback onTap;
   final double height;
   final Widget? trailing;
+  final VoidCallback? onLongPress;
 
   @override
   Widget build(BuildContext context) {
@@ -494,6 +529,7 @@ class _NavRow extends StatelessWidget {
         child: InkWell(
           borderRadius: Radii.mdAll,
           onTap: onTap,
+          onLongPress: onLongPress,
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 160),
             curve: Curves.easeOut,

@@ -578,6 +578,37 @@ Without it the app guesses from the name (Sora, Veo, Runway, Kling → video;
 DALL·E, Imagen, Flux, Midjourney, Ideogram → image; Suno, Udio, Eleven →
 audio), and a model it cannot place is general. With no models listed at
 all, `model` is left out and the server picks.
+### Saved chats: `/v1/threads`
+
+Every chat that is not private is saved as it happens, so it can be
+opened again from Recents in the drawer. The device keeps a copy for the
+signed-in account; these routes keep one on the server so a chat follows
+the account to another device.
+
+| Method | Path | Body | Returns |
+|---|---|---|---|
+| GET | `/v1/threads` | — | this account's chats, newest first |
+| PUT | `/v1/threads/{id}` | the chat | the chat |
+| DELETE | `/v1/threads/{id}` | — | — |
+
+```json
+{ "id": "chat-1727178000000000", "title": "Plan a shoot at the ferry terminal",
+  "updatedAt": "2026-09-24T14:20:00Z",
+  "messages": [
+    { "id": "you-1", "author": "you", "body": "Plan a shoot at the ferry terminal" },
+    { "id": "m1", "author": "shift", "body": "…", "model": "claude-opus-5-5",
+      "modelName": "Claude Opus 5.5" }] }
+```
+
+- The id is the client's; `PUT` creates or replaces. It is sent after
+  each message and each answer, with the whole chat.
+- **Never store a message sent with `private: true`.** The client never
+  saves a private chat; the server must not either.
+- Optional: a 404 on any of these and the app keeps chats on the device
+  only, without an error. The app merges the server's list with the
+  device's by id, keeping the newer copy of each.
+- The Suite's own `chat/threads` routes can back these.
+
 ### `POST /v1/polish`
 
 The composer's sparkle, "Polish my prompt". Body `{ "prompt": "make a

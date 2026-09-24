@@ -18,6 +18,8 @@ _next_id = [1]
 # What POST /v1/uploads was given, by id, so a trained avatar can show the
 # photo it was made from. Nothing is written to disk.
 UPLOADS = {}
+# Saved chats by id, the way /v1/threads keeps them.
+THREADS = {}
 # How long the stand-in "render" takes. Long enough to watch the gallery
 # poll, short enough to wait for: MOCK_TRAIN_SECONDS=5 for a quicker look.
 TRAIN_SECONDS = float(os.environ.get("MOCK_TRAIN_SECONDS", "20"))
@@ -218,7 +220,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "application/json")
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Headers", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET,POST,PATCH,DELETE,OPTIONS")
+        self.send_header("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS")
         self.send_header("Content-Length", str(len(raw)))
         self.end_headers()
         if raw:
@@ -231,6 +233,10 @@ class Handler(BaseHTTPRequestHandler):
         path = self.path.split("?")[0]
         if path == "/v1/league":
             return self._send(200, league_placement() if LOCATION["set"] else {})
+        if path == "/v1/threads":
+            return self._send(200, sorted(
+                THREADS.values(), key=lambda t: t.get("updatedAt", ""),
+                reverse=True))
         if path == "/v1/avatars":
             settle_avatars()
             return self._send(200, [public(a) for a in AVATARS])
@@ -347,8 +353,21 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, league_placement())
         self._send(404, {"message": f"No route {path}."})
 
+    def do_PUT(self):
+        path = self.path.split("?")[0]
+        if path.startswith("/v1/threads/"):
+            length = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(length) or b"{}")
+            body["id"] = path.split("/")[3]
+            THREADS[body["id"]] = body
+            return self._send(200, body)
+        self._send(404, {"message": f"No route {path}."})
+
     def do_DELETE(self):
         path = self.path.split("?")[0]
+        if path.startswith("/v1/threads/"):
+            THREADS.pop(path.split("/")[3], None)
+            return self._send(204)
         if path.startswith("/v1/ecovault/") and path.endswith("/save"):
             return self._send(200, {"id": path.split("/")[3], "saved": False})
         if path.startswith("/v1/avatars/"):

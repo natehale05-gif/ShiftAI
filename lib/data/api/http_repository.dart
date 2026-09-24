@@ -36,6 +36,7 @@ class HttpRepository implements ShiftRepository {
   static const String _league = '/v1/league';
   static const String _boards = '/v1/boards';
   static const String _models = '/v1/models';
+  static const String _threads = '/v1/threads';
   static const String _location = '/v1/me/location';
 
   /// The Suite's boards, if this engine serves them. Optional: an engine
@@ -62,10 +63,42 @@ class HttpRepository implements ShiftRepository {
     }
   }
 
+  /// Saved chats, when the engine keeps them. Optional like the boards:
+  /// any refusal (a 404 above all) means the device's copy is the one.
+  Future<List<ChatThread>?> _chatThreads() async {
+    try {
+      return Decode.rows(await _api.get(_threads), 'threads')
+          .map(ChatThread.tryParse)
+          .whereType<ChatThread>()
+          .toList(growable: false);
+    } on ShiftApiException {
+      return null;
+    }
+  }
+
+  @override
+  Future<void> saveThread(ChatThread thread) async {
+    try {
+      await _api.put('$_threads/${thread.id}', body: thread.toJson());
+    } on ShiftApiException catch (error) {
+      if (error.kind != ShiftApiErrorKind.notFound) rethrow;
+    }
+  }
+
+  @override
+  Future<void> deleteThread(String id) async {
+    try {
+      await _api.delete('$_threads/$id');
+    } on ShiftApiException catch (error) {
+      if (error.kind != ShiftApiErrorKind.notFound) rethrow;
+    }
+  }
+
   @override
   Future<ShiftSnapshot> load() async {
     final Future<SuiteBoards?> boards = _suiteBoards();
     final Future<List<ChatModel>> models = _chatModels();
+    final Future<List<ChatThread>?> threads = _chatThreads();
     // One round trip each, in parallel. A backend that would rather answer
     // in one shot can add a /v1/snapshot and this becomes a single call.
     final List<dynamic> parts = await Future.wait(<Future<dynamic>>[
@@ -122,6 +155,7 @@ class HttpRepository implements ShiftRepository {
           : null,
       boards: await boards,
       models: await models,
+      threads: await threads,
     );
   }
 

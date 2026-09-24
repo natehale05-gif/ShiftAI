@@ -83,6 +83,14 @@ class AppState extends ChangeNotifier {
       _snap.ecoVault,
     );
     notes = _listOr<Note>(blob['notes'], Note.fromJson, _snap.notes);
+    threads = _mergeThreads(
+      <ChatThread>[
+        for (final Object? t
+            in (blob['threads'] as List<Object?>?) ?? const <Object?>[])
+          if (ChatThread.tryParse(t) case final ChatThread thread) thread,
+      ],
+      _snap.threads,
+    );
 
     final Map<String, dynamic> unlocked =
         (blob['trophies'] as Map<String, dynamic>?) ?? <String, dynamic>{};
@@ -155,6 +163,7 @@ class AppState extends ChangeNotifier {
       trophies = List<Trophy>.of(_snap.trophies);
       vault = List<VaultItem>.of(_snap.vault);
       notes = List<Note>.of(_snap.notes);
+      threads = _mergeThreads(threads, _snap.threads);
       agentRuns = List<AgentRun>.of(_snap.agentRuns);
       jobs = List<JobRow>.of(_snap.jobs);
       designs = List<DesignDoc>.of(_snap.designs);
@@ -353,6 +362,104 @@ class AppState extends ChangeNotifier {
   late List<DesignDoc> designs;
   late List<Avatar> avatars;
   late List<ChatMessage> messages;
+
+  /// Saved chats, newest first: what "Recents" lists. Every conversation
+  /// that is not private is one of these as soon as it has a message.
+  late List<ChatThread> threads;
+
+  /// The saved chat [messages] belongs to; null for a new one not yet
+  /// saved, and for a private one, which never is.
+  String? currentThreadId;
+
+  static const int _keptThreads = 100;
+
+  /// The device's copy and the server's, by id, the newer of each.
+  static List<ChatThread> _mergeThreads(
+    List<ChatThread> local,
+    List<ChatThread>? server,
+  ) {
+    final Map<String, ChatThread> byId = <String, ChatThread>{
+      for (final ChatThread t in local) t.id: t,
+    };
+    for (final ChatThread t in server ?? const <ChatThread>[]) {
+      final ChatThread? mine = byId[t.id];
+      if (mine == null || t.updatedAt.isAfter(mine.updatedAt)) byId[t.id] = t;
+    }
+    final List<ChatThread> out = byId.values.toList()
+      ..sort(
+          (ChatThread a, ChatThread b) => b.updatedAt.compareTo(a.updatedAt));
+    return out.take(_keptThreads).toList();
+  }
+
+  /// Saves the conversation on screen, on the device and on the server.
+  ///
+  /// Chats used to be kept nowhere: they lived in memory, and "New chat",
+  /// a reload or signing out lost them. A private chat still is kept
+  /// nowhere, which is its point.
+  void _saveThread() {
+    if (privateChat) return;
+    final List<ChatMessage> kept =
+        messages.where((ChatMessage m) => m.failure == null).toList();
+    if (!kept.any((ChatMessage m) => m.author == MessageAuthor.you)) return;
+    final String id =
+        currentThreadId ??= 'chat-${DateTime.now().microsecondsSinceEpoch}';
+    final ChatThread thread = ChatThread(
+      id: id,
+      title: ChatThread.titleFor(kept),
+      updatedAt: DateTime.now(),
+      messages: kept,
+    );
+    threads = <ChatThread>[
+      thread,
+      ...threads.where((ChatThread t) => t.id != id),
+    ].take(_keptThreads).toList();
+    // The device's copy is written with the rest of the state; the
+    // server's is best effort, and an engine without /v1/threads keeps
+    // none, which is fine.
+    unawaited(() async {
+      try {
+        await _repo.saveThread(thread);
+      } on Object catch (error) {
+        debugPrint('chat: not saved on the server — $error');
+      }
+    }());
+  }
+
+  /// Opens a saved chat to read or carry on. Whatever was on screen is
+  /// already saved, unless it was private.
+  void openThread(String id) {
+    final ChatThread? thread =
+        threads.where((ChatThread t) => t.id == id).firstOrNull;
+    if (thread == null) return;
+    _round++;
+    _reply?.ignore();
+    thinking = false;
+    privateChat = false;
+    messages = List<ChatMessage>.of(thread.messages);
+    currentThreadId = thread.id;
+    lastAsk = thread.messages
+        .where((ChatMessage m) => m.author == MessageAuthor.you)
+        .map((ChatMessage m) => m.body)
+        .lastOrNull;
+    surface = Surface.suite;
+    mode = ShiftMode.suite;
+    _changed();
+  }
+
+  /// Deletes a saved chat, here and on the server. The one on screen goes
+  /// back to a new chat.
+  void deleteThread(String id) {
+    threads = threads.where((ChatThread t) => t.id != id).toList();
+    if (currentThreadId == id) clearThread();
+    _changed();
+    unawaited(() async {
+      try {
+        await _repo.deleteThread(id);
+      } on Object catch (error) {
+        debugPrint('chat: not deleted on the server — $error');
+      }
+    }());
+  }
 
   /// The line the Suite shows over an empty thread. Held on the state
   /// rather than picked where it is drawn: the empty state rebuilds on
@@ -662,8 +769,13 @@ class AppState extends ChangeNotifier {
     _changed();
   }
 
+  /// Going private, or back, starts a fresh conversation. A private one
+  /// is never saved; carrying on a saved chat in private and switching
+  /// back would have saved the private part into it.
   void togglePrivateChat() {
-    privateChat = !privateChat;
+    final bool next = !privateChat;
+    clearThread();
+    privateChat = next;
     _changed();
   }
 
@@ -1086,6 +1198,7 @@ class AppState extends ChangeNotifier {
         league: _snap.league,
         boards: _snap.boards,
         models: _snap.models,
+        threads: _snap.threads,
       );
     }
   }
@@ -1137,6 +1250,10 @@ class AppState extends ChangeNotifier {
     signedIn = false;
     selectedVaultId = null;
     messages = <ChatMessage>[];
+    // Chats are the account's, like the vault: the next person on this
+    // device does not get this one's Recents.
+    threads = <ChatThread>[];
+    currentThreadId = null;
     if (!seededDemo) {
       vault = <VaultItem>[];
       ecoVault = <VaultItem>[];
@@ -1223,6 +1340,7 @@ class AppState extends ChangeNotifier {
       ...messages,
       ChatMessage(id: 'you-$stamp', author: MessageAuthor.you, body: body),
     ];
+    _saveThread();
     // An image (or video, or audio) with no model connected that makes
     // one: nothing is sent. A chat model would only have written about
     // the picture it cannot draw, and charged for it.
@@ -1324,6 +1442,7 @@ class AppState extends ChangeNotifier {
           .toList();
       if (!(stillCurrent?.call() ?? true)) return const <ChatMessage>[];
       messages = <ChatMessage>[...messages, ...answer];
+      _saveThread();
       lastError = null;
       // Coming back with something made is the ring, whether or not it
       // ever lands in the vault — a private ask still counts.
@@ -1381,6 +1500,8 @@ class AppState extends ChangeNotifier {
     _reply?.ignore();
     thinking = false;
     messages = <ChatMessage>[];
+    // The chat that was on screen is already saved; this is a new one.
+    currentThreadId = null;
     lastAsk = null;
     greeting = Greetings.next(avoid: greeting);
     _changed();
@@ -1437,6 +1558,7 @@ class AppState extends ChangeNotifier {
       'vault': vault.map((VaultItem v) => v.toJson()).toList(),
       'ecoVault': ecoVault.map((VaultItem v) => v.toJson()).toList(),
       'notes': notes.map((Note n) => n.toJson()).toList(),
+      'threads': threads.map((ChatThread t) => t.toJson()).toList(),
       'rings': rings.toJson(),
     };
     await _prefs.setString(StoreKeys.app, jsonEncode(blob));

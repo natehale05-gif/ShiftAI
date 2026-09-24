@@ -81,6 +81,14 @@ class ApiClient {
           )
           .timeout(timeout));
 
+  Future<dynamic> put(String path, {Object? body}) => _send(() async => _client
+      .put(
+        _uri(path),
+        headers: await _headers(),
+        body: body == null ? null : jsonEncode(body),
+      )
+      .timeout(timeout));
+
   Future<dynamic> delete(String path) => _send(() async =>
       _client.delete(_uri(path), headers: await _headers()).timeout(timeout));
 
