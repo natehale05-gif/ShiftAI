@@ -10,6 +10,7 @@ import '../../util/choices.dart';
 import '../../util/haptics.dart';
 import '../../util/model_router.dart';
 import '../../widgets/common.dart';
+import '../../widgets/markdown_text.dart';
 import 'failure_card.dart';
 import '../../widgets/alert.dart';
 
@@ -471,7 +472,9 @@ class _MessageTile extends StatelessWidget {
           ),
           const SizedBox(height: Space.x3),
         ],
-        if (body.isNotEmpty) Text(body, style: ShiftType.body(c.text)),
+        // Models answer in Markdown; the thread draws it rather than
+        // showing the asterisks and hashes.
+        if (body.isNotEmpty) MarkdownText(body),
         if (showBullets) ...<Widget>[
           const SizedBox(height: Space.x3),
           ...message.bullets.map(

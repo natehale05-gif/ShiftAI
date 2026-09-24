@@ -146,6 +146,12 @@ def answer(body):
             "modelName": names.get(model, model),
         })
         return [asked]
+    # Markdown, the way real models answer, so the thread's rendering of
+    # it can be seen: ask for a "shot list".
+    if "shot list" in (prompt or "").lower():
+        return [{"id": f"m{len(history) + 1}", "author": "shift",
+                 "model": model, "modelName": names.get(model, model),
+                 "body": MARKDOWN_REPLY}]
     replies = [t for t in history if t.get("role") == "assistant"]
     text = (f"I can read all {len(history)} earlier turns of this "
             f"conversation.")
@@ -202,6 +208,25 @@ def make(body, model, history):
             "vaultItemId": row["id"],
         },
     }
+
+
+MARKDOWN_REPLY = """### Shot list
+
+A **tight** 20 second cut, *handheld*, for [Reels](https://example.com).
+
+1. **Hook:** the ferry horn, 0:00 to 0:02
+2. The crossing
+   - wide from the deck
+   - close on the wake
+3. ~~Drone~~ no drone: it reads as stock
+
+> Keep every shot under three seconds.
+
+```
+ffmpeg -i crossing.mp4 -t 20 -vf scale=1080:1920 reel.mp4
+```
+
+Trim with `ffmpeg` and post by **6 pm**."""
 
 
 FEEL = "What should it feel like?"
