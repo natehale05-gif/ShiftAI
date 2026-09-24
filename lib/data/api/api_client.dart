@@ -147,10 +147,16 @@ class ApiClient {
         return _send(run, allowRetry: false);
       }
     }
+    // JSON is UTF-8 by definition (RFC 8259), whatever the Content-Type
+    // says. response.body decodes by the header and falls back to
+    // Latin-1 when it names no charset and is not application/json, so a
+    // proxy's text/plain turned "1080 × 1920" into "1080 Ã 1920", and
+    // every accent, dash and emoji with it.
+    final String text = utf8.decode(response.bodyBytes, allowMalformed: true);
     if (status >= 200 && status < 300) {
-      if (response.body.isEmpty) return null;
+      if (text.isEmpty) return null;
       try {
-        return jsonDecode(response.body);
+        return jsonDecode(text);
       } on FormatException {
         throw ShiftApiException(
           ShiftApiErrorKind.malformed,
@@ -168,7 +174,7 @@ class ApiClient {
         >= 400 && < 500 => ShiftApiErrorKind.badRequest,
         _ => ShiftApiErrorKind.server,
       },
-      _messageFrom(response.body) ?? 'The request failed.',
+      _messageFrom(text) ?? 'The request failed.',
       status: status,
     );
   }
