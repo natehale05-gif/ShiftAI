@@ -94,6 +94,32 @@ abstract final class ShiftType {
   static TextStyle caption(Color color) =>
       _manrope(size: 13, lineHeight: 20, weight: 500, color: color);
 
+  // Apple's text ramp, by its names, for the sizes that had been set by
+  // hand with copyWith(fontSize: …): 26, 18 and 16 were on no ramp at all.
+  // body (17), bodySm (15, subheadline), caption (13, footnote),
+  // subheading (20, title 3) and heading (28, title 1) above already are.
+
+  /// Headline: 17 semibold. A row's own name, a bar's title.
+  static TextStyle headline(Color color) =>
+      _manrope(size: 17, lineHeight: 24, weight: 600, color: color);
+
+  /// Callout: 16. A list row's text where 17 is too loud and 15 too quiet.
+  static TextStyle callout(Color color) =>
+      _manrope(size: 16, lineHeight: 22, weight: 400, color: color);
+
+  /// Title 2: 22. A figure or name that leads a card.
+  static TextStyle title2(Color color) =>
+      _outfit(size: 22, lineHeight: 28, weight: 600, color: color);
+
+  /// Title 1: 28, bold. A document's own title in its editor.
+  static TextStyle title1(Color color) => _outfit(
+        size: 28,
+        lineHeight: 34,
+        weight: 700,
+        letterSpacing: -0.2,
+        color: color,
+      );
+
   /// A screen's own title, under its back link — the large title a
   /// navigation stack opens on.
   static TextStyle largeTitle(Color color) => _outfit(
