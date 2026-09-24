@@ -74,6 +74,7 @@ class _Engine extends SeedRepository {
     List<ChatTurn> history = const <ChatTurn>[],
     Future<void>? cancel,
     void Function(String soFar)? onText,
+    List<SentFile> files = const <SentFile>[],
   }) async {
     sent.add((prompt: prompt, model: model, history: history));
     if (model != null && model == failFor) {
@@ -492,6 +493,13 @@ void main() {
         'ideas for a poster about the market': TaskKind.writing,
         'a content plan for my reels this week': TaskKind.writing,
         'make a video of the ferry': TaskKind.video,
+        // A question about one is not a request for one: this went to the
+        // image model with a photo attached, and it made a new picture.
+        'What is in this photo?': null,
+        'is this logo too busy': null,
+        'how long should the reel be?': null,
+        'can you make a poster for Friday?': TaskKind.image,
+        'make this photo brighter': TaskKind.image,
         'thanks, shorter please': null,
         'why is the sky blue?': null,
       };
