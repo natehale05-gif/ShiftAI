@@ -145,6 +145,14 @@ then answer with an attachment that points at that row:
   caller goes away, stop the model call and do not charge for it, if the
   provider allows that.
 
+**`attachments`** are the files someone attached with "+": uploaded
+first through `POST /v1/uploads`, then named here by id,
+`[{ "uploadId": "u1", "name": "ferry.png", "mimeType": "image/png" }]`.
+Hand the model the files themselves (an image as an image, a PDF or
+text file as its contents). Turns in `history` carry their own
+`attachments` the same way. Until this is read, a model is sent a
+question about a photo it cannot see.
+
 **`private: true`** means do not retain the exchange anywhere: no logs of
 the content, and nothing in `/v1/threads`.
 

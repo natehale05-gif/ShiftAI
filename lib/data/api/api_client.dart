@@ -202,9 +202,7 @@ class ApiClient {
         case 'error':
           throw ShiftApiException(
             ShiftApiErrorKind.server,
-            (decoded is Map<String, dynamic>
-                    ? _firstMessage(decoded)
-                    : null) ??
+            (decoded is Map<String, dynamic> ? _firstMessage(decoded) : null) ??
                 'The answer stopped part way.',
           );
       }
@@ -270,6 +268,7 @@ class ApiClient {
     required String fileName,
     required String mimeType,
     required List<int> bytes,
+    Duration? wait,
   }) =>
       _send(() async {
         final http.MultipartRequest request =
@@ -284,7 +283,7 @@ class ApiClient {
                 ),
               );
         final http.StreamedResponse streamed =
-            await _client.send(request).timeout(timeout);
+            await _client.send(request).timeout(wait ?? timeout);
         return http.Response.fromStream(streamed);
       });
 

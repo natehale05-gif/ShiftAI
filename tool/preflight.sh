@@ -72,7 +72,7 @@ grep -q "android.permission.ACCESS_COARSE_LOCATION" \
   android/app/src/main/AndroidManifest.xml \
   && ok "coarse location permission (the local league needs it)" \
   || bad "no ACCESS_COARSE_LOCATION: sharing a location will silently fail"
-for k in fluttersecurestorage filepicker home_widget; do
+for k in fluttersecurestorage filepicker home_widget fluttercommunity.plus.share; do
   grep -q "$k" android/app/proguard-rules.pro \
     && ok "R8 keeps $k" || bad "R8 will strip $k in release"
 done

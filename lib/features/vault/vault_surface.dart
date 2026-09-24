@@ -713,6 +713,13 @@ class _DetailPanel extends StatelessWidget {
                         : 'Save to your vault',
                     onTap: () => state.toggleSaved(item.id),
                   ),
+                Builder(
+                  builder: (BuildContext row) => _ActionRow(
+                    icon: Icons.ios_share_rounded,
+                    label: 'Share',
+                    onTap: () => sharePiece(row, item),
+                  ),
+                ),
                 if (item.mine)
                   _ActionRow(
                     icon: Icons.delete_outline_rounded,

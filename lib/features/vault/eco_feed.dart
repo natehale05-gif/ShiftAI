@@ -8,6 +8,7 @@ import '../../theme/type.dart';
 import '../../util/format.dart';
 import '../../util/haptics.dart';
 import '../../widgets/common.dart';
+import '../../util/share_text.dart';
 import 'media_player.dart';
 
 /// EcoVault as a feed, the way Instagram shows one: one post at a time,
@@ -126,6 +127,8 @@ class _FeedPostState extends State<FeedPost>
             child: GroupedList(
               children: <Widget>[
                 row(Icons.replay_rounded, 'Use this prompt', _usePrompt),
+                row(Icons.ios_share_rounded, 'Share',
+                    () => sharePiece(context, item)),
                 row(Icons.content_copy_rounded, 'Copy prompt', () {
                   Clipboard.setData(ClipboardData(text: item.prompt));
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -264,6 +267,15 @@ class _FeedPostState extends State<FeedPost>
                   onPressed: _usePrompt,
                   icon: Icon(Icons.replay_rounded, size: 26, color: c.text),
                 ),
+                // Instagram's paper plane, in Apple's share glyph.
+                Builder(
+                  builder: (BuildContext button) => IconButton(
+                    tooltip: 'Share',
+                    onPressed: () => sharePiece(button, item),
+                    icon:
+                        Icon(Icons.ios_share_rounded, size: 24, color: c.text),
+                  ),
+                ),
               ],
             ),
           ),
@@ -323,6 +335,42 @@ class _FeedPostState extends State<FeedPost>
           ),
         ],
       ),
+    );
+  }
+}
+
+/// What sharing a piece hands over: its title, who made it, the prompt,
+/// and the file's own link when there is one. The link is public by an
+/// unguessable name (docs/API.md), which is what makes it shareable.
+String pieceShareText(VaultItem item) {
+  final String by = item.mine
+      ? 'Made with ShiftAi'
+      : 'By ${item.byName ?? item.byHandle} (@${item.byHandle}) on ShiftAi';
+  return <String>[
+    '${item.title} · $by',
+    if (item.prompt.isNotEmpty) 'Prompt: ${item.prompt}',
+    if (item.mediaUrl != null) item.mediaUrl!,
+  ].join('\n\n');
+}
+
+/// Opens the share sheet for [item], pointing from [anchor]'s widget (an
+/// iPad requires somewhere to point it from), and says what happened when
+/// it was not the sheet.
+Future<void> sharePiece(BuildContext anchor, VaultItem item) async {
+  final ScaffoldMessengerState? bar = ScaffoldMessenger.maybeOf(anchor);
+  final RenderObject? box = anchor.findRenderObject();
+  final Rect? origin = box is RenderBox && box.hasSize
+      ? box.localToGlobal(Offset.zero) & box.size
+      : null;
+  Haptics.light();
+  final ShareOutcome outcome = await shareText(
+    pieceShareText(item),
+    subject: item.title,
+    origin: origin,
+  );
+  if (outcome == ShareOutcome.copied) {
+    bar?.showSnackBar(
+      const SnackBar(content: Text('Copied, ready to paste anywhere')),
     );
   }
 }

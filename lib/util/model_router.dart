@@ -171,6 +171,13 @@ abstract final class ModelRouter {
     'subject line',
   ]);
 
+  /// A question: it ends in one, or opens like one.
+  static final RegExp _question = RegExp(
+    r'\?\s*$|^\s*(?:what|why|how|who|where|when|which|is|are|was|were|'
+    r'can|could|does|do|did|should|would|will)\b',
+    caseSensitive: false,
+  );
+
   /// What [prompt] asks for, or null for talk no specialist covers.
   ///
   /// A piece of text is writing, whatever it is for. Otherwise a medium
@@ -181,12 +188,18 @@ abstract final class ModelRouter {
     if (_text.hasMatch(prompt)) return TaskKind.writing;
     final bool makes = _make.hasMatch(prompt);
     final bool writes = _write.hasMatch(prompt);
+    // A question about a medium is not a request for one: "what is in
+    // this photo?" went to the image model, which made a new picture.
+    // "Can you make a video?" still asks for the thing itself.
+    final bool asks = _question.hasMatch(prompt);
     for (final TaskKind k in <TaskKind>[
       TaskKind.video,
       TaskKind.image,
       TaskKind.audio,
     ]) {
-      if (_asks[k]!.hasMatch(prompt) && (makes || !writes)) return k;
+      if (_asks[k]!.hasMatch(prompt) && (makes || (!writes && !asks))) {
+        return k;
+      }
     }
     for (final TaskKind k in <TaskKind>[
       TaskKind.code,

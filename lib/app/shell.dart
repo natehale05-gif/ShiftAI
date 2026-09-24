@@ -15,6 +15,7 @@ import '../state/app_state.dart';
 import '../theme/tokens.dart';
 import '../theme/type.dart';
 import '../util/system_bars.dart';
+import '../util/thread_search.dart';
 import '../widgets/alert.dart';
 import '../widgets/common.dart';
 import 'modes.dart';
@@ -390,17 +391,7 @@ class SidebarNav extends StatelessWidget {
                   // keep them. Tap to open one again; hold to delete it.
                   if (state.threads.isNotEmpty) ...<Widget>[
                     const _GroupLabel('Recents', spaced: true),
-                    for (final ChatThread t in state.threads.take(30))
-                      _NavRow(
-                        key: ValueKey<String>('recent-${t.id}'),
-                        icon: Icons.chat_bubble_outline_rounded,
-                        label: t.title,
-                        height: rowHeight,
-                        active: state.surface == Surface.suite &&
-                            state.currentThreadId == t.id,
-                        onTap: () => go(() => state.openThread(t.id)),
-                        onLongPress: () => _confirmDeleteChat(context, t),
-                      ),
+                    _Recents(rowHeight: rowHeight, go: go),
                   ],
                 ],
               ),
@@ -419,6 +410,98 @@ class SidebarNav extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// The saved chats, with a search once there are enough to lose one.
+///
+/// Only the newest 30 were ever listed, and nothing reached the rest: a
+/// chat from last month was saved and could not be opened. The search
+/// looks through every one, titles and what was said in them.
+class _Recents extends StatefulWidget {
+  const _Recents({required this.rowHeight, required this.go});
+
+  final double rowHeight;
+  final void Function(VoidCallback action) go;
+
+  /// More than this and the search appears.
+  static const int searchFrom = 6;
+
+  /// How many are listed at once.
+  static const int shown = 30;
+
+  @override
+  State<_Recents> createState() => _RecentsState();
+}
+
+class _RecentsState extends State<_Recents> {
+  String _query = '';
+
+  @override
+  Widget build(BuildContext context) {
+    final AppState state = AppScope.of(context);
+    final ShiftColors c = ShiftColors.of(context);
+    final List<ChatThread> all = state.threads;
+    final bool searching = _query.trim().isNotEmpty;
+    final List<ChatThread> found = threadMatches(all, _query);
+    final List<ChatThread> listed =
+        found.take(_Recents.shown).toList(growable: false);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        if (all.length >= _Recents.searchFrom || searching)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              Space.x2,
+              0,
+              Space.x2,
+              Space.x2,
+            ),
+            child: SearchField(
+              hint: 'Search chats',
+              onChanged: (String v) => setState(() => _query = v),
+            ),
+          ),
+        for (final ChatThread t in listed)
+          _NavRow(
+            key: ValueKey<String>('recent-${t.id}'),
+            icon: Icons.chat_bubble_outline_rounded,
+            label: t.title,
+            height: widget.rowHeight,
+            active:
+                state.surface == Surface.suite && state.currentThreadId == t.id,
+            onTap: () => widget.go(() => state.openThread(t.id)),
+            onLongPress: () => _confirmDeleteChat(context, t),
+          ),
+        if (searching && found.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: Space.x3,
+              vertical: Space.x2,
+            ),
+            child: Text(
+              'No chat mentions “${_query.trim()}”.',
+              style: ShiftType.caption(c.textMuted),
+            ),
+          ),
+        if (found.length > listed.length)
+          Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: Space.x3,
+              vertical: Space.x2,
+            ),
+            child: Text(
+              searching
+                  ? '${found.length - listed.length} more match. '
+                      'Add a word to narrow it.'
+                  : '${found.length - listed.length} older chats. '
+                      'Search to find one.',
+              style: ShiftType.caption(c.textMuted),
+            ),
+          ),
+      ],
     );
   }
 }

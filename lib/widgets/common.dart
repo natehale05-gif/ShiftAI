@@ -740,6 +740,7 @@ class PillComposer extends StatefulWidget {
   const PillComposer({
     required this.hint,
     this.onSend,
+    this.onSendFiles,
     this.onStop,
     this.showSparkle = false,
     this.showAvatarPicker = false,
@@ -754,6 +755,12 @@ class PillComposer extends StatefulWidget {
   /// pressing enter and watching it vanish with nothing to show for it is
   /// the same dead end as being refused, in a worse place.
   final bool Function(String)? onSend;
+
+  /// Where a composer that can send files sends them: the text and the
+  /// files themselves, so they can be uploaded. Without it, attachments
+  /// travel as their names in the text, which is all a screen with no
+  /// upload can do with them.
+  final bool Function(String text, List<PickedFile> files)? onSendFiles;
 
   /// Set while an answer is on its way: the send button becomes Stop,
   /// which gives up on it. Enter still sends, and a new message replaces
@@ -821,6 +828,8 @@ class _PillComposerState extends State<PillComposer> {
     if (_controller.text.trim().isNotEmpty) Haptics.light();
     final String text = _controller.text.trim();
     if (text.isEmpty && _attachments.isEmpty) return;
+    final bool Function(String, List<PickedFile>)? withFiles =
+        widget.onSendFiles;
     final String carried = _attachments.isEmpty
         ? text
         : <String>[
@@ -828,7 +837,9 @@ class _PillComposerState extends State<PillComposer> {
             '[${_attachments.length} attached: '
                 '${_attachments.map((PickedFile f) => f.name).join(', ')}]',
           ].join('\n');
-    final bool sent = widget.onSend?.call(carried) ?? true;
+    final bool sent = withFiles != null
+        ? withFiles(text, List<PickedFile>.of(_attachments))
+        : widget.onSend?.call(carried) ?? true;
     if (!sent) {
       _focus.requestFocus();
       return;
