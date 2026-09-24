@@ -143,6 +143,12 @@ AI-generated face shipped in `assets/avatars/`), is who the Suite
 generates as until someone picks their own; no `avatarId` means her. She
 is never anyone's profile picture or leaderboard face.
 
+Chats are saved as they happen (`AppState.threads`, Recents in the
+drawer): on the device, in the account-keyed blob, and on the server via
+`/v1/threads` when it has it (404 means device only). A private chat is
+saved nowhere, and going private or back starts a fresh chat so a private
+part can never land in a saved one.
+
 `DELETE /v1/me` is store-blocking — Apple rejects account creation
 without in-app deletion (Guideline 5.1.1(v)). The button and the
 confirmation exist; they need something to call.
@@ -164,6 +170,6 @@ exploratory, branch.
 flutter analyze && flutter test
 ```
 
-295 tests. They have caught every regression listed above at least once,
+306 tests. They have caught every regression listed above at least once,
 including several of mine. If one fails, read it before changing it —
 twice now the test was right and my expectation was wrong.
