@@ -47,6 +47,7 @@ class _Engine extends SeedRepository {
     String? avatarId,
     String? model,
     List<ChatTurn> history = const <ChatTurn>[],
+    Future<void>? cancel,
   }) async {
     sent.add((prompt: prompt, history: history));
     return <ChatMessage>[

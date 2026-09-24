@@ -23,6 +23,10 @@ THREADS = {}
 # How long the stand-in "render" takes. Long enough to watch the gallery
 # poll, short enough to wait for: MOCK_TRAIN_SECONDS=5 for a quicker look.
 TRAIN_SECONDS = float(os.environ.get("MOCK_TRAIN_SECONDS", "20"))
+# A message with "slow" in it waits this long before its answer, like a
+# model writing a long one or making a picture: long enough to see "Still
+# working" and try Stop. MOCK_SLOW_SECONDS=5 for a quicker look.
+SLOW_SECONDS = float(os.environ.get("MOCK_SLOW_SECONDS", "30"))
 BASE = "http://127.0.0.1:8111"
 
 
@@ -261,7 +265,13 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/v1/messages":
             length = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(length) or b"{}")
-            return self._send(200, answer(body))
+            if "slow" in str(body.get("prompt", "")).lower():
+                time.sleep(SLOW_SECONDS)
+            try:
+                return self._send(200, answer(body))
+            except (BrokenPipeError, ConnectionResetError):
+                # Stop in the app: the caller cancelled and went away.
+                print("messages: the caller stopped waiting", flush=True)
         if path == "/v1/polish":
             length = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(length) or b"{}")

@@ -30,6 +30,9 @@ class HttpRepository implements ShiftRepository {
   static const String _connections = '/v1/connections';
   static const String _week = '/v1/week';
   static const String _messages = '/v1/messages';
+
+  /// How long an answer may take before the app gives up on it.
+  static const Duration replyWait = Duration(minutes: 3);
   static const String _polish = '/v1/polish';
   static const String _uploads = '/v1/uploads';
   static const String _avatars = '/v1/avatars';
@@ -166,9 +169,17 @@ class HttpRepository implements ShiftRepository {
     String? avatarId,
     String? model,
     List<ChatTurn> history = const <ChatTurn>[],
+    Future<void>? cancel,
   }) async {
     final dynamic body = await _api.post(
       _messages,
+      // A model writing a long answer, with the whole conversation to
+      // read, or making a picture, often takes more than the 20 s every
+      // other call gets. At 20 s the app said the server had not answered
+      // while the server went on and charged for the answer. Stop is how
+      // a person gives up sooner.
+      wait: replyWait,
+      abort: cancel,
       // `private` tells the server not to retain the exchange. The client
       // already keeps it out of its own storage. The whole conversation
       // goes with every message, so the server never has to keep a thread

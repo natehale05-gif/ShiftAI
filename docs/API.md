@@ -433,6 +433,17 @@ Answer with one or more messages, in the order they should appear:
 optional — a message can be prose, bullets, an attachment card, a failure
 notice, a question with answers to tap, or any combination.
 
+**How long it may take.** This route gets 3 minutes; every other route
+gets 20 s. After 20 s the thread says it is still working and the send
+button becomes Stop. Stop closes the connection, so a server that stops
+the model call when its caller goes away saves the credits. An answer
+that needs longer than 3 minutes should come back at once as "working on
+it" and land in the vault when it is done.
+
+**Retry and Edit** re-send an earlier question in place: the history
+then ends before that question, and the reply being replaced (or, for
+an edit, everything after the question) is not in it.
+
 ### Questions with answers to tap
 
 When a model needs to ask before it goes on, the app draws its answers
@@ -719,7 +730,7 @@ Any non-2xx is turned into one exception with a `kind` the UI can act on:
 | Status | kind | Retryable |
 |---|---|---|
 | — (no route to host) | `offline` | yes |
-| — (timed out, 20s) | `timeout` | yes |
+| — (timed out: 20 s, or 3 min for `/v1/messages`) | `timeout` | yes |
 | 401 | `unauthorised` | no |
 | 403 | `forbidden` | no |
 | 404 | `notFound` | no |

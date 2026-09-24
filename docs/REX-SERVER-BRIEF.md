@@ -136,10 +136,14 @@ then answer with an attachment that points at that row:
   `mediaType: "audio"` on the vault row.
 - The row must already be in `GET /v1/vault` by the time you answer.
   Tapping the card opens that vault item.
-- A long render may not fit the client's 20 s timeout. Either answer
-  at once with a "working on it" message and put the row in the vault
-  when it finishes, or keep the request under 20 s. Do not hold the
-  connection open for a minute.
+- The app waits up to **3 minutes** for `/v1/messages` (every other
+  route gets 20 s). After 20 s it tells the person it is still working
+  and offers Stop. A render that takes longer than 3 minutes should
+  answer at once with a "working on it" message and put the row in the
+  vault when it finishes.
+- **Stop cancels the request**: the app closes the connection. When the
+  caller goes away, stop the model call and do not charge for it, if the
+  provider allows that.
 
 **`private: true`** means do not retain the exchange anywhere: no logs of
 the content, and nothing in `/v1/threads`.

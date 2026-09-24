@@ -104,12 +104,16 @@ abstract interface class ShiftRepository {
   /// [model] names which AI answers; null lets the server pick. [history]
   /// is the whole conversation before [prompt], so the model that answers
   /// reads everything said so far, including other models' replies.
+  ///
+  /// Completing [cancel] stops the request (Stop in the composer); the
+  /// call then throws, and the caller has already moved on.
   Future<List<ChatMessage>> send(
     String prompt, {
     bool private = false,
     String? avatarId,
     String? model,
     List<ChatTurn> history = const <ChatTurn>[],
+    Future<void>? cancel,
   });
 
   /// Rewrite a rough ask into a fuller brief. Returning the text unchanged

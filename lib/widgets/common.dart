@@ -730,6 +730,7 @@ class PillComposer extends StatefulWidget {
   const PillComposer({
     required this.hint,
     this.onSend,
+    this.onStop,
     this.showSparkle = false,
     this.showAvatarPicker = false,
     this.width = 950,
@@ -743,6 +744,11 @@ class PillComposer extends StatefulWidget {
   /// pressing enter and watching it vanish with nothing to show for it is
   /// the same dead end as being refused, in a worse place.
   final bool Function(String)? onSend;
+
+  /// Set while an answer is on its way: the send button becomes Stop,
+  /// which gives up on it. Enter still sends, and a new message replaces
+  /// the one being waited for.
+  final VoidCallback? onStop;
 
   /// Suite's composer carries the make-something mark; the others do not.
   final bool showSparkle;
@@ -1104,10 +1110,17 @@ class _PillComposerState extends State<PillComposer> {
                             width: _controlSize,
                             height: _controlSize,
                             child: IconButton(
-                              tooltip: 'Send',
-                              onPressed: _send,
-                              icon: const Icon(
-                                Icons.arrow_upward_rounded,
+                              tooltip: widget.onStop == null ? 'Send' : 'Stop',
+                              onPressed: widget.onStop == null
+                                  ? _send
+                                  : () {
+                                      Haptics.light();
+                                      widget.onStop!();
+                                    },
+                              icon: Icon(
+                                widget.onStop == null
+                                    ? Icons.arrow_upward_rounded
+                                    : Icons.stop_rounded,
                                 size: 20,
                               ),
                               style: IconButton.styleFrom(

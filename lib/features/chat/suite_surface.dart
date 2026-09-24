@@ -8,6 +8,7 @@ import '../../theme/tokens.dart';
 import '../../theme/type.dart';
 import '../../util/choices.dart';
 import '../../util/haptics.dart';
+import '../../util/model_router.dart';
 import '../../widgets/common.dart';
 import 'failure_card.dart';
 import '../../widgets/alert.dart';
@@ -46,7 +47,9 @@ class _SuiteSurfaceState extends State<SuiteSurface> {
   Widget build(BuildContext context) {
     final AppState state = AppScope.of(context);
     final bool empty = state.messages.isEmpty;
-    final int count = state.messages.length + (state.thinking ? 1 : 0);
+    final bool askAgain = _AskAgain.shows(state);
+    final int count =
+        state.messages.length + (state.thinking || askAgain ? 1 : 0);
 
     if (count != _lastCount) {
       _lastCount = count;
@@ -72,14 +75,15 @@ class _SuiteSurfaceState extends State<SuiteSurface> {
                     separatorBuilder: (_, __) =>
                         const SizedBox(height: Space.x5),
                     itemBuilder: (BuildContext context, int index) {
-                      final bool isPending =
-                          state.thinking && index == count - 1;
+                      final bool last = index == state.messages.length;
                       return Center(
                         child: ConstrainedBox(
                           constraints: const BoxConstraints(maxWidth: 820),
-                          child: isPending
-                              ? const _Thinking()
-                              : _MessageTile(message: state.messages[index]),
+                          child: !last
+                              ? _MessageTile(message: state.messages[index])
+                              : state.thinking
+                                  ? const _Thinking()
+                                  : const _AskAgain(),
                         ),
                       );
                     },
@@ -102,6 +106,7 @@ class _SuiteSurfaceState extends State<SuiteSurface> {
           showSparkle: true,
           showAvatarPicker: true,
           onSend: state.sendMessage,
+          onStop: state.thinking ? state.stopReply : null,
         ),
       ],
     );
@@ -206,26 +211,93 @@ class _ThinkingState extends State<_Thinking>
   @override
   Widget build(BuildContext context) {
     final ShiftColors c = ShiftColors.of(context);
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          FadeTransition(
-            opacity: Tween<double>(begin: 0.35, end: 1).animate(_pulse),
-            child: Container(
-              width: 6,
-              height: 6,
-              decoration: BoxDecoration(
-                color: c.accent,
-                borderRadius: Radii.pillAll,
-              ),
+    final bool slow = AppScope.of(context).slowReply;
+    final Widget line = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        FadeTransition(
+          opacity: Tween<double>(begin: 0.35, end: 1).animate(_pulse),
+          child: Container(
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(
+              color: c.accent,
+              borderRadius: Radii.pillAll,
             ),
           ),
+        ),
+        const SizedBox(width: Space.x2),
+        Eyebrow(slow ? 'Still working' : 'Working'),
+      ],
+    );
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: !slow
+          ? line
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                line,
+                const SizedBox(height: Space.x2),
+                // A long answer, or a picture being made, can take a
+                // minute. Before, the app gave up at 20 s and said the
+                // server had not answered while it went on working.
+                Text(
+                  'Long answers and made files can take a minute. '
+                  'Stop gives up on this one.',
+                  style: ShiftType.bodySm(c.textMuted),
+                ),
+              ],
+            ),
+    );
+  }
+}
+
+/// Under a question that got no answer: one that was stopped, or one that
+/// ended in a failure notice. Ask again sends the same question in place;
+/// Edit changes it first.
+class _AskAgain extends StatelessWidget {
+  const _AskAgain();
+
+  static bool shows(AppState state) {
+    if (state.thinking || state.chatNeedsSignIn) return false;
+    if (state.stopped) return true;
+    final ChatMessage? last = state.messages.lastOrNull;
+    // An engine's own failure notice ("did not answer"), not the "no
+    // image model" one: asking that again changes nothing.
+    return last != null &&
+        last.failure != null &&
+        last.failure!.offersAccount &&
+        state.messages.any((ChatMessage m) => m.author == MessageAuthor.you);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final AppState state = AppScope.of(context);
+    final ShiftColors c = ShiftColors.of(context);
+    final ChatMessage? question = state.messages
+        .where((ChatMessage m) => m.author == MessageAuthor.you)
+        .lastOrNull;
+    return Row(
+      children: <Widget>[
+        if (state.stopped) ...<Widget>[
+          Text('Stopped.', style: ShiftType.bodySm(c.textMuted)),
           const SizedBox(width: Space.x2),
-          const Eyebrow('Working'),
         ],
-      ),
+        _MessageAction(
+          icon: Icons.refresh_rounded,
+          label: 'Ask again',
+          color: c.textMuted,
+          onPressed: () => state.regenerate(),
+        ),
+        if (question != null)
+          _MessageAction(
+            icon: Icons.edit_outlined,
+            label: 'Edit',
+            color: c.textMuted,
+            onPressed: () => _editQuestion(context, state, question),
+          ),
+      ],
     );
   }
 }
@@ -752,41 +824,153 @@ class _MessageActions extends StatelessWidget {
           icon: Icons.refresh_rounded,
           label: 'Retry',
           color: c.textMuted,
-          onPressed: () {
-            final String? asked = state.lastAsk;
-            if (asked == null) {
-              toast('Nothing to retry yet.');
-              return;
-            }
-            state.sendMessage(asked);
-          },
+          onPressed: () => _retry(context, state, message),
         ),
-        _MessageAction(
-          icon: Icons.edit_outlined,
-          label: 'Edit',
-          color: c.textMuted,
-          onPressed: () => _editLastAsk(context, state),
-        ),
+        if (_questionOf(state, message) case final ChatMessage question)
+          _MessageAction(
+            icon: Icons.edit_outlined,
+            label: 'Edit',
+            color: c.textMuted,
+            onPressed: () => _editQuestion(context, state, question),
+          ),
       ],
     );
   }
 }
 
-/// Edit reopens what you asked for, so you can change it and send again
-/// instead of retyping the whole thing.
-Future<void> _editLastAsk(BuildContext context, AppState state) async {
-  final String? asked = state.lastAsk;
-  if (asked == null) {
+/// The question [reply] answers: the newest of yours before it.
+ChatMessage? _questionOf(AppState state, ChatMessage reply) {
+  final int at = state.messages.indexOf(reply);
+  if (at < 0) return null;
+  return state.messages
+      .take(at)
+      .where((ChatMessage m) => m.author == MessageAuthor.you)
+      .lastOrNull;
+}
+
+/// Retry asks this reply's question again and puts the new answer in its
+/// place. It used to send the last thing you asked as a new message at
+/// the bottom, whichever reply it was under, so the thread read the
+/// question twice and the model was sent the old answer as well.
+///
+/// With several AIs connected it asks which one tries again.
+Future<void> _retry(
+  BuildContext context,
+  AppState state,
+  ChatMessage reply,
+) async {
+  final ChatMessage? question = _questionOf(state, reply);
+  if (question == null) {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Nothing to edit yet.')),
+      const SnackBar(content: Text('Nothing to retry yet.')),
     );
     return;
   }
+  // Only the ones that could answer it: a video model is no choice for
+  // "name the ferry", nor a chat model for "an image of Miami".
+  final TaskKind? kind = ModelRouter.kindOf(question.body);
+  final bool made = kind != null && ModelRouter.made.contains(kind);
+  final List<ChatModel> able = state.chatModels
+      .where((ChatModel m) => made
+          ? m.bestFor.contains(kind)
+          : !m.bestFor.any(ModelRouter.made.contains))
+      .toList();
+  if (able.length < 2) {
+    state.regenerate(replyId: reply.id);
+    return;
+  }
+  final ChatModel? same =
+      able.where((ChatModel m) => m.id == reply.model).firstOrNull;
+  final ChatModel? using = await showModalBottomSheet<ChatModel>(
+    context: context,
+    builder: (BuildContext context) {
+      final ShiftColors c = ShiftColors.of(context);
+      final List<ChatModel> order = <ChatModel>[
+        if (same != null) same,
+        ...able.where((ChatModel m) => m != same),
+      ];
+      return SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(
+            Space.x5,
+            Space.x4,
+            Space.x5,
+            Space.x5,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              Semantics(
+                header: true,
+                child: Text(
+                  'Try again with',
+                  style: ShiftType.sectionTitle(c.text),
+                ),
+              ),
+              const SizedBox(height: Space.x4),
+              GroupedList(
+                children: <Widget>[
+                  for (final ChatModel m in order)
+                    InkWell(
+                      onTap: () {
+                        Haptics.selection();
+                        Navigator.of(context).pop(m);
+                      },
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(minHeight: 56),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: Space.x4,
+                          ),
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: <Widget>[
+                                Text(
+                                  m.name,
+                                  style: ShiftType.copy(
+                                    c.text,
+                                    size: 16,
+                                    weight: 600,
+                                  ),
+                                ),
+                                Text(
+                                  m == same ? 'The same one again' : m.provider,
+                                  style: ShiftType.caption(c.textMuted),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      );
+    },
+  );
+  if (using != null) state.regenerate(replyId: reply.id, using: using);
+}
 
+/// Edit reopens a question you asked, so you can change it and ask again
+/// from there instead of retyping the whole thing. What came after it
+/// goes: it answered the question as it was.
+Future<void> _editQuestion(
+  BuildContext context,
+  AppState state,
+  ChatMessage question,
+) async {
   final String? next = await showShiftAlert<String>(
     context,
     title: 'Edit and send again',
-    field: ShiftAlertField(initial: asked, minLines: 2, maxLines: 8),
+    message: 'Everything after this message is replaced by the new answer.',
+    field: ShiftAlertField(initial: question.body, minLines: 2, maxLines: 8),
     actions: <ShiftAlertAction<String>>[
       const ShiftAlertAction<String>('Cancel'),
       ShiftAlertAction<String>(
@@ -797,7 +981,9 @@ Future<void> _editLastAsk(BuildContext context, AppState state) async {
       ),
     ],
   );
-  if (next != null && next.trim().isNotEmpty) state.sendMessage(next.trim());
+  if (next != null && next.trim().isNotEmpty) {
+    state.editMessage(question.id, next.trim());
+  }
 }
 
 class _MessageAction extends StatelessWidget {

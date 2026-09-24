@@ -64,13 +64,34 @@ class ApiClient {
           .get(_uri(path, query), headers: await _headers(json: false))
           .timeout(timeout));
 
-  Future<dynamic> post(String path, {Object? body}) => _send(() async => _client
-      .post(
-        _uri(path),
-        headers: await _headers(),
-        body: body == null ? null : jsonEncode(body),
-      )
-      .timeout(timeout));
+  /// [wait] replaces [timeout] for one call that is expected to take
+  /// longer (a model writing a long answer, or making a file). Completing
+  /// [abort] cancels the request, and the call throws.
+  Future<dynamic> post(
+    String path, {
+    Object? body,
+    Duration? wait,
+    Future<void>? abort,
+  }) {
+    if (abort == null) {
+      return _send(() async => _client
+          .post(
+            _uri(path),
+            headers: await _headers(),
+            body: body == null ? null : jsonEncode(body),
+          )
+          .timeout(wait ?? timeout));
+    }
+    return _send(() async {
+      final http.AbortableRequest request =
+          http.AbortableRequest('POST', _uri(path), abortTrigger: abort)
+            ..headers.addAll(await _headers());
+      if (body != null) request.body = jsonEncode(body);
+      final http.StreamedResponse streamed =
+          await _client.send(request).timeout(wait ?? timeout);
+      return http.Response.fromStream(streamed);
+    });
+  }
 
   Future<dynamic> patch(String path, {Object? body}) =>
       _send(() async => _client
