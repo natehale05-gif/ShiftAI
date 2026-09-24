@@ -359,7 +359,8 @@ account, just on a smaller board.
 
 | Method | Path | Body | Returns |
 |---|---|---|---|
-| POST | `/v1/messages` | `{prompt, private, avatarId?}` | the answer, as messages |
+| GET | `/v1/models` | — | the AIs that can answer |
+| POST | `/v1/messages` | `{prompt, private, avatarId?, model?, history}` | the answer, as messages |
 | POST | `/v1/polish` | `{prompt}` | `{prompt}` |
 | PATCH | `/v1/me` | `{handle}` | the creator |
 | PATCH | `/v1/vault/{id}` | `{title}` | the item |
@@ -403,10 +404,93 @@ Answer with one or more messages, in the order they should appear:
 optional — a message can be prose, bullets, an attachment card, a failure
 notice, or any combination.
 
+### Several AIs in one conversation
+
+The Suite can be answered by any AI the server has connected, and one
+conversation can move between them. Each one has to read everything said
+so far, the others' replies included, and carry on from it **as though
+they were one model**.
+
+`GET /v1/models` lists who can answer, in the order the picker shows them:
+
+```json
+[{ "id": "claude-opus-5-5", "name": "Claude Opus 5.5",
+   "provider": "Anthropic", "default": true },
+ { "id": "gpt-x", "name": "…", "provider": "…" }]
+```
+
+Optional: without it (404 or an error) the app shows no picker and sends
+no `model`. With more than one, the composer shows "Answering: <name>";
+`Auto` sends no `model` and the server picks, usually the `default` one.
+
+`POST /v1/messages` gains two fields:
+
+```json
+{ "prompt": "Now make it shorter",
+  "model": "claude-opus-5-5",
+  "history": [
+    { "role": "user", "body": "Write a caption for the ferry clip" },
+    { "role": "assistant", "model": "gpt-x",
+      "body": "Morning light on the harbour, one crossing at a time." }
+  ] }
+```
+
+- **`model`**: which AI answers. Missing means the server's choice. An id
+  the server does not have is a `badRequest`, with a sentence.
+- **`history`**: the whole conversation before `prompt`, oldest first. The
+  app sends it with every message, so the server does not have to keep a
+  thread to make this work, and a private chat is never stored anywhere.
+
+What the server must do with `history`, which is the whole point:
+
+1. Give the chosen model **every** turn, in order, then `prompt` as the
+   newest user turn.
+2. Send each earlier reply as the **assistant's own** turn (role
+   `assistant` in whatever form that provider takes), **whichever model
+   wrote it**. Do not relabel another model's reply as a user message,
+   and do not write "another AI said" into the text. That is what makes a
+   model read the earlier answers as its own and carry on from them in
+   one voice. The turn's `model` is for your records only; leave it out
+   of what the model sees.
+3. Give every model the same system instructions for the Suite, so the
+   voice does not change when the model does.
+4. Reply-side lists and attachments are already folded into `body` as
+   text (`- item`, `[Attached: file.mp4]`), so a model sees them too.
+   Failure notices are the app's, not a reply, and are never sent.
+
+Every answer message says who wrote it:
+
+```json
+[{ "id": "m4", "author": "shift", "model": "claude-opus-5-5",
+   "modelName": "Claude Opus 5.5", "body": "Harbour light, one crossing." }]
+```
+
+The app labels the reply with `modelName`, and sends `model` back in the
+next `history`. `tool/mock_engine.py` implements all of this, with two
+stand-in models; its reply quotes the last answer it was given, so you
+can see a model reading another's reply.
+
 **`private: true` means do not retain the exchange.** The client already
 keeps private threads out of its own storage; honouring this server-side is
 the other half of that promise, and the claim is made to the person in the
 composer's hint text.
+
+### `POST /v1/polish`
+
+The composer's sparkle, "Polish my prompt". Body `{ "prompt": "make a
+poster" }`; answer `{ "prompt": "<the fuller brief>" }`. The client puts
+the answer back in the bar with an Undo; it never sends it on its own.
+
+- **No polisher yet? Answer 404.** The client then writes the brief
+  itself (`lib/util/prompt.dart`), so the button still works. Do not
+  answer 200 with the prompt unchanged: that reads as "already a full
+  brief."
+- **A refusal is shown as one.** Out of credits, moderation, a provider
+  down: answer the usual error shape and the person sees the `message`,
+  with what they typed left alone.
+- Plain text only. If the Suite's polisher is `image/polish-prompt`,
+  this route can wrap it; the studio relay's shape is not one the client
+  reads.
 
 ### `PATCH /v1/me`
 

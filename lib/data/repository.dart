@@ -23,7 +23,12 @@ class ShiftSnapshot {
     required this.avatars,
     this.league,
     this.boards,
+    this.models = const <ChatModel>[],
   });
+
+  /// The AIs the server has connected, from `GET /v1/models`. Empty for an
+  /// engine that does not list them, and then it picks who answers.
+  final List<ChatModel> models;
 
   /// The Suite's weekly boards, when the engine serves `/v1/boards`. Null
   /// before it does, and in the seeded demo, which keeps its own board.
@@ -90,10 +95,16 @@ abstract interface class ShiftRepository {
   /// one or more messages, in order. [avatarId] names one of this
   /// creator's own avatars to generate as; omitted, the engine answers in
   /// whatever voice it answers in by default.
+  ///
+  /// [model] names which AI answers; null lets the server pick. [history]
+  /// is the whole conversation before [prompt], so the model that answers
+  /// reads everything said so far, including other models' replies.
   Future<List<ChatMessage>> send(
     String prompt, {
     bool private = false,
     String? avatarId,
+    String? model,
+    List<ChatTurn> history = const <ChatTurn>[],
   });
 
   /// Rewrite a rough ask into a fuller brief. Returning the text unchanged

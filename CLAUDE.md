@@ -101,7 +101,10 @@ from this repo's `main` within about five minutes of a push. Only the
 three of the team can sign in with real accounts, so it spends real
 credits. `docs/API.md` is the contract: every route, shape, error
 semantic, the four auth routes, and (since 23 Sept 2026) the vault's
-media fields and the Suite's boards at `/v1/boards`.
+media fields, the Suite's boards at `/v1/boards`, and several AIs in one
+conversation (`/v1/models`, and `model` + `history` on `/v1/messages`).
+Every earlier reply goes back as the assistant's own turn, whichever
+model wrote it; that is what lets them read each other as one model.
 
 Not wired yet: `ANY /v1/studio/<path>`, which relays to the Suite's own
 `/api/studio/<path>` (chat, image, video, voice, music, deck and the
@@ -136,6 +139,6 @@ exploratory, branch.
 flutter analyze && flutter test
 ```
 
-215 tests. They have caught every regression listed above at least once,
+231 tests. They have caught every regression listed above at least once,
 including several of mine. If one fails, read it before changing it —
 twice now the test was right and my expectation was wrong.

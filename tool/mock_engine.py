@@ -29,6 +29,44 @@ def league_placement():
         ],
     }
 
+# Two stand-in AIs, so the app's picker and its per-reply labels have
+# something to show. A real engine lists whichever it has connected.
+MODELS = [
+    {"id": "mock-a", "name": "Mock A", "provider": "Mock", "default": True},
+    {"id": "mock-b", "name": "Mock B", "provider": "Mock"},
+]
+
+
+def answer(body):
+    """A reply that proves the model read the whole conversation.
+
+    It says which model is answering, how many earlier turns it was given,
+    and quotes the last reply, whichever model wrote it. That is the
+    contract in docs/API.md: every earlier reply arrives as the assistant's
+    own turn, so a model picking up another model's conversation carries
+    on from it as one model would.
+    """
+    names = {m["id"]: m["name"] for m in MODELS}
+    model = body.get("model") or MODELS[0]["id"]
+    history = body.get("history") or []
+    replies = [t for t in history if t.get("role") == "assistant"]
+    text = (f"I can read all {len(history)} earlier turns of this "
+            f"conversation.")
+    if replies:
+        last = replies[-1]
+        wrote = names.get(last.get("model"), "an earlier answer")
+        quoted = (last.get("body") or "")[:80]
+        text += f" Carrying on from the last reply ({wrote}): \"{quoted}\""
+    text += f" You asked: \"{body.get('prompt', '')}\""
+    return [{
+        "id": f"m{len(history) + 1}",
+        "author": "shift",
+        "model": model,
+        "modelName": names.get(model, model),
+        "body": text,
+    }]
+
+
 EMPTY = {
     "/v1/me": USER,
     "/v1/standings": [],
@@ -41,6 +79,7 @@ EMPTY = {
     "/v1/designs": [],
     "/v1/connections": [],
     "/v1/week": {"pool": 0, "payoutLine": "Nothing paid out yet."},
+    "/v1/models": MODELS,
     # The Suite's weekly boards (Rex's server notes, 23 Sept 2026). A new
     # member is on none of them yet, so every board is an empty list.
     "/v1/boards": {"data": {
@@ -83,6 +122,22 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = self.path.split("?")[0]
+        if path == "/v1/messages":
+            length = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(length) or b"{}")
+            return self._send(200, answer(body))
+        if path == "/v1/polish":
+            length = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(length) or b"{}")
+            ask = str(body.get("prompt", "")).strip()
+            if not ask:
+                return self._send(400, {"message": "Nothing to polish."})
+            # A stand-in rewrite, marked as the mock's so nobody mistakes
+            # it for a model's work. The shape is what matters: {prompt}.
+            return self._send(200, {
+                "prompt": f"{ask}\n\n(Polished by the mock engine.) "
+                          "Say who it is for, the tone, and what to deliver."
+            })
         if path.startswith("/v1/ecovault/") and path.endswith("/save"):
             return self._send(200, {"id": path.split("/")[3], "saved": True})
         if path == "/v1/auth/sign-in":

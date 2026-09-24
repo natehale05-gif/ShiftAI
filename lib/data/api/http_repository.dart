@@ -1,6 +1,7 @@
 import '../../models/models.dart';
 import 'dart:async';
 
+import '../../util/prompt.dart';
 import '../repository.dart';
 import '../seed_repository.dart';
 import 'api_client.dart';
@@ -34,6 +35,7 @@ class HttpRepository implements ShiftRepository {
   static const String _avatars = '/v1/avatars';
   static const String _league = '/v1/league';
   static const String _boards = '/v1/boards';
+  static const String _models = '/v1/models';
   static const String _location = '/v1/me/location';
 
   /// The Suite's boards, if this engine serves them. Optional: an engine
@@ -48,9 +50,22 @@ class HttpRepository implements ShiftRepository {
     }
   }
 
+  /// The AIs this engine has connected. Optional, like the boards: an
+  /// engine without the route answers with whichever model it chooses.
+  Future<List<ChatModel>> _chatModels() async {
+    try {
+      return Decode.rows(await _api.get(_models), 'models')
+          .map(ChatModel.fromJson)
+          .toList(growable: false);
+    } on ShiftApiException {
+      return const <ChatModel>[];
+    }
+  }
+
   @override
   Future<ShiftSnapshot> load() async {
     final Future<SuiteBoards?> boards = _suiteBoards();
+    final Future<List<ChatModel>> models = _chatModels();
     // One round trip each, in parallel. A backend that would rather answer
     // in one shot can add a /v1/snapshot and this becomes a single call.
     final List<dynamic> parts = await Future.wait(<Future<dynamic>>[
@@ -106,6 +121,7 @@ class HttpRepository implements ShiftRepository {
           ? League.fromJson(parts[12] as Map<String, dynamic>)
           : null,
       boards: await boards,
+      models: await models,
     );
   }
 
@@ -114,15 +130,21 @@ class HttpRepository implements ShiftRepository {
     String prompt, {
     bool private = false,
     String? avatarId,
+    String? model,
+    List<ChatTurn> history = const <ChatTurn>[],
   }) async {
     final dynamic body = await _api.post(
       _messages,
       // `private` tells the server not to retain the exchange. The client
-      // already keeps it out of its own storage.
+      // already keeps it out of its own storage. The whole conversation
+      // goes with every message, so the server never has to keep a thread
+      // for the model to read it.
       body: <String, dynamic>{
         'prompt': prompt,
         'private': private,
         if (avatarId != null) 'avatarId': avatarId,
+        if (model != null) 'model': model,
+        'history': history.map((ChatTurn t) => t.toJson()).toList(),
       },
     );
     return Decode.rows(body, 'messages')
@@ -132,14 +154,28 @@ class HttpRepository implements ShiftRepository {
 
   @override
   Future<String> polish(String prompt) async {
-    final dynamic body =
-        await _api.post(_polish, body: <String, dynamic>{'prompt': prompt});
-    if (body is Map<String, dynamic> && body['prompt'] is String) {
-      return body['prompt'] as String;
+    final dynamic body;
+    try {
+      body =
+          await _api.post(_polish, body: <String, dynamic>{'prompt': prompt});
+    } on ShiftApiException catch (error) {
+      // An engine with no polisher answers 404 (or 405, the route exists
+      // for something else). That is not the person's problem: the brief
+      // is written here instead, the same one the seeded app writes, so
+      // the sparkle always does something. Anything else, from offline
+      // to out of credits, is a real refusal and goes back to the bar.
+      if (error.status == 404 || error.status == 405) {
+        return Prompt.polish(prompt);
+      }
+      rethrow;
     }
-    // A backend without a polisher is not an error; it just has nothing to
-    // add, and the bar keeps what the person typed.
-    return prompt;
+    final Object? polished = body is Map<String, dynamic>
+        ? (body['prompt'] ?? body['polished'] ?? body['text'])
+        : null;
+    if (polished is String && polished.trim().isNotEmpty) return polished;
+    // It answered, but with nothing usable. Blanking the bar would lose
+    // what the person typed; the local brief keeps the button honest.
+    return Prompt.polish(prompt);
   }
 
   @override

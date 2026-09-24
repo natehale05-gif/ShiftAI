@@ -44,6 +44,7 @@ class AppState extends ChangeNotifier {
     // already picked a theme has a stored theme and keeps exactly what it
     // chose until it turns this on.
     followSystem = blob['themeAuto'] as bool? ?? blob['theme'] == null;
+    _chatModelId = blob['chatModel'] as String?;
     // Stored as the disabled set rather than the enabled one, so a feature
     // added by a later version is on by default instead of silently
     // missing for everyone who already has a blob.
@@ -406,6 +407,51 @@ class AppState extends ChangeNotifier {
   /// The Suite's boards, when the engine serves them; null otherwise, and
   /// then the Global tab is `/v1/standings`.
   SuiteBoards? get boards => _snap.boards;
+
+  /// The AIs the server has connected, in the order it lists them.
+  List<ChatModel> get chatModels => _snap.models;
+
+  String? _chatModelId;
+
+  /// Who answers the next message: the one picked, if the server still has
+  /// it, or null for the server's own choice.
+  ChatModel? get chatModel {
+    for (final ChatModel m in chatModels) {
+      if (m.id == _chatModelId) return m;
+    }
+    return null;
+  }
+
+  /// Picks which AI answers from now on; null hands it back to the server.
+  /// The conversation is unchanged: the next model reads all of it.
+  void setChatModel(String? id) {
+    if (_chatModelId == id) return;
+    _chatModelId = id;
+    _changed();
+  }
+
+  /// The conversation so far, as the next model should read it.
+  ///
+  /// Every reply is an `assistant` turn whichever model wrote it, so a model
+  /// picking up a conversation another one started reads the earlier
+  /// answers as its own and carries on from them, as one model would. A
+  /// reply's list is folded into its text, since the model has no other
+  /// way to see it. Failure notices are the app's, not anybody's answer,
+  /// and stay out.
+  List<ChatTurn> get chatHistory => <ChatTurn>[
+        for (final ChatMessage m in messages)
+          if (m.failure == null)
+            ChatTurn(
+              role: m.author == MessageAuthor.you ? 'user' : 'assistant',
+              body: <String>[
+                if (m.body.isNotEmpty) m.body,
+                ...m.bullets.map((String b) => '- $b'),
+                if (m.attachment != null)
+                  '[Attached: ${m.attachment!.fileName}]',
+              ].join('\n'),
+              model: m.model,
+            ),
+      ];
 
   /// The connector catalogue the engine knows about.
   List<Connector> get connectors => _snap.connectors;
@@ -950,6 +996,7 @@ class AppState extends ChangeNotifier {
         avatars: _snap.avatars,
         league: _snap.league,
         boards: _snap.boards,
+        models: _snap.models,
       );
     }
   }
@@ -1078,6 +1125,10 @@ class AppState extends ChangeNotifier {
     if (body.isEmpty) return false;
     lastAsk = body;
     final String stamp = DateTime.now().microsecondsSinceEpoch.toString();
+    // Taken before the new message is added: the history is what came
+    // before this prompt, and the prompt travels on its own.
+    final List<ChatTurn> history = chatHistory;
+    final String? model = chatModel?.id;
     messages = <ChatMessage>[
       ...messages,
       ChatMessage(id: 'you-$stamp', author: MessageAuthor.you, body: body),
@@ -1095,6 +1146,8 @@ class AppState extends ChangeNotifier {
           body,
           private: privateChat,
           avatarId: activeAvatarId,
+          model: model,
+          history: history,
         );
         messages = <ChatMessage>[...messages, ...answer];
         lastError = null;
@@ -1130,14 +1183,19 @@ class AppState extends ChangeNotifier {
   }
 
   /// Rewrites what is in the composer into a fuller brief.
-  Future<String> polishPrompt(String text) async {
+  ///
+  /// `error` is set, and `text` is what was passed in, when the engine
+  /// refused. This leaves [lastError] alone on purpose: that field is what
+  /// the board and the shelf read to say they did not load, so a polish
+  /// that failed must not blank them, and one that worked must not hide
+  /// a load that did not.
+  Future<({String text, ShiftApiException? error})> polishPrompt(
+    String text,
+  ) async {
     try {
-      final String out = await _repo.polish(text);
-      lastError = null;
-      return out;
+      return (text: await _repo.polish(text), error: null);
     } on ShiftApiException catch (error) {
-      lastError = error;
-      return text;
+      return (text: text, error: error);
     }
   }
 
@@ -1187,6 +1245,7 @@ class AppState extends ChangeNotifier {
       'v': _blobVersion,
       'theme': themeId.name,
       'themeAuto': followSystem,
+      if (_chatModelId != null) 'chatModel': _chatModelId,
       'disabledFeatures':
           _disabled.map((ShiftFeature f) => f.name).toList(growable: false),
       'surface': surface.name,
