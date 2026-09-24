@@ -5,6 +5,7 @@ import '../../theme/tokens.dart';
 import '../../theme/type.dart';
 import '../../widgets/common.dart';
 import '../../widgets/alert.dart';
+import '../../widgets/spinner.dart';
 
 /// The gate. One card, email and password, and a plain line about what the
 /// membership already covers.
@@ -122,11 +123,7 @@ class _SignInScreenState extends State<SignInScreen> {
                           minimumSize: const Size.fromHeight(48),
                         ),
                         child: state.signingIn
-                            ? const SizedBox.square(
-                                dimension: 18,
-                                child:
-                                    CircularProgressIndicator(strokeWidth: 2),
-                              )
+                            ? ShiftSpinner(color: c.onAccent)
                             : const Text('Sign in'),
                       ),
                       // What the engine said, verbatim. A wrong password

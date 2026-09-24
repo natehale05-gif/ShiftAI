@@ -17,6 +17,7 @@ import 'avatar.dart';
 import 'connectors.dart';
 import '../../util/haptics.dart';
 import '../../widgets/alert.dart';
+import '../../widgets/spinner.dart';
 
 /// The avatar maker and the account first, then appearance, sections and
 /// connections — who you are before how the app looks and behaves.
@@ -765,7 +766,7 @@ class _AvatarFace extends StatelessWidget {
         Icon(
           Icons.person_rounded,
           size: _size * 0.62,
-          color: Colors.white.withValues(alpha: 0.85),
+          color: MediaInk.onMedia.withValues(alpha: 0.85),
         ),
       ],
     );
@@ -1063,13 +1064,7 @@ class _CreateAvatarFlowState extends State<_CreateAvatarFlow> {
                   border: Border.all(color: c.border),
                 ),
                 child: _picking
-                    ? SizedBox.square(
-                        dimension: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(c.accent),
-                        ),
-                      )
+                    ? ShiftSpinner(color: c.textMuted, size: 18)
                     : bytes == null
                         ? Icon(Icons.person_outline_rounded, color: c.textMuted)
                         : Image.memory(bytes,
@@ -1105,16 +1100,12 @@ class _CreateAvatarFlowState extends State<_CreateAvatarFlow> {
           const SizedBox(height: Space.x3),
           // Making a moving likeness of someone needs their say-so. The
           // Suite asks for it (its likeness-consent route); so does this.
-          CheckboxListTile(
+          ShiftCheckRow(
             key: const ValueKey<String>('avatar-consent'),
             value: _consented,
-            onChanged: _saving
-                ? null
-                : (bool? v) => setState(() => _consented = v ?? false),
-            contentPadding: EdgeInsets.zero,
-            controlAffinity: ListTileControlAffinity.leading,
-            dense: true,
-            title: Text(
+            onChanged:
+                _saving ? null : (bool v) => setState(() => _consented = v),
+            child: Text(
               'This photo is of me, and I agree to ShiftAi making an '
               'animated avatar of my likeness from it.',
               style: ShiftType.bodySm(c.text),
@@ -1135,15 +1126,8 @@ class _CreateAvatarFlowState extends State<_CreateAvatarFlow> {
                   onPressed:
                       bytes == null || !_consented || _saving ? null : _create,
                   child: _saving
-                      ? SizedBox.square(
-                          dimension: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                              ShiftColors.of(context).onAccent,
-                            ),
-                          ),
-                        )
+                      ? ShiftSpinner(
+                          color: ShiftColors.of(context).onAccent, size: 18)
                       : const Text('Create'),
                 ),
               ),
@@ -1189,14 +1173,7 @@ class _EngineCardState extends State<_EngineCard> {
             children: <Widget>[
               Expanded(
                   child: Eyebrow('Engine · ${live ? 'live' : 'built in'}')),
-              if (state.refreshing)
-                SizedBox.square(
-                  dimension: 16,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation<Color>(c.accent),
-                  ),
-                ),
+              if (state.refreshing) ShiftSpinner(color: c.textMuted, size: 16),
             ],
           ),
           const SizedBox(height: Space.x3),

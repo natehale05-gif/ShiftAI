@@ -9,6 +9,7 @@ import 'state/app_state.dart';
 import 'theme/tokens.dart';
 import 'theme/type.dart';
 import 'widgets/common.dart';
+import 'widgets/spinner.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -69,12 +70,12 @@ class _BootScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Deliberately not themed: the theme lives in the state being loaded.
-    // These are ShiftColors.retro, which is both the theme a new account
-    // opens on and the colour the page behind the app is painted, so the
-    // hand-off either side of this screen is invisible. They have to move
-    // together with that default.
-    const Color bg = Color(0xFF0A0A0F);
-    const Color muted = Color(0xFFBFBFBF);
+    // ShiftColors.retro, which is both the theme a new account opens on
+    // and the colour the page behind the app is painted, so the hand-off
+    // either side of this screen is invisible. Read from the tokens, so
+    // they move together with that default; these were copied hex.
+    final Color bg = ShiftColors.retro.bg;
+    final Color muted = ShiftColors.retro.textMuted;
 
     return MaterialApp(
       debugShowCheckedModeBanner: false,
@@ -85,13 +86,7 @@ class _BootScreen extends StatelessWidget {
               // A quiet spinner, not a line of tracked capitals: the fonts
               // may not have loaded yet, and the app is usually up before
               // anyone could read one.
-              ? const SizedBox.square(
-                  dimension: 22,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2.2,
-                    color: muted,
-                  ),
-                )
+              ? ShiftSpinner(color: muted, size: 22)
               : Padding(
                   padding: const EdgeInsets.all(Space.x6),
                   child: Text(

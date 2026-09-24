@@ -11,6 +11,7 @@ import '../theme/tokens.dart';
 import '../theme/type.dart';
 import '../util/file_pick.dart';
 import '../util/haptics.dart';
+import 'spinner.dart';
 
 /// The lockup's artwork, inked in whichever theme is showing.
 ///
@@ -258,7 +259,7 @@ class SegmentedPills<T> extends StatelessWidget {
                     borderRadius: BorderRadius.circular(Radii.md.x - 2),
                     boxShadow: <BoxShadow>[
                       BoxShadow(
-                        color: Colors.black.withValues(
+                        color: ShiftShadow.color.withValues(
                           alpha: c.isDarkGround ? 0.35 : 0.12,
                         ),
                         blurRadius: 4,
@@ -365,7 +366,7 @@ class MediaThumbnail extends StatelessWidget {
       foregroundDecoration: BoxDecoration(
         borderRadius: Radii.lgAll,
         border: Border.all(
-          color: selected ? c.accent : Colors.white.withValues(alpha: 0.06),
+          color: selected ? c.accent : MediaInk.onMedia.withValues(alpha: 0.06),
           width: selected ? 2.5 : 1,
         ),
       ),
@@ -389,19 +390,19 @@ class MediaThumbnail extends StatelessWidget {
                     vertical: 2,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.45),
+                    color: MediaInk.scrim.withValues(alpha: 0.45),
                     borderRadius: Radii.smAll,
                   ),
                   child: d == null
                       ? const Icon(
                           Icons.play_arrow_rounded,
                           size: 14,
-                          color: Colors.white,
+                          color: MediaInk.onMedia,
                         )
                       : Text(
                           _clock(d),
                           style: ShiftType.figures(
-                            Colors.white,
+                            MediaInk.onMedia,
                             size: 12,
                             weight: 600,
                           ),
@@ -471,7 +472,7 @@ class _KindMark extends StatelessWidget {
       width: 52,
       height: 52,
       decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.35),
+        color: MediaInk.scrim.withValues(alpha: 0.35),
         shape: BoxShape.circle,
       ),
       child: Icon(
@@ -479,7 +480,7 @@ class _KindMark extends StatelessWidget {
             ? Icons.graphic_eq_rounded
             : Icons.description_outlined,
         size: 26,
-        color: Colors.white,
+        color: MediaInk.onMedia,
       ),
     );
   }
@@ -521,12 +522,12 @@ class PlayDisc extends StatelessWidget {
       height: size,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: Colors.black.withValues(alpha: 0.35),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.55)),
+        color: MediaInk.scrim.withValues(alpha: 0.35),
+        border: Border.all(color: MediaInk.onMedia.withValues(alpha: 0.55)),
       ),
       child: Icon(
         Icons.play_arrow_rounded,
-        color: Colors.white,
+        color: MediaInk.onMedia,
         size: size * 0.6,
       ),
     );
@@ -562,7 +563,7 @@ class _PosterPainter extends CustomPainter {
     final Color lead = ShiftBrand.neonAt(t1);
     final Color glow = ShiftBrand.neonAt(t2);
     // A night ground tinted toward the lead, dark enough for white type.
-    final Color night = Color.lerp(Colors.black, lead, 0.14)!;
+    final Color night = Color.lerp(MediaInk.scrim, lead, 0.14)!;
 
     final double angle = rnd.nextDouble() * math.pi * 2;
     final double dx = math.cos(angle), dy = math.sin(angle);
@@ -1079,16 +1080,7 @@ class _PillComposerState extends State<PillComposer> {
                               tooltip: 'Polish my prompt',
                               onPressed: _polishing || empty ? null : _polish,
                               icon: _polishing
-                                  ? SizedBox.square(
-                                      dimension: 18,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        valueColor:
-                                            AlwaysStoppedAnimation<Color>(
-                                          c.accent,
-                                        ),
-                                      ),
-                                    )
+                                  ? ShiftSpinner(color: c.textMuted, size: 18)
                                   : Icon(
                                       Icons.auto_awesome_rounded,
                                       size: 20,
@@ -1686,6 +1678,70 @@ class _SearchFieldState extends State<SearchField> {
           else
             const SizedBox(width: Space.x3),
         ],
+      ),
+    );
+  }
+}
+
+/// A round check and its sentence, tappable as one row: the circle iOS
+/// uses for a tick (Reminders, Mail's selection), rather than Material's
+/// square box.
+class ShiftCheckRow extends StatelessWidget {
+  const ShiftCheckRow({
+    required this.value,
+    required this.onChanged,
+    required this.child,
+    super.key,
+  });
+
+  final bool value;
+
+  /// Null greys the row out.
+  final ValueChanged<bool>? onChanged;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final ShiftColors c = ShiftColors.of(context);
+    final bool enabled = onChanged != null;
+    return Semantics(
+      checked: value,
+      enabled: enabled,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: enabled
+            ? () {
+                Haptics.selection();
+                onChanged!(!value);
+              }
+            : null,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 44),
+          child: Row(
+            children: <Widget>[
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 120),
+                width: 24,
+                height: 24,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: value ? c.accent : c.bg.withValues(alpha: 0),
+                  border: Border.all(
+                    color: value ? c.accent : c.borderStrong,
+                    width: 1.5,
+                  ),
+                ),
+                child: value
+                    ? Icon(Icons.check_rounded, size: 16, color: c.onAccent)
+                    : null,
+              ),
+              const SizedBox(width: Space.x3),
+              Expanded(
+                child: Opacity(opacity: enabled ? 1 : 0.5, child: child),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

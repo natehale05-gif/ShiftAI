@@ -301,7 +301,8 @@ class _DesignPreview extends StatelessWidget {
           borderRadius: Radii.smAll,
           boxShadow: <BoxShadow>[
             BoxShadow(
-              color: Colors.black.withValues(alpha: c.isDarkGround ? 0.4 : 0.1),
+              color: ShiftShadow.color
+                  .withValues(alpha: c.isDarkGround ? 0.4 : 0.1),
               blurRadius: 10,
               offset: const Offset(0, 3),
             ),

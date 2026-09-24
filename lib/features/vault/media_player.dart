@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 
@@ -5,6 +6,7 @@ import '../../models/models.dart';
 import '../../theme/tokens.dart';
 import '../../theme/type.dart';
 import '../../widgets/common.dart';
+import '../../widgets/spinner.dart';
 
 /// The piece itself in the vault's detail: the full image, a playable
 /// video, or an audio player over the piece's art. A document, or anything
@@ -95,7 +97,7 @@ class _VideoViewState extends State<_VideoView> {
           MediaArt(seed: widget.item.id, thumbnailUrl: widget.item.thumbnailUrl)
         else
           ColoredBox(
-            color: Colors.black,
+            color: MediaInk.scrim,
             child: Center(
               child: AspectRatio(
                 aspectRatio: player.value.aspectRatio,
@@ -108,12 +110,12 @@ class _VideoViewState extends State<_VideoView> {
             child: Container(
               padding: const EdgeInsets.all(Space.x3),
               decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.6),
+                color: MediaInk.scrim.withValues(alpha: 0.6),
                 borderRadius: Radii.mdAll,
               ),
               child: Text(
                 'This clip would not play.',
-                style: ShiftType.copy(Colors.white, size: 14, weight: 500),
+                style: ShiftType.copy(MediaInk.onMedia, size: 14, weight: 500),
               ),
             ),
           )
@@ -129,14 +131,8 @@ class _VideoViewState extends State<_VideoView> {
             ),
           )
         else if (!ready)
-          Center(
-            child: SizedBox.square(
-              dimension: 28,
-              child: CircularProgressIndicator(
-                strokeWidth: 2.4,
-                color: Colors.white.withValues(alpha: 0.9),
-              ),
-            ),
+          const Center(
+            child: ShiftSpinner(color: MediaInk.onMedia, size: 28),
           )
         else ...<Widget>[
           Positioned.fill(
@@ -166,8 +162,8 @@ class _VideoViewState extends State<_VideoView> {
               padding: const EdgeInsets.only(top: 8),
               colors: VideoProgressColors(
                 playedColor: c.accent,
-                bufferedColor: Colors.white.withValues(alpha: 0.35),
-                backgroundColor: Colors.white.withValues(alpha: 0.15),
+                bufferedColor: MediaInk.onMedia.withValues(alpha: 0.35),
+                backgroundColor: MediaInk.onMedia.withValues(alpha: 0.15),
               ),
             ),
           ),
@@ -239,7 +235,7 @@ class _AudioViewState extends State<_AudioView> {
               Space.x1,
             ),
             decoration: BoxDecoration(
-              color: Colors.black.withValues(alpha: 0.5),
+              color: MediaInk.scrim.withValues(alpha: 0.5),
               borderRadius: Radii.pillAll,
             ),
             child: player == null || !player.value.isInitialized
@@ -251,15 +247,10 @@ class _AudioViewState extends State<_AudioView> {
                         icon: player == null || _failed
                             ? const Icon(
                                 Icons.play_arrow_rounded,
-                                color: Colors.white,
+                                color: MediaInk.onMedia,
                               )
-                            : const SizedBox.square(
-                                dimension: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
-                              ),
+                            : const ShiftSpinner(
+                                color: MediaInk.onMedia, size: 18),
                       ),
                       Expanded(
                         child: Text(
@@ -267,7 +258,7 @@ class _AudioViewState extends State<_AudioView> {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: ShiftType.copy(
-                            Colors.white,
+                            MediaInk.onMedia,
                             size: 14,
                             weight: 500,
                           ),
@@ -288,49 +279,41 @@ class _AudioViewState extends State<_AudioView> {
                               v.isPlaying
                                   ? Icons.pause_rounded
                                   : Icons.play_arrow_rounded,
-                              color: Colors.white,
+                              color: MediaInk.onMedia,
                             ),
                           ),
                           Text(
                             _clock(v.position),
                             style: ShiftType.figures(
-                              Colors.white,
+                              MediaInk.onMedia,
                               size: 12,
                               weight: 500,
                             ),
                           ),
                           Expanded(
-                            child: SliderTheme(
-                              data: SliderTheme.of(context).copyWith(
-                                trackHeight: 3,
-                                thumbShape: const RoundSliderThumbShape(
-                                  enabledThumbRadius: 6,
-                                ),
-                                activeTrackColor: c.accent,
-                                thumbColor: Colors.white,
-                                inactiveTrackColor:
-                                    Colors.white.withValues(alpha: 0.25),
-                              ),
-                              child: Slider(
-                                value: total == 0
-                                    ? 0
-                                    : (v.position.inMilliseconds / total)
-                                        .clamp(0, 1)
-                                        .toDouble(),
-                                onChanged: total == 0
-                                    ? null
-                                    : (double f) => player.seekTo(
-                                          Duration(
-                                            milliseconds: (f * total).round(),
-                                          ),
+                            child: // Apple's own scrubber, the one in every iOS player, rather than
+                                // a restyled Material slider.
+                                CupertinoSlider(
+                              activeColor: c.accent,
+                              thumbColor: MediaInk.onMedia,
+                              value: total == 0
+                                  ? 0
+                                  : (v.position.inMilliseconds / total)
+                                      .clamp(0, 1)
+                                      .toDouble(),
+                              onChanged: total == 0
+                                  ? null
+                                  : (double f) => player.seekTo(
+                                        Duration(
+                                          milliseconds: (f * total).round(),
                                         ),
-                              ),
+                                      ),
                             ),
                           ),
                           Text(
                             _clock(v.duration),
                             style: ShiftType.figures(
-                              Colors.white,
+                              MediaInk.onMedia,
                               size: 12,
                               weight: 500,
                             ),
