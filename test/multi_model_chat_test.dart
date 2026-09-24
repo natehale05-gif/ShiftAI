@@ -374,13 +374,23 @@ void main() {
       expect(state.answeringLabel, 'Best fit');
     });
 
-    test('with no models listed the server chooses', () async {
+    test(
+        'with no models listed the server chooses for words, and a made '
+        'thing is not sent at all', () async {
       final (AppState state, _Engine engine) = await _signedIn();
       engine.models = const <ChatModel>[];
       await state.refresh();
-      state.sendMessage('Make a video');
+      state.sendMessage('Write a caption for Miami');
       await _settle();
       expect(engine.sent.single.model, isNull);
+
+      // What the preview did: its chat model answered "generate an image
+      // of miami" with "I can't generate images".
+      state.sendMessage('generate an image of miami');
+      await _settle();
+      expect(engine.sent, hasLength(1), reason: 'not sent to anyone');
+      expect(state.messages.last.failure?.sentence,
+          'No image model is connected yet.');
     });
   });
 
@@ -449,9 +459,11 @@ void main() {
       expect(r.missing, TaskKind.image);
       expect(
           ModelRouter.route(_panel, 'a poster for Friday').model?.id, 'flux');
-      // With no list at all the server decides, as it always has.
+      // With no list at all the server decides words, never a made thing.
+      expect(ModelRouter.route(const <ChatModel>[], 'a poster').missing,
+          TaskKind.image);
       expect(
-          ModelRouter.route(const <ChatModel>[], 'a poster').missing, isNull);
+          ModelRouter.route(const <ChatModel>[], 'a caption').missing, isNull);
     });
   });
 

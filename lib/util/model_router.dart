@@ -210,10 +210,19 @@ abstract final class ModelRouter {
     ChatModel? picked,
     String? lastModelId,
   }) {
-    // No list at all: the server knows its own models and chooses.
-    if (models.isEmpty) return const ModelRoute(null);
     final TaskKind? kind = kindOf(prompt);
-    if (kind != null && made.contains(kind)) {
+    final bool madeThing = kind != null && made.contains(kind);
+    // No list at all: words go to the server, which picks who answers.
+    // A made thing does not. Left to choose, the preview answered
+    // "generate an image of Miami" with its chat model ("I can't generate
+    // images — I'm a text-based assistant"); an engine that has not said
+    // which of its models make images is treated as having none.
+    if (models.isEmpty) {
+      return madeThing
+          ? ModelRoute(null, missing: kind)
+          : const ModelRoute(null);
+    }
+    if (madeThing) {
       final List<ChatModel> able =
           models.where((ChatModel m) => m.bestFor.contains(kind)).toList();
       if (able.isEmpty) return ModelRoute(null, missing: kind);

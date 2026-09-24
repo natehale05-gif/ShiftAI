@@ -246,7 +246,7 @@ void main() {
       'something to the next model', () async {
     final (AppState state, _Engine engine) =
         await _signedIn(<ChatMessage>[_feel]);
-    state.sendMessage('make a video of Miami');
+    state.sendMessage('Plan a trip to Miami');
     await Future<void>.delayed(Duration.zero);
     state.sendMessage('the second one');
     await Future<void>.delayed(Duration.zero);
@@ -264,7 +264,7 @@ void main() {
     final (AppState state, _Engine engine) =
         await _signedIn(<ChatMessage>[_feel]);
     await _open(tester, state);
-    state.sendMessage('make a video of Miami');
+    state.sendMessage('Plan a trip to Miami');
     await tester.pumpAndSettle();
 
     expect(find.byType(ChoiceButtons), findsOneWidget);
@@ -287,7 +287,7 @@ void main() {
     final (AppState state, _Engine engine) =
         await _signedIn(<ChatMessage>[_where]);
     await _open(tester, state);
-    state.sendMessage('make a reel');
+    state.sendMessage('Plan the launch');
     await tester.pumpAndSettle();
 
     final Finder send = find.widgetWithText(FilledButton, 'Send');
@@ -301,7 +301,10 @@ void main() {
 
     await tester.tap(find.widgetWithText(FilledButton, 'Send 2'));
     await tester.pumpAndSettle();
+    // Sent, though "Reels" reads like a request for a video: a tapped
+    // answer goes back to the model that asked.
     expect(engine.sent.last.prompt, 'Reels and YouTube');
+    expect(state.messages.any((ChatMessage m) => m.failure != null), isFalse);
   });
 
   testWidgets('a question written out gets buttons, lines not shown twice',

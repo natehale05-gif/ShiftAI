@@ -414,7 +414,7 @@ class _MessageTile extends StatelessWidget {
           ChoiceButtons(
             key: ValueKey<String>('choices-${message.id}'),
             offer: offer,
-            onAnswer: state.sendMessage,
+            onAnswer: state.answerChoice,
           ),
         ],
         const SizedBox(height: Space.x2),
