@@ -143,8 +143,18 @@ abstract final class ModelRouter {
   ]);
 
   /// A piece of text, whatever it is for: "make me a caption for the
-  /// video" is writing, as is a script, lyrics or a title.
+  /// video" is writing, as is a script, lyrics or a title, and so is a
+  /// plan for one: a shot list, an outline, ideas. "Give me a shot list
+  /// for the ferry reel" went to the video model and came back a video.
   static final RegExp _text = _words(<String>[
+    'shot list',
+    'outline',
+    'ideas',
+    'plan',
+    'checklist',
+    'tips',
+    'strategy',
+    'summary',
     'caption',
     'captions',
     'script',
