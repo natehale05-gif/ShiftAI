@@ -24,6 +24,16 @@ It is also the quickest way to check a real server: swap the base URL
 and any screen that changes is a place your shapes differ from this
 document.
 
+`tool/check_engine.py` does that without the app: it signs in, calls
+every route and prints `ok`, `missing` or `differs` for each, with what
+the app will do about it. Read-only unless `--spend`; it never calls
+`DELETE /v1/me`.
+
+```
+python3 tool/check_engine.py https://app.shiftai.club/app-preview/api \
+    --email you@shiftai.club --password '...' [--spend]
+```
+
 ## What the client assumes
 
 - **Lists may be bare or wrapped.** `[...]`, `{"data": [...]}`,
