@@ -114,9 +114,9 @@ media fields, the Suite's boards at `/v1/boards`, and several AIs in one
 conversation (`/v1/models`, and `model` + `history` on `/v1/messages`).
 Every earlier reply goes back as the assistant's own turn, whichever
 model wrote it; that is what lets them read each other as one model.
-With more than one model listed, every model answers each message in
-turn by default ("Every model" in the picker), each reading the answers
-before its own.
+One model answers each message: the one picked by hand, or with none
+picked, the one suited to it ("Best fit", `lib/util/model_router.dart`:
+a video to a video model, words to a general one, follow-ups staying put).
 
 Not wired yet: `ANY /v1/studio/<path>`, which relays to the Suite's own
 `/api/studio/<path>` (chat, image, video, voice, music, deck and the
@@ -161,6 +161,6 @@ exploratory, branch.
 flutter analyze && flutter test
 ```
 
-289 tests. They have caught every regression listed above at least once,
+291 tests. They have caught every regression listed above at least once,
 including several of mine. If one fails, read it before changing it —
 twice now the test was right and my expectation was wrong.
