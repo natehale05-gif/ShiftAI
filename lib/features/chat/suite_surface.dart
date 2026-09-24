@@ -936,8 +936,6 @@ Future<void> _pickModel(BuildContext context, AppState state) {
         );
       }
 
-      final ChatModel? fallback =
-          state.chatModels.where((ChatModel m) => m.isDefault).firstOrNull;
       return SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(
@@ -959,27 +957,19 @@ Future<void> _pickModel(BuildContext context, AppState state) {
               ),
               const SizedBox(height: Space.x1),
               Text(
-                'Switch at any point. The next one reads the whole '
-                'conversation, every reply included, and carries on from it.',
+                'One AI answers each message. Switch at any point: the next '
+                'one reads the whole conversation and carries on from it.',
                 style: ShiftType.bodySm(c.textMuted),
               ),
               const SizedBox(height: Space.x4),
               GroupedList(
                 children: <Widget>[
                   option(
-                    on: state.answeringWithEvery,
-                    pick: state.setAnswerWithEvery,
-                    name: 'Every model',
-                    detail: 'All ${state.chatModels.length} answer in turn, '
-                        'each building on the others',
-                  ),
-                  option(
-                    on: !state.answeringWithEvery && state.chatModel == null,
+                    on: state.chatModel == null,
                     pick: () => state.setChatModel(null),
-                    name: 'Auto',
-                    detail: fallback == null
-                        ? 'The server picks one'
-                        : 'The server picks one · usually ${fallback.name}',
+                    name: 'Best fit',
+                    detail: 'The right AI for each message: images, video, '
+                        'code or words',
                   ),
                   for (final ChatModel m in state.chatModels)
                     option(

@@ -83,6 +83,11 @@ def league_placement():
 MODELS = [
     {"id": "mock-a", "name": "Mock A", "provider": "Mock", "default": True},
     {"id": "mock-b", "name": "Mock B", "provider": "Mock"},
+    # Specialists, so Best fit has somewhere to send a video or an image.
+    {"id": "mock-video", "name": "Mock Video", "provider": "Mock",
+     "bestFor": ["video"]},
+    {"id": "mock-image", "name": "Mock Image", "provider": "Mock",
+     "bestFor": ["image"]},
 ]
 
 
@@ -131,15 +136,6 @@ def answer(body):
         quoted = (last.get("body") or "")[:80]
         text += f" Carrying on from the last reply ({wrote}): \"{quoted}\""
     asked = body.get("prompt", "")
-    # The app's every-model round: the second and later models are sent a
-    # carry-on instruction after the person's message. Quote the message.
-    if asked.startswith("Carry on as the same assistant"):
-        users = [t for t in history if t.get("role") == "user"]
-        text += (" I'm adding to the answer above, to: "
-                 f"\"{(users[-1].get('body') if users else '')}\"")
-        return [{"id": f"m{len(history) + 1}", "author": "shift",
-                 "model": model, "modelName": names.get(model, model),
-                 "body": text}]
     text += f" You asked: \"{asked}\""
     return [{
         "id": f"m{len(history) + 1}",

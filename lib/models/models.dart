@@ -798,6 +798,7 @@ class ChatModel {
     required this.name,
     this.provider = '',
     this.isDefault = false,
+    this.bestFor = const <TaskKind>{},
   });
 
   final String id;
@@ -807,14 +808,98 @@ class ChatModel {
   /// The one that answers when nobody has picked.
   final bool isDefault;
 
-  factory ChatModel.fromJson(Map<String, dynamic> json) => ChatModel(
-        id: json['id'] as String,
-        name: (json['name'] as String?)?.trim().isNotEmpty ?? false
-            ? json['name'] as String
-            : json['id'] as String,
-        provider: json['provider'] as String? ?? '',
-        isDefault: json['default'] == true,
-      );
+  /// What this model is the right one for, as the server says (`bestFor`)
+  /// or, when it does not, as its name gives away: Sora and Veo are video,
+  /// DALL·E and Flux are images, Suno is audio. Empty for a general model,
+  /// which takes whatever no specialist does.
+  final Set<TaskKind> bestFor;
+
+  factory ChatModel.fromJson(Map<String, dynamic> json) {
+    final String id = json['id'] as String;
+    final String name = (json['name'] as String?)?.trim().isNotEmpty ?? false
+        ? json['name'] as String
+        : id;
+    final Object? raw =
+        json['bestFor'] ?? json['best_for'] ?? json['capabilities'];
+    final Set<TaskKind> said = raw is List
+        ? raw
+            .map((Object? k) => TaskKind.parse(k is String ? k : null))
+            .whereType<TaskKind>()
+            .toSet()
+        : <TaskKind>{};
+    return ChatModel(
+      id: id,
+      name: name,
+      provider: json['provider'] as String? ?? '',
+      isDefault: json['default'] == true,
+      bestFor: raw is List ? said : TaskKind.guessFor('$id $name'),
+    );
+  }
+}
+
+/// What a message asks for, which decides which model should answer it.
+enum TaskKind {
+  image,
+  video,
+  audio,
+  code,
+  writing,
+  research;
+
+  static TaskKind? parse(String? raw) {
+    final String k = (raw ?? '').trim().toLowerCase();
+    for (final TaskKind t in values) {
+      if (t.name == k) return t;
+    }
+    return switch (k) {
+      'images' || 'picture' || 'art' => image,
+      'music' || 'voice' || 'sound' || 'speech' => audio,
+      'search' || 'web' => research,
+      'text' || 'copy' => writing,
+      _ => null,
+    };
+  }
+
+  /// A model's specialities from its id and name, for a server that does
+  /// not send `bestFor`. Only names that say what they are count: a
+  /// general model (Claude, GPT, Gemini) gets none and takes the rest.
+  static Set<TaskKind> guessFor(String idAndName) {
+    final String n = idAndName.toLowerCase();
+    bool has(List<String> words) => words.any(n.contains);
+    return <TaskKind>{
+      if (has(<String>[
+        'sora',
+        'veo',
+        'runway',
+        'kling',
+        'pika',
+        'luma',
+        'video',
+        'hailuo',
+        'seedance'
+      ]))
+        video,
+      if (has(<String>[
+        'dall',
+        'imagen',
+        'flux',
+        'midjourney',
+        'stable-diff',
+        'stable diff',
+        'sdxl',
+        'ideogram',
+        'image',
+        'recraft'
+      ]))
+        image,
+      if (has(
+          <String>['suno', 'udio', 'eleven', 'music', 'voice', 'tts', 'audio']))
+        audio,
+      if (has(<String>['codex', 'coder', 'devstral', 'codestral', 'code']))
+        code,
+      if (has(<String>['perplexity', 'sonar', 'research', 'search'])) research,
+    };
+  }
 }
 
 /// One earlier turn of a conversation, as sent with the next message so

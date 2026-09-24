@@ -540,29 +540,34 @@ the other half of that promise, and the claim is made to the person in the
 composer's hint text.
 
 
-#### Every model answers
+#### Best fit: one model per message, the right one
 
-With more than one model listed, the app's default is **Every model**:
-each message is answered by every model in `/v1/models`, in that order,
-one `POST /v1/messages` each, and each reads the answers before its own.
+One model answers each message. With nothing picked by hand, the app
+chooses it (**Best fit**) and sends its id as `model`:
 
-- The first call is the message as usual: `prompt` is what the person
-  typed, `model` the first model, `history` what came before.
-- Each call after it has `model` set to the next model, `history` ending
-  with the person's message (`user`) and every answer so far this round
-  (`assistant`, whichever model wrote it), and `prompt` set to a fixed
-  instruction to carry on as the same assistant: keep what the answer so
-  far got right, correct it, add what it missed, not repeat it. The
-  person never sees that instruction; only the answers are shown, each
-  labelled with its model.
-- In later messages the history carries every answer as consecutive
-  `assistant` turns. If a provider needs strict user/assistant
-  alternation, join consecutive assistant turns into one before sending.
-- One model failing shows "<name> did not answer." and the round goes
-  on with the next.
-- **The app can only offer the models this route lists.** With one, or
-  none (404), there is no round and no picker: the server answers alone.
-  People can still pick one model, or Auto, in the picker.
+- A message asking for a video, an image or audio goes to a model whose
+  `bestFor` includes `video`, `image` or `audio`; code, research and
+  writing likewise. "Write a caption for the clip" is writing, not video:
+  a piece of text is writing whatever it is for.
+- Anything no specialist covers ("make it shorter", a plain question)
+  stays with the model that answered last if that is a general model, and
+  otherwise goes to the `default` one.
+- People can still pick one model by hand, and it then answers everything.
+
+Say what each model is for in `/v1/models`:
+
+```json
+[{ "id": "claude-opus-5-5", "name": "Claude Opus 5.5", "provider": "Anthropic",
+   "default": true },
+ { "id": "veo-3", "name": "Veo 3", "provider": "Google", "bestFor": ["video"] },
+ { "id": "flux-pro", "name": "Flux Pro", "provider": "BFL", "bestFor": ["image"] }]
+```
+
+`bestFor` takes `image`, `video`, `audio`, `code`, `writing`, `research`.
+Without it the app guesses from the name (Sora, Veo, Runway, Kling → video;
+DALL·E, Imagen, Flux, Midjourney, Ideogram → image; Suno, Udio, Eleven →
+audio), and a model it cannot place is general. With no models listed at
+all, `model` is left out and the server picks.
 ### `POST /v1/polish`
 
 The composer's sparkle, "Polish my prompt". Body `{ "prompt": "make a

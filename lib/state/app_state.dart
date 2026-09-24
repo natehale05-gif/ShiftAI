@@ -19,6 +19,7 @@ import '../theme/tokens.dart';
 import 'daily_rings.dart';
 import 'greetings.dart';
 import '../util/haptics.dart';
+import '../util/model_router.dart';
 
 /// Storage keys. Everything money related persists so a reload never resets
 /// the account. Nothing else writes these keys, and a key this app did not
@@ -411,14 +412,13 @@ class AppState extends ChangeNotifier {
   /// The AIs the server has connected, in the order it lists them.
   List<ChatModel> get chatModels => _snap.models;
 
-  /// What was picked: a model's id, [_auto], [_every], or nothing yet.
+  /// The model picked by hand, or null for Best fit. Anything else stored
+  /// here by an older build ("*every", "*auto") matches no model and so
+  /// reads as Best fit too.
   String? _chatModelId;
 
-  static const String _every = '*every';
-  static const String _auto = '*auto';
-
-  /// Who answers the next message when one AI does: the one picked, if the
-  /// server still has it, or null for the server's own choice.
+  /// The model picked by hand, if the server still has it; null means Best
+  /// fit, which chooses per message.
   ChatModel? get chatModel {
     for (final ChatModel m in chatModels) {
       if (m.id == _chatModelId) return m;
@@ -426,45 +426,41 @@ class AppState extends ChangeNotifier {
     return null;
   }
 
-  /// Whether every connected AI answers each message, in turn.
+  /// "Best fit", or the name of the model picked by hand.
+  String get answeringLabel => chatModel?.name ?? 'Best fit';
+
+  /// Who answers [prompt]: the model picked by hand, or the one Best fit
+  /// chooses for it (ModelRouter), or null for the server's own choice
+  /// when it lists no models at all.
   ///
-  /// The default whenever the server has connected more than one, which is
-  /// what the Suite is for: before, a message went to one AI (the server's
-  /// pick, or the one chosen), and the others never said anything unless
-  /// someone switched to them by hand. Picking one AI, or Auto, turns it
-  /// off; picking "Every model" turns it back on.
-  bool get answeringWithEvery =>
-      chatModels.length > 1 && chatModel == null && _chatModelId != _auto;
+  /// One model answers each message. For a while every connected model
+  /// answered every message in turn, which was the wrong reading of "I'm
+  /// only getting responses from one model": the point was the right one
+  /// answering, not all of them.
+  ChatModel? answererFor(String prompt) =>
+      chatModel ??
+      ModelRouter.pick(chatModels, prompt, lastModelId: _lastAnswerer);
 
-  /// "Every model", "Auto", or the picked model's name.
-  String get answeringLabel =>
-      answeringWithEvery ? 'Every model' : (chatModel?.name ?? 'Auto');
+  /// The model that wrote the latest real reply, so a follow-up ("make it
+  /// shorter") stays with it rather than hopping.
+  String? get _lastAnswerer {
+    for (final ChatMessage m in messages.reversed) {
+      if (m.author != MessageAuthor.you &&
+          m.failure == null &&
+          m.model != null) {
+        return m.model;
+      }
+    }
+    return null;
+  }
 
-  /// Picks which AI answers from now on; null hands it back to the server.
-  /// The conversation is unchanged: the next model reads all of it.
+  /// Picks which AI answers from now on; null is Best fit. The
+  /// conversation is unchanged: the next model reads all of it.
   void setChatModel(String? id) {
-    final String next = id ?? _auto;
-    if (_chatModelId == next) return;
-    _chatModelId = next;
+    if (_chatModelId == id) return;
+    _chatModelId = id;
     _changed();
   }
-
-  /// Every connected AI answers each message, each reading the others.
-  void setAnswerWithEvery() {
-    if (_chatModelId == _every) return;
-    _chatModelId = _every;
-    _changed();
-  }
-
-  /// What the second and later AIs in a round are asked, after the
-  /// person's own message and the answers before theirs. Written so each
-  /// carries on as the same assistant rather than starting over or
-  /// repeating the one before; the person never sees it.
-  static const String everyModelFollowUp =
-      'Carry on as the same assistant and answer the request above '
-      'yourself. Build on the answer so far: keep what it got right, '
-      'correct anything it got wrong, add what it missed, and do not '
-      'repeat it. If there is nothing to add, say so in one line.';
 
   /// The conversation so far, as the next model should read it.
   ///
@@ -1211,12 +1207,7 @@ class AppState extends ChangeNotifier {
     // Taken before the new message is added: the history is what came
     // before this prompt, and the prompt travels on its own.
     final List<ChatTurn> history = chatHistory;
-    final String? model = chatModel?.id;
-    // The panel for this message: every connected AI, or none when one
-    // answers alone.
-    final List<ChatModel> panel = answeringWithEvery
-        ? List<ChatModel>.of(chatModels)
-        : const <ChatModel>[];
+    final ChatModel? answerer = answererFor(body);
     messages = <ChatMessage>[
       ...messages,
       ChatMessage(id: 'you-$stamp', author: MessageAuthor.you, body: body),
@@ -1224,8 +1215,8 @@ class AppState extends ChangeNotifier {
     thinking = true;
     _changed();
 
-    // A newer message, or a cleared thread, ends this one's round: its
-    // late answers are not appended to a conversation that moved on.
+    // A newer message, or a cleared thread, ends this one: its late answer
+    // is not appended to a conversation that moved on.
     final int round = ++_round;
     bool current() => round == _round;
 
@@ -1234,30 +1225,14 @@ class AppState extends ChangeNotifier {
     // writing it down.
     _reply?.ignore();
     _reply = () async {
-      if (panel.isEmpty) {
-        await _answer(stamp, body, model: model, history: history);
-      } else {
-        // Every AI in turn. The first answers the message; each after it
-        // is given the message and every answer so far as the assistant's
-        // own, and carries on from them as the same assistant.
-        final List<ChatTurn> sofar = <ChatTurn>[
-          ...history,
-          ChatTurn(role: 'user', body: body),
-        ];
-        for (int i = 0; i < panel.length && current(); i++) {
-          final ChatModel m = panel[i];
-          final List<ChatMessage> got = await _answer(
-            '$stamp-${m.id}',
-            i == 0 ? body : everyModelFollowUp,
-            model: m.id,
-            history: i == 0 ? history : List<ChatTurn>.of(sofar),
-            as: m,
-            stillCurrent: current,
-          );
-          sofar.addAll(
-              got.where((ChatMessage a) => a.failure == null).map(_turnOf));
-        }
-      }
+      await _answer(
+        stamp,
+        body,
+        model: answerer?.id,
+        history: history,
+        as: answerer,
+        stillCurrent: current,
+      );
       if (!current()) return;
       thinking = false;
       _changed();

@@ -16,6 +16,15 @@ import 'package:shift_ai/data/seed.dart';
 import 'package:shift_ai/data/seed_repository.dart';
 import 'package:shift_ai/models/models.dart';
 import 'package:shift_ai/state/app_state.dart';
+import 'package:shift_ai/util/model_router.dart';
+
+/// A server with specialists: a video and an image model beside two
+/// general ones.
+final List<ChatModel> _panel = <ChatModel>[
+  ..._models,
+  ChatModel.fromJson(const <String, String>{'id': 'veo', 'name': 'Veo 3'}),
+  ChatModel.fromJson(const <String, String>{'id': 'flux', 'name': 'Flux Pro'}),
+];
 
 const List<ChatModel> _models = <ChatModel>[
   ChatModel(
@@ -76,7 +85,10 @@ class _Engine extends SeedRepository {
         body: 'Answer ${sent.length} from $id',
         bullets: sent.length == 1 ? <String>['first point'] : <String>[],
         model: id,
-        modelName: _models.firstWhere((ChatModel m) => m.id == id).name,
+        modelName: models
+            .firstWhere((ChatModel m) => m.id == id,
+                orElse: () => ChatModel(id: id, name: id))
+            .name,
       ),
     ];
   }
@@ -158,14 +170,14 @@ void main() {
     );
   });
 
-  test('Auto sends no model, and a failure notice is never history', () async {
+  test(
+      'Best fit sends one model, the default for plain talk, and a failure '
+      'notice is never history', () async {
     final (AppState state, _Engine engine) = await _signedIn();
-    // Auto is a pick now; with nothing picked, every model answers.
-    state.setChatModel(null);
-    expect(state.answeringWithEvery, isFalse);
+    expect(state.answeringLabel, 'Best fit');
     state.sendMessage('Hello');
     await _settle();
-    expect(engine.sent.single.model, isNull);
+    expect(engine.sent.single.model, 'claude');
     state.messages = <ChatMessage>[
       ...state.messages,
       const ChatMessage(
@@ -277,12 +289,11 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    // Every model, until one is picked.
-    expect(find.text('Every model'), findsOneWidget);
-    await tester.tap(find.text('Every model'));
+    // Best fit, until one is picked.
+    expect(find.text('Best fit'), findsOneWidget);
+    await tester.tap(find.text('Best fit'));
     await tester.pumpAndSettle();
     expect(find.text('Who answers'), findsOneWidget);
-    expect(find.text('Auto'), findsOneWidget);
     await tester.tap(find.text('Other model'));
     await tester.pumpAndSettle();
     expect(state.chatModel?.id, 'other');
@@ -294,101 +305,133 @@ void main() {
     expect(find.text('Answer 1 from other'), findsOneWidget);
   });
 
-  group('every model answers', () {
-    test(
-        'with nothing picked, each connected AI answers the message in turn, '
-        'the second reading the first as its own', () async {
-      final (AppState state, _Engine engine) = await _signedIn();
-      expect(state.answeringWithEvery, isTrue);
-      expect(state.answeringLabel, 'Every model');
-
-      state.sendMessage('Write a caption');
-      await _settle();
-      await _settle();
-
-      // One call per model, in the order the server lists them.
-      expect(engine.sent.map((s) => s.model), <String?>['claude', 'other']);
-      // The first gets the message itself and what came before it.
-      expect(engine.sent[0].prompt, 'Write a caption');
-      expect(engine.sent[0].history, isEmpty);
-      // The second gets the message and the first answer as the
-      // assistant's own, then the ask to carry on from it.
-      expect(engine.sent[1].prompt, AppState.everyModelFollowUp);
-      expect(engine.sent[1].history.map((ChatTurn t) => t.role),
-          <String>['user', 'assistant']);
-      expect(engine.sent[1].history.first.body, 'Write a caption');
-      expect(engine.sent[1].history.last.body,
-          'Answer 1 from claude\n- first point');
-
-      // Both answers are in the thread, labelled, and the follow-up is not.
-      expect(
-        state.messages.map((ChatMessage m) => m.modelName ?? m.author.name),
-        <String>['you', 'Claude', 'Other model'],
-      );
-      expect(
-          state.messages
-              .any((ChatMessage m) => m.body == AppState.everyModelFollowUp),
-          isFalse);
-      expect(state.thinking, isFalse);
-
-      // The next message's history has both answers.
-      state.sendMessage('Shorter');
-      await _settle();
-      await _settle();
-      expect(engine.sent[2].history.map((ChatTurn t) => t.model),
-          <String?>[null, 'claude', 'other']);
-    });
-
-    test('picking one model, or Auto, turns it off; Every model back on',
+  group('Best fit: one model per message, the right one', () {
+    test('the message goes to the model suited to it, and only that one',
         () async {
       final (AppState state, _Engine engine) = await _signedIn();
-      state.setChatModel('other');
-      expect(state.answeringWithEvery, isFalse);
-      state.sendMessage('Hi');
-      await _settle();
-      expect(engine.sent.single.model, 'other');
-
-      state.setAnswerWithEvery();
-      expect(state.answeringWithEvery, isTrue);
-      await state.flush();
-      final SharedPreferences prefs = await SharedPreferences.getInstance();
-      final (AppState again, _) = await _signedIn(
-          <String, Object>{StoreKeys.app: prefs.getString(StoreKeys.app)!});
-      expect(again.answeringWithEvery, isTrue);
-    });
-
-    test('one model failing does not stop the others', () async {
-      final (AppState state, _Engine engine) = await _signedIn();
-      engine.failFor = 'claude';
-      state.sendMessage('Hi');
-      await _settle();
-      await _settle();
-      expect(engine.sent.map((s) => s.model), <String?>['claude', 'other']);
-      expect(state.messages[1].failure?.sentence, 'Claude did not answer.');
-      expect(state.messages[2].modelName, 'Other model');
-      // The failure is not something the next model reads.
-      expect(
-          engine.sent[1].history.map((ChatTurn t) => t.role), <String>['user']);
-    });
-
-    test('a new message ends the round before it', () async {
-      final (AppState state, _Engine engine) = await _signedIn();
-      state.sendMessage('First');
-      state.clearThread();
-      await _settle();
-      await _settle();
-      expect(engine.sent, hasLength(1));
-      expect(state.messages, isEmpty);
-    });
-
-    test('with one model connected there is no round', () async {
-      final (AppState state, _Engine engine) = await _signedIn();
-      engine.models = <ChatModel>[_models.first];
+      engine.models = _panel;
       await state.refresh();
-      expect(state.answeringWithEvery, isFalse);
-      state.sendMessage('Hi');
+
+      state.sendMessage('Make a video of Miami at sunset');
       await _settle();
-      expect(engine.sent, hasLength(1));
+      expect(engine.sent.single.model, 'veo');
+
+      state.sendMessage('Now a poster for it');
+      await _settle();
+      expect(engine.sent.last.model, 'flux');
+
+      state.sendMessage('Write a caption for the clip');
+      await _settle();
+      expect(engine.sent.last.model, 'claude');
+      expect(engine.sent, hasLength(3), reason: 'one call per message');
+    });
+
+    test(
+        'a follow-up stays with the general model that answered; a question '
+        'after a specialist goes back to the default', () async {
+      final (AppState state, _Engine engine) = await _signedIn();
+      engine.models = _panel;
+      await state.refresh();
+
+      state.setChatModel('other');
+      state.sendMessage('Hello');
+      await _settle();
+      state.setChatModel(null);
+      state.sendMessage('Thanks, shorter please');
+      await _settle();
+      expect(engine.sent.last.model, 'other', reason: 'no hop for nothing');
+
+      state.sendMessage('Make a video of it');
+      await _settle();
+      expect(engine.sent.last.model, 'veo');
+      state.sendMessage('Why is the sky blue?');
+      await _settle();
+      expect(engine.sent.last.model, 'claude', reason: 'not the video model');
+    });
+
+    test('a model picked by hand answers everything; null is Best fit again',
+        () async {
+      final (AppState state, _Engine engine) = await _signedIn();
+      engine.models = _panel;
+      await state.refresh();
+      state.setChatModel('other');
+      state.sendMessage('Make a video of Miami');
+      await _settle();
+      expect(engine.sent.last.model, 'other');
+      state.setChatModel(null);
+      expect(state.answeringLabel, 'Best fit');
+    });
+
+    test('an older build\'s stored "*every" reads as Best fit', () async {
+      final (AppState state, _) = await _signedIn(<String, Object>{
+        StoreKeys.app: jsonEncode(<String, Object>{'chatModel': '*every'}),
+      });
+      expect(state.chatModel, isNull);
+      expect(state.answeringLabel, 'Best fit');
+    });
+
+    test('with no models listed the server chooses', () async {
+      final (AppState state, _Engine engine) = await _signedIn();
+      engine.models = const <ChatModel>[];
+      await state.refresh();
+      state.sendMessage('Make a video');
+      await _settle();
+      expect(engine.sent.single.model, isNull);
+    });
+  });
+
+  group('what a message asks for', () {
+    test('a medium when the thing itself is wanted, writing for words', () {
+      final Map<String, TaskKind?> cases = <String, TaskKind?>{
+        'make a video of Miami': TaskKind.video,
+        'a 15 second reel for the launch': TaskKind.video,
+        'generate a logo for the café': TaskKind.image,
+        'a poster for Friday': TaskKind.image,
+        'compose a jingle for the ad': TaskKind.audio,
+        'write a caption for the ferry clip': TaskKind.writing,
+        'make me a caption for the video': TaskKind.writing,
+        'a script for the promo video': TaskKind.writing,
+        'describe this photo': TaskKind.writing,
+        'fix this bug in my Dart function': TaskKind.code,
+        'find the latest news on the launch': TaskKind.research,
+        'draft an email to the venue': TaskKind.writing,
+        'thanks, shorter please': null,
+        'why is the sky blue?': null,
+      };
+      cases.forEach((String prompt, TaskKind? kind) {
+        expect(ModelRouter.kindOf(prompt), kind, reason: prompt);
+      });
+    });
+
+    test('a model says what it is for, or its name does', () {
+      expect(
+        ChatModel.fromJson(const <String, Object>{
+          'id': 'x',
+          'name': 'Studio',
+          'bestFor': <String>['video', 'images'],
+        }).bestFor,
+        <TaskKind>{TaskKind.video, TaskKind.image},
+      );
+      TaskKind? only(String id, String name) {
+        final Set<TaskKind> k =
+            ChatModel.fromJson(<String, String>{'id': id, 'name': name})
+                .bestFor;
+        return k.length == 1 ? k.single : null;
+      }
+
+      expect(only('veo-3', 'Veo 3'), TaskKind.video);
+      expect(only('sora-2', 'Sora'), TaskKind.video);
+      expect(only('flux-pro', 'Flux Pro'), TaskKind.image);
+      expect(only('dall-e-3', 'DALL·E 3'), TaskKind.image);
+      expect(only('suno-v4', 'Suno'), TaskKind.audio);
+      expect(
+        ChatModel.fromJson(const <String, String>{
+          'id': 'claude-opus-5-5',
+          'name': 'Claude Opus 5.5',
+        }).bestFor,
+        isEmpty,
+        reason: 'a general model takes whatever no specialist does',
+      );
     });
   });
 }
