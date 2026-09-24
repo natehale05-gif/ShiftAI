@@ -26,6 +26,9 @@ class _SuiteSurfaceState extends State<SuiteSurface> {
   final ScrollController _scroll = ScrollController();
   int _lastCount = 0;
 
+  /// How long the reply being written out was at the last build.
+  int _lastLength = 0;
+
   @override
   void dispose() {
     _scroll.dispose();
@@ -48,8 +51,27 @@ class _SuiteSurfaceState extends State<SuiteSurface> {
     final AppState state = AppScope.of(context);
     final bool empty = state.messages.isEmpty;
     final bool askAgain = _AskAgain.shows(state);
-    final int count =
-        state.messages.length + (state.thinking || askAgain ? 1 : 0);
+    // "Working" until the first words arrive; after that the reply itself
+    // shows it is coming.
+    final bool working = state.thinking && state.streamingId == null;
+    final int count = state.messages.length + (working || askAgain ? 1 : 0);
+
+    // A reply written out as it arrives grows without adding a row; the
+    // thread keeps up with it while you are reading at the bottom, and
+    // leaves you where you are if you have scrolled up.
+    final int length = state.streamingId == null
+        ? 0
+        : state.messages.lastOrNull?.body.length ?? 0;
+    if (length != _lastLength) {
+      _lastLength = length;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!_scroll.hasClients) return;
+        final ScrollPosition at = _scroll.position;
+        if (at.maxScrollExtent - at.pixels < 160) {
+          _scroll.jumpTo(at.maxScrollExtent);
+        }
+      });
+    }
 
     if (count != _lastCount) {
       _lastCount = count;
@@ -490,7 +512,12 @@ class _MessageTile extends StatelessWidget {
           ),
         ],
         const SizedBox(height: Space.x2),
-        _MessageActions(message: message),
+        // While it is being written, the actions' room is kept: the reply
+        // keeps its full width, and nothing moves when they appear.
+        if (message.id == state.streamingId)
+          const SizedBox(width: double.infinity, height: 44)
+        else
+          _MessageActions(message: message),
       ],
     );
   }

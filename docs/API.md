@@ -448,6 +448,37 @@ answer names a row it does not have yet, so "Open in Vault" finds it.
 then ends before that question, and the reply being replaced (or, for
 an edit, everything after the question) is not in it.
 
+### Writing the answer out as it comes
+
+Optional, and the app works without it. `POST /v1/messages` is sent
+with `Accept: text/event-stream, application/json`. Answer JSON as above
+and nothing changes. Answer `Content-Type: text/event-stream` instead
+and the reply appears word by word, the way Claude's does:
+
+```
+event: text
+data: {"text": "Harbour light, "}
+
+event: text
+data: {"text": "one crossing."}
+
+event: messages
+data: [{"id": "m4", "author": "shift", "model": "claude-opus-5-5", "modelName": "Claude Opus 5.5", "body": "Harbour light, one crossing."}]
+```
+
+- **`text`** carries the next piece of the reply, not the whole of it so
+  far. The app shows them joined, as one reply that grows.
+- **`messages`** is the finished answer, exactly the JSON the route
+  otherwise returns, choices and attachments included. It replaces what
+  was written out. Send it last.
+- **`error`** with `{"message": "..."}` ends it as a refusal, and the
+  person sees the sentence.
+- A stream that ends with no `messages` keeps what was written as the
+  reply. A comment line (`: keep-alive`) is ignored, so it can hold a
+  quiet connection open; after 3 minutes with nothing, the app gives up.
+- Stop closes the connection mid-stream. What was written stays in the
+  thread.
+
 ### Questions with answers to tap
 
 When a model needs to ask before it goes on, the app draws its answers

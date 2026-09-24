@@ -7,6 +7,7 @@ gets.
 """
 import json
 import os
+import re
 import time
 from email.parser import BytesParser
 from email.policy import HTTP
@@ -29,6 +30,11 @@ TRAIN_SECONDS = float(os.environ.get("MOCK_TRAIN_SECONDS", "20"))
 # model writing a long one or making a picture: long enough to see "Still
 # working" and try Stop. MOCK_SLOW_SECONDS=5 for a quicker look.
 SLOW_SECONDS = float(os.environ.get("MOCK_SLOW_SECONDS", "30"))
+# Answers are written out a word at a time (server-sent events) when the
+# app asks for text/event-stream, as docs/API.md describes. MOCK_STREAM=0
+# answers with plain JSON instead, the way a server that does not stream
+# does.
+STREAM = os.environ.get("MOCK_STREAM", "1") != "0"
 BASE = "http://127.0.0.1:8111"
 
 
@@ -276,6 +282,25 @@ class Handler(BaseHTTPRequestHandler):
         if raw:
             self.wfile.write(raw)
 
+    def _stream(self, reply):
+        """The answer as server-sent events: its words, then the whole."""
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+
+        def event(name, data):
+            self.wfile.write(
+                f"event: {name}\ndata: {json.dumps(data)}\n\n".encode())
+            self.wfile.flush()
+
+        for message in reply:
+            for word in re.findall(r"\S+\s*", message.get("body") or ""):
+                event("text", {"text": word})
+                time.sleep(0.04)
+        event("messages", reply)
+
     def do_OPTIONS(self):
         self._send(204)
 
@@ -316,7 +341,11 @@ class Handler(BaseHTTPRequestHandler):
             if "slow" in str(body.get("prompt", "")).lower():
                 time.sleep(SLOW_SECONDS)
             try:
-                return self._send(200, answer(body))
+                reply = answer(body)
+                if STREAM and "text/event-stream" in self.headers.get(
+                        "Accept", ""):
+                    return self._stream(reply)
+                return self._send(200, reply)
             except (BrokenPipeError, ConnectionResetError):
                 # Stop in the app: the caller cancelled and went away.
                 print("messages: the caller stopped waiting", flush=True)

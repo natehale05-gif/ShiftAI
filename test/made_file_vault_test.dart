@@ -28,6 +28,7 @@ class _Engine extends SeedRepository {
     String? model,
     List<ChatTurn> history = const <ChatTurn>[],
     Future<void>? cancel,
+    void Function(String soFar)? onText,
   }) async {
     made = true;
     return <ChatMessage>[

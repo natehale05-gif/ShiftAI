@@ -564,6 +564,10 @@ class AppState extends ChangeNotifier {
   /// offers to ask again. Not saved: it describes this sitting only.
   bool stopped = false;
 
+  /// The reply being written out as it arrives, while it is: shown in the
+  /// thread as it grows, without Copy, Retry or Edit until it is done.
+  String? streamingId;
+
   VaultScope vaultScope = VaultScope.mine;
   String? selectedVaultId;
 
@@ -1489,8 +1493,12 @@ class AppState extends ChangeNotifier {
   /// caller goes away stops this. Whatever was asked stays on screen.
   void stopReply() {
     if (!thinking) return;
+    final bool partial = streamingId != null;
     _dropReply();
     stopped = true;
+    // What was written before Stop stays, as it would in Claude: it is
+    // what the model said, and the next message reads it.
+    if (partial) _saveThread();
     _changed();
   }
 
@@ -1506,6 +1514,7 @@ class AppState extends ChangeNotifier {
     slowReply = false;
     thinking = false;
     stopped = false;
+    streamingId = null;
   }
 
   /// Asks [prompt], which is already on screen as the newest message, and
@@ -1560,6 +1569,33 @@ class AppState extends ChangeNotifier {
       notifyListeners();
     });
 
+    // Written out as it arrives, when the engine streams: one reply that
+    // grows in place, replaced by the finished answer when that lands.
+    final String live = 'live-$stamp';
+    void grow(String soFar) {
+      if (!current()) return;
+      _slowTimer?.cancel();
+      slowReply = false;
+      streamingId = live;
+      final ChatMessage partial = ChatMessage(
+        id: live,
+        author: MessageAuthor.shift,
+        body: soFar,
+        model: answerer?.id,
+        modelName: answerer?.name,
+      );
+      final int at = messages.indexWhere((ChatMessage m) => m.id == live);
+      messages = at < 0
+          ? <ChatMessage>[...messages, partial]
+          : <ChatMessage>[
+              ...messages.sublist(0, at),
+              partial,
+              ...messages.sublist(at + 1),
+            ];
+      // Every few words: redrawn, not written to storage each time.
+      notifyListeners();
+    }
+
     // The answer comes from the engine. Private chat is passed through so
     // a server can be told not to retain it, on top of this client never
     // writing it down.
@@ -1572,11 +1608,14 @@ class AppState extends ChangeNotifier {
         as: answerer,
         stillCurrent: current,
         cancel: stop.future,
+        onText: grow,
+        replacing: live,
       );
       if (!current()) return;
       _slowTimer?.cancel();
       slowReply = false;
       thinking = false;
+      streamingId = null;
       _changed();
     }();
   }
@@ -1602,6 +1641,8 @@ class AppState extends ChangeNotifier {
     ChatModel? as,
     bool Function()? stillCurrent,
     Future<void>? cancel,
+    void Function(String soFar)? onText,
+    String? replacing,
   }) async {
     try {
       final List<ChatMessage> answer = (await _repo.send(
@@ -1611,6 +1652,7 @@ class AppState extends ChangeNotifier {
         model: model,
         history: history,
         cancel: cancel,
+        onText: onText,
       ))
           .map((ChatMessage a) => as == null || a.model != null
               ? a
@@ -1629,7 +1671,12 @@ class AppState extends ChangeNotifier {
                 ))
           .toList();
       if (!(stillCurrent?.call() ?? true)) return const <ChatMessage>[];
-      messages = <ChatMessage>[...messages, ...answer];
+      // The finished answer takes the place of the one written out as it
+      // came.
+      messages = <ChatMessage>[
+        ...messages.where((ChatMessage m) => m.id != replacing),
+        ...answer,
+      ];
       _saveThread();
       lastError = null;
       // Coming back with something made is the ring, whether or not it

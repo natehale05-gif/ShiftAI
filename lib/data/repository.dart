@@ -107,6 +107,10 @@ abstract interface class ShiftRepository {
   ///
   /// Completing [cancel] stops the request (Stop in the composer); the
   /// call then throws, and the caller has already moved on.
+  ///
+  /// [onText] is handed the answer so far, each time more of it arrives,
+  /// when the engine writes it out as it goes. The returned messages are
+  /// the finished answer either way.
   Future<List<ChatMessage>> send(
     String prompt, {
     bool private = false,
@@ -114,6 +118,7 @@ abstract interface class ShiftRepository {
     String? model,
     List<ChatTurn> history = const <ChatTurn>[],
     Future<void>? cancel,
+    void Function(String soFar)? onText,
   });
 
   /// Rewrite a rough ask into a fuller brief. Returning the text unchanged

@@ -155,6 +155,13 @@ AI-generated face shipped in `assets/avatars/`), is who the Suite
 generates as until someone picks their own; no `avatarId` means her. She
 is never anyone's profile picture or leaderboard face.
 
+Answers get 3 minutes, not the 20 s every other call gets; after 20 s the
+thread says "Still working" and Send becomes Stop, which aborts the
+request. An engine that streams (`text/event-stream`, see `docs/API.md`)
+writes the reply out as it comes; one that answers JSON works as before.
+Retry and Edit redo an earlier question in place, never as a new message
+at the bottom.
+
 Chats are saved as they happen (`AppState.threads`, Recents in the
 drawer): on the device, in the account-keyed blob, and on the server via
 `/v1/threads` when it has it (404 means device only). A private chat is
@@ -182,6 +189,6 @@ exploratory, branch.
 flutter analyze && flutter test
 ```
 
-325 tests. They have caught every regression listed above at least once,
+332 tests. They have caught every regression listed above at least once,
 including several of mine. If one fails, read it before changing it —
 twice now the test was right and my expectation was wrong.

@@ -170,9 +170,17 @@ class HttpRepository implements ShiftRepository {
     String? model,
     List<ChatTurn> history = const <ChatTurn>[],
     Future<void>? cancel,
+    void Function(String soFar)? onText,
   }) async {
-    final dynamic body = await _api.post(
+    final StringBuffer soFar = StringBuffer();
+    final dynamic body = await _api.postEvents(
       _messages,
+      // Written out as it comes, when the engine streams: the words show
+      // as they are written instead of all at once after a wait.
+      onText: (String more) {
+        soFar.write(more);
+        onText?.call(soFar.toString());
+      },
       // A model writing a long answer, with the whole conversation to
       // read, or making a picture, often takes more than the 20 s every
       // other call gets. At 20 s the app said the server had not answered
@@ -192,6 +200,24 @@ class HttpRepository implements ShiftRepository {
         'history': history.map((ChatTurn t) => t.toJson()).toList(),
       },
     );
+    if (body == null) {
+      // A stream that ended without its finished answer: what it wrote is
+      // the answer.
+      if (soFar.isEmpty) {
+        throw const ShiftApiException(
+          ShiftApiErrorKind.malformed,
+          'The answer came back empty.',
+        );
+      }
+      return <ChatMessage>[
+        ChatMessage(
+          id: 'streamed-${DateTime.now().microsecondsSinceEpoch}',
+          author: MessageAuthor.shift,
+          body: soFar.toString(),
+          model: model,
+        ),
+      ];
+    }
     return Decode.rows(body, 'messages')
         .map(ChatMessage.fromJson)
         .toList(growable: false);

@@ -198,6 +198,34 @@ Body `{ "prompt": "make a poster" }`. Answer `{ "prompt": "<the fuller brief>" }
 - It is optional. Until it exists, answer 404 and the client asks the chat
   model instead.
 
+## 4b. Stream the answer (optional, and worth it)
+
+The app now asks `/v1/messages` for `text/event-stream` as well as JSON.
+Answer JSON and nothing changes. Stream it and the reply appears word by
+word instead of all at once after a wait:
+
+```
+event: text
+data: {"text": "Harbour light, "}
+
+event: text
+data: {"text": "one crossing."}
+
+event: messages
+data: [ ...the same JSON array you return today... ]
+```
+
+- `text` is the next piece only, not everything so far.
+- `messages` is sent last, and is the finished answer exactly as the
+  non-streaming route returns it (model, modelName, choices,
+  attachment). It replaces what was streamed.
+- `event: error` with `{"message": "..."}` is a refusal the person sees.
+- Map it straight from the provider's stream: for Anthropic, each
+  `content_block_delta` text becomes one `text` event.
+- For an image or video model there is nothing to stream; answer JSON.
+- `python3 tool/mock_engine.py` streams this way, so `curl -N` against it
+  shows the exact bytes.
+
 ## 5. Questions answered with buttons
 
 When a model needs to ask before going on, the app draws the answers as
