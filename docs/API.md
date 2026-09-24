@@ -552,7 +552,17 @@ chooses it (**Best fit**) and sends its id as `model`:
 - Anything no specialist covers ("make it shorter", a plain question)
   stays with the model that answered last if that is a general model, and
   otherwise goes to the `default` one.
-- People can still pick one model by hand, and it then answers everything.
+- **A chat model never answers a request for an image, a video or
+  audio.** Those go only to a model whose `bestFor` names them, even
+  over a chat model picked by hand. With none connected, the app sends
+  nothing and says "No image model is connected yet. Nothing was sent,
+  and nothing was charged." So list image, video and audio models with
+  `bestFor` (or names that say what they are), or those requests go
+  unanswered.
+- People can still pick one model by hand, and it then answers
+  everything it can make.
+- With no models listed at all the server chooses; there, too, an image
+  request must go to an image model and never come back as chat text.
 
 Say what each model is for in `/v1/models`:
 

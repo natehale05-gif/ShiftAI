@@ -349,15 +349,19 @@ void main() {
       expect(engine.sent.last.model, 'claude', reason: 'not the video model');
     });
 
-    test('a model picked by hand answers everything; null is Best fit again',
-        () async {
+    test(
+        'a model picked by hand answers all it can, never a video it cannot '
+        'make; null is Best fit again', () async {
       final (AppState state, _Engine engine) = await _signedIn();
       engine.models = _panel;
       await state.refresh();
       state.setChatModel('other');
-      state.sendMessage('Make a video of Miami');
+      state.sendMessage('Write a caption for Miami');
       await _settle();
       expect(engine.sent.last.model, 'other');
+      state.sendMessage('Make a video of Miami');
+      await _settle();
+      expect(engine.sent.last.model, 'veo', reason: 'a chat model cannot');
       state.setChatModel(null);
       expect(state.answeringLabel, 'Best fit');
     });
@@ -377,6 +381,77 @@ void main() {
       state.sendMessage('Make a video');
       await _settle();
       expect(engine.sent.single.model, isNull);
+    });
+  });
+
+  group('a chat model never answers a request for an image', () {
+    test(
+        'with no image model connected nothing is sent, and the thread says '
+        'why', () async {
+      final (AppState state, _Engine engine) = await _signedIn();
+      // Two general models only: nobody here makes images.
+      expect(state.sendMessage('Make an image of a lighthouse'), isTrue);
+      await _settle();
+      expect(engine.sent, isEmpty, reason: 'not the chat model, not anyone');
+      expect(state.thinking, isFalse);
+      expect(state.messages.first.body, 'Make an image of a lighthouse');
+      expect(state.messages.last.failure?.sentence,
+          'No image model is connected yet.');
+      expect(state.messages.last.failure?.reassurance,
+          'Nothing was sent, and nothing was charged.');
+      // Signing in again would not connect an image model.
+      expect(state.messages.last.failure?.offersAccount, isFalse);
+      // The notice is the app's, not an answer: never history.
+      expect(state.chatHistory.map((ChatTurn t) => t.role), <String>['user']);
+
+      // Words still go to the chat model as ever.
+      state.sendMessage('Write a caption for a lighthouse photo');
+      await _settle();
+      expect(engine.sent.single.model, 'claude');
+    });
+
+    test('a chat model picked by hand hands the image to the image model',
+        () async {
+      final (AppState state, _Engine engine) = await _signedIn();
+      engine.models = _panel;
+      await state.refresh();
+      state.setChatModel('other');
+      state.sendMessage('Generate a logo for the café');
+      await _settle();
+      expect(engine.sent.single.model, 'flux');
+      // And everything else stays with the pick.
+      state.sendMessage('Thanks, what font would suit it?');
+      await _settle();
+      expect(engine.sent.last.model, 'other');
+    });
+
+    test('video and audio are held to the same rule', () async {
+      final (AppState state, _Engine engine) = await _signedIn();
+      state.sendMessage('Make a video of Miami');
+      state.sendMessage('Compose a jingle for the ad');
+      await _settle();
+      expect(engine.sent, isEmpty);
+      expect(
+        state.messages
+            .where((ChatMessage m) => m.failure != null)
+            .map((ChatMessage m) => m.failure!.sentence),
+        <String>[
+          'No video model is connected yet.',
+          'No audio model is connected yet.',
+        ],
+      );
+    });
+
+    test('the router never falls back to a chat model for a made thing', () {
+      expect(ModelRouter.pick(_models, 'a poster for Friday'), isNull);
+      final ModelRoute r = ModelRouter.route(_models, 'a poster for Friday');
+      expect(r.model, isNull);
+      expect(r.missing, TaskKind.image);
+      expect(
+          ModelRouter.route(_panel, 'a poster for Friday').model?.id, 'flux');
+      // With no list at all the server decides, as it always has.
+      expect(
+          ModelRouter.route(const <ChatModel>[], 'a poster').missing, isNull);
     });
   });
 

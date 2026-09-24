@@ -1089,11 +1089,17 @@ class FailureInfo {
     required this.sentence,
     required this.reassurance,
     required this.details,
+    this.offersAccount = true,
   });
 
   final String sentence;
   final String reassurance;
   final String details;
+
+  /// Whether signing in again or Settings could fix it. Not for "no image
+  /// model is connected": the person is signed in, and nothing in their
+  /// settings connects one.
+  final bool offersAccount;
 
   static const FailureInfo planCheckUnreachable = FailureInfo(
     sentence: 'Could not check your plan right now.',

@@ -437,9 +437,19 @@ class AppState extends ChangeNotifier {
   /// answered every message in turn, which was the wrong reading of "I'm
   /// only getting responses from one model": the point was the right one
   /// answering, not all of them.
-  ChatModel? answererFor(String prompt) =>
-      chatModel ??
-      ModelRouter.pick(chatModels, prompt, lastModelId: _lastAnswerer);
+  ///
+  /// A request for an image, a video or audio only ever goes to a model
+  /// that makes them, even over a chat model picked by hand; see [routeFor].
+  ChatModel? answererFor(String prompt) => routeFor(prompt).model;
+
+  /// Where [prompt] goes, or what it asked for that nothing connected can
+  /// make.
+  ModelRoute routeFor(String prompt) => ModelRouter.route(
+        chatModels,
+        prompt,
+        picked: chatModel,
+        lastModelId: _lastAnswerer,
+      );
 
   /// The model that wrote the latest real reply, so a follow-up ("make it
   /// shorter") stays with it rather than hopping.
@@ -1207,11 +1217,38 @@ class AppState extends ChangeNotifier {
     // Taken before the new message is added: the history is what came
     // before this prompt, and the prompt travels on its own.
     final List<ChatTurn> history = chatHistory;
-    final ChatModel? answerer = answererFor(body);
+    final ModelRoute route = routeFor(body);
+    final ChatModel? answerer = route.model;
     messages = <ChatMessage>[
       ...messages,
       ChatMessage(id: 'you-$stamp', author: MessageAuthor.you, body: body),
     ];
+    // An image (or video, or audio) with no model connected that makes
+    // one: nothing is sent. A chat model would only have written about
+    // the picture it cannot draw, and charged for it.
+    final TaskKind? missing = route.missing;
+    if (missing != null) {
+      _round++;
+      thinking = false;
+      messages = <ChatMessage>[
+        ...messages,
+        ChatMessage(
+          id: 'unmet-$stamp',
+          author: MessageAuthor.shift,
+          body: '',
+          failure: FailureInfo(
+            sentence: 'No ${_madeName(missing)} model is connected yet.',
+            reassurance: 'Nothing was sent, and nothing was charged.',
+            details: 'The Suite only hands ${_madeName(missing)} requests to '
+                'a model that makes ${_madeName(missing)}, never to a chat '
+                'model. Once one is connected, ask again.',
+            offersAccount: false,
+          ),
+        ),
+      ];
+      _changed();
+      return true;
+    }
     thinking = true;
     _changed();
 
@@ -1241,6 +1278,13 @@ class AppState extends ChangeNotifier {
   }
 
   int _round = 0;
+
+  static String _madeName(TaskKind kind) => switch (kind) {
+        TaskKind.image => 'image',
+        TaskKind.video => 'video',
+        TaskKind.audio => 'audio',
+        _ => kind.name,
+      };
 
   /// One engine call for [sendMessage]: appends what comes back, or a
   /// failure notice, and returns what was appended. [as] labels a reply

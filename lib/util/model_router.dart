@@ -188,6 +188,43 @@ abstract final class ModelRouter {
     return writes ? TaskKind.writing : null;
   }
 
+  /// What only a model built for it can make. A chat model asked for an
+  /// image writes about one instead, or describes what it would draw:
+  /// never an answer to the ask, and it spends the credits anyway.
+  static const Set<TaskKind> made = <TaskKind>{
+    TaskKind.image,
+    TaskKind.video,
+    TaskKind.audio,
+  };
+
+  /// Who answers [prompt]: the model to send it to, or, when it asks for
+  /// something only a specialist can make and none is connected, which
+  /// kind is missing so the app can say so and send nothing.
+  ///
+  /// [picked] is a model chosen by hand. It answers everything except a
+  /// thing it cannot make: a chat model picked by hand does not get the
+  /// image request, a connected image model does.
+  static ModelRoute route(
+    List<ChatModel> models,
+    String prompt, {
+    ChatModel? picked,
+    String? lastModelId,
+  }) {
+    // No list at all: the server knows its own models and chooses.
+    if (models.isEmpty) return const ModelRoute(null);
+    final TaskKind? kind = kindOf(prompt);
+    if (kind != null && made.contains(kind)) {
+      final List<ChatModel> able =
+          models.where((ChatModel m) => m.bestFor.contains(kind)).toList();
+      if (able.isEmpty) return ModelRoute(null, missing: kind);
+      final ChatModel? last =
+          able.where((ChatModel m) => m.id == lastModelId).firstOrNull;
+      if (picked != null && able.contains(picked)) return ModelRoute(picked);
+      return ModelRoute(last ?? able.first);
+    }
+    return ModelRoute(picked ?? pick(models, prompt, lastModelId: lastModelId));
+  }
+
   /// The one model to answer [prompt], given who answered last.
   static ChatModel? pick(
     List<ChatModel> models,
@@ -210,6 +247,9 @@ abstract final class ModelRouter {
         return last != null && fit.contains(last) ? last : fit.first;
       }
     }
+    // Something only a specialist makes, and none is here: nobody
+    // answers it (route says why), least of all a chat model.
+    if (kind != null && made.contains(kind)) return null;
     // Nobody specialises in this. A specialist that answered last (the
     // image model, say) is not the one to answer "why is the sky blue";
     // a general model that answered last is.
@@ -217,4 +257,14 @@ abstract final class ModelRouter {
     return fallback ??
         models.where((ChatModel m) => m.bestFor.isEmpty).firstOrNull;
   }
+}
+
+/// Where a message goes: [model] answers it, or [missing] names what it
+/// asked for that no connected model can make. Both null means the server
+/// chooses.
+class ModelRoute {
+  const ModelRoute(this.model, {this.missing});
+
+  final ChatModel? model;
+  final TaskKind? missing;
 }
