@@ -361,7 +361,8 @@ void main() {
     test('creating an avatar uploads, then posts the upload id', () async {
       final _FakeServer server = _FakeServer(
         (http.BaseRequest r) => switch (r.url.path) {
-          '/v1/uploads' => http.Response(_json(<String, String>{'id': 'u1'}), 200),
+          '/v1/uploads' =>
+            http.Response(_json(<String, String>{'id': 'u1'}), 200),
           '/v1/avatars' => http.Response(
               _json(<String, dynamic>{
                 'id': 'a2',
@@ -392,7 +393,7 @@ void main() {
       expect(created.url.path, '/v1/avatars');
       expect(
         jsonDecode(created.body),
-        <String, dynamic>{'uploadId': 'u1', 'name': 'Studio'},
+        <String, dynamic>{'uploadId': 'u1', 'name': 'Studio', 'consent': true},
       );
     });
 

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/cupertino.dart' show CupertinoSwitch;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -586,11 +588,43 @@ class _AvatarsCard extends StatefulWidget {
 class _AvatarsCardState extends State<_AvatarsCard> {
   bool _creating = false;
 
+  /// While an avatar is training, the gallery re-reads the list every
+  /// [_every], so it turns ready here without the person reopening the
+  /// app. It used to wait for the next full refresh, which on a phone
+  /// could mean never in that sitting. Only while the gallery is on
+  /// screen and something is training; never for the seeded catalogue,
+  /// which has no renderer behind it.
+  Timer? _poll;
+  static const Duration _every = Duration(seconds: 15);
+
+  void _syncPoll(AppState state) {
+    final bool want = state.avatarsTraining && !state.seededDemo;
+    if (!want) {
+      _poll?.cancel();
+      _poll = null;
+      return;
+    }
+    if (_poll != null) return;
+    _poll = Timer.periodic(_every, (_) => state.refreshAvatars());
+    // And once now: coming back to Settings after a few minutes should
+    // show the finished avatar straight away, not fifteen seconds later.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(state.refreshAvatars());
+    });
+  }
+
+  @override
+  void dispose() {
+    _poll?.cancel();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final AppState state = AppScope.of(context);
     final ShiftColors c = ShiftColors.of(context);
     final List<Avatar> avatars = state.avatars;
+    _syncPoll(state);
 
     return ShiftCard(
       child: Column(
@@ -787,6 +821,18 @@ class _AvatarTile extends StatelessWidget {
             textAlign: TextAlign.center,
             style: ShiftType.caption(avatar.personal ? c.accent : c.textMuted),
           ),
+          // "Failed" alone leaves nothing to do differently next time.
+          if (avatar.status == AvatarStatus.failed &&
+              avatar.failureReason != null) ...<Widget>[
+            const SizedBox(height: 2),
+            Text(
+              avatar.failureReason!,
+              maxLines: 4,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: ShiftType.caption(c.danger),
+            ),
+          ],
           const SizedBox(height: Space.x2),
           if (!avatar.personal && avatar.ready)
             Center(
@@ -884,8 +930,14 @@ class _CreateAvatarFlowState extends State<_CreateAvatarFlow> {
   final TextEditingController _name = TextEditingController();
   Uint8List? _bytes;
   String _fileName = 'avatar.png';
+  String _mimeType = 'image/png';
   bool _picking = false;
   bool _saving = false;
+
+  /// "This is me, and I agree." Create stays off until it is ticked, and
+  /// the tick is cleared whenever the photo changes: agreeing to one photo
+  /// is not agreeing to the next.
+  bool _consented = false;
 
   @override
   void dispose() {
@@ -902,14 +954,17 @@ class _CreateAvatarFlowState extends State<_CreateAvatarFlow> {
       return;
     }
 
-    final Uint8List? bytes = await prepareAvatarBytes(picked.bytes);
+    final PreparedPhoto photo = await prepareAvatarPhoto(
+      picked.bytes,
+      fileName: picked.name,
+      mimeType: picked.mimeType,
+    );
     if (!mounted) return;
+    final Uint8List? bytes = photo.bytes;
     if (bytes == null) {
       setState(() => _picking = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Could not read ${picked.name} as a picture.'),
-        ),
+        SnackBar(content: Text(photo.problem ?? 'Could not use that photo.')),
       );
       return;
     }
@@ -917,19 +972,23 @@ class _CreateAvatarFlowState extends State<_CreateAvatarFlow> {
     setState(() {
       _picking = false;
       _bytes = bytes;
-      _fileName = picked.name;
+      _fileName = photo.fileName;
+      _mimeType = photo.mimeType;
+      _consented = false;
     });
   }
 
   Future<void> _create() async {
     final Uint8List? bytes = _bytes;
-    if (bytes == null) return;
+    if (bytes == null || !_consented) return;
     final AppState state = AppScope.read(context);
     setState(() => _saving = true);
     final Avatar? created = await state.createAvatar(
       bytes,
       name: _name.text.trim().isEmpty ? 'Avatar' : _name.text.trim(),
+      consented: _consented,
       fileName: _fileName,
+      mimeType: _mimeType,
     );
     if (!mounted) return;
     if (created == null) {
@@ -986,8 +1045,11 @@ class _CreateAvatarFlowState extends State<_CreateAvatarFlow> {
               Expanded(
                 child: OutlinedButton(
                   onPressed: _picking ? null : _choosePhoto,
+                  // A photo only: the picker filters to images and only
+                  // an image can be checked and scaled here. It used to
+                  // say "or clip", which it could never take.
                   child: Text(
-                    bytes == null ? 'Choose a photo or clip' : 'Replace',
+                    bytes == null ? 'Choose a photo' : 'Choose another',
                   ),
                 ),
               ),
@@ -1001,11 +1063,30 @@ class _CreateAvatarFlowState extends State<_CreateAvatarFlow> {
           ),
           const SizedBox(height: Space.x2),
           Text(
-            'HeyGen trains from this — it takes a few minutes, and you can '
-            'keep working while it does.',
+            'One person, facing the camera, in good light, nothing covering '
+            'the face. HeyGen trains from it — it takes a few minutes, and '
+            'you can keep working while it does.',
             style: ShiftType.caption(c.textMuted),
           ),
-          const SizedBox(height: Space.x4),
+          const SizedBox(height: Space.x3),
+          // Making a moving likeness of someone needs their say-so. The
+          // Suite asks for it (its likeness-consent route); so does this.
+          CheckboxListTile(
+            key: const ValueKey<String>('avatar-consent'),
+            value: _consented,
+            onChanged: _saving
+                ? null
+                : (bool? v) => setState(() => _consented = v ?? false),
+            contentPadding: EdgeInsets.zero,
+            controlAffinity: ListTileControlAffinity.leading,
+            dense: true,
+            title: Text(
+              'This photo is of me, and I agree to ShiftAi making an '
+              'animated avatar of my likeness from it.',
+              style: ShiftType.bodySm(c.text),
+            ),
+          ),
+          const SizedBox(height: Space.x3),
           Row(
             children: <Widget>[
               Expanded(
@@ -1017,7 +1098,8 @@ class _CreateAvatarFlowState extends State<_CreateAvatarFlow> {
               const SizedBox(width: Space.x3),
               Expanded(
                 child: FilledButton(
-                  onPressed: bytes == null || _saving ? null : _create,
+                  onPressed:
+                      bytes == null || !_consented || _saving ? null : _create,
                   child: _saving
                       ? SizedBox.square(
                           dimension: 18,

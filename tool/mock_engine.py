@@ -6,11 +6,60 @@ the app at it, and the screens you get are the screens a first-time user
 gets.
 """
 import json
+import os
+import time
+from email.parser import BytesParser
+from email.policy import HTTP
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 USER = {"handle": "rae", "name": "Rae Okonkwo", "email": "rae@example.com"}
 AVATARS = []
 _next_id = [1]
+# What POST /v1/uploads was given, by id, so a trained avatar can show the
+# photo it was made from. Nothing is written to disk.
+UPLOADS = {}
+# How long the stand-in "render" takes. Long enough to watch the gallery
+# poll, short enough to wait for: MOCK_TRAIN_SECONDS=5 for a quicker look.
+TRAIN_SECONDS = float(os.environ.get("MOCK_TRAIN_SECONDS", "20"))
+BASE = "http://127.0.0.1:8111"
+
+
+def settle_avatars():
+    """Finish any render whose time is up, the way HeyGen would.
+
+    A name with "fail" in it fails, so the failed tile can be seen too.
+    The first avatar to finish becomes personal if none is: the profile
+    picture should not wait for the person to find a button.
+    """
+    now = time.time()
+    for avatar in AVATARS:
+        if avatar["status"] == "training" and now - avatar["_t0"] >= TRAIN_SECONDS:
+            if "fail" in avatar["name"].lower():
+                avatar["status"] = "failed"
+                avatar["failureReason"] = (
+                    "The mock engine fails any avatar named with \"fail\".")
+            else:
+                avatar["status"] = "ready"
+                avatar["previewUrl"] = f"{BASE}/v1/mock/media/{avatar['_upload']}"
+    if not any(a["personal"] for a in AVATARS):
+        for avatar in AVATARS:
+            if avatar["status"] == "ready":
+                avatar["personal"] = True
+                break
+
+
+def public(avatar):
+    return {k: v for k, v in avatar.items() if not k.startswith("_")}
+
+
+def file_part(content_type, raw):
+    """The `file` field of a multipart upload, as (bytes, type)."""
+    message = BytesParser(policy=HTTP).parsebytes(
+        f"Content-Type: {content_type}\r\n\r\n".encode() + raw)
+    for part in message.iter_parts():
+        if part.get_param("name", header="content-disposition") == "file":
+            return part.get_payload(decode=True), part.get_content_type()
+    return None, None
 # None until PATCH /v1/me/location sets it. A brand new account has shared
 # no location, so GET /v1/league must answer "not placed yet" until then —
 # never the global board in a league's clothing.
@@ -90,9 +139,6 @@ EMPTY = {
         "credit_weights": {"held": 0, "use": 0},
         "connect_window": {"start": None, "end": None},
     }},
-    # Same list object POST/DELETE below mutate, so a GET always sees
-    # whatever this run has been asked to create.
-    "/v1/avatars": AVATARS,
 }
 
 
@@ -116,6 +162,21 @@ class Handler(BaseHTTPRequestHandler):
         path = self.path.split("?")[0]
         if path == "/v1/league":
             return self._send(200, league_placement() if LOCATION["set"] else {})
+        if path == "/v1/avatars":
+            settle_avatars()
+            return self._send(200, [public(a) for a in AVATARS])
+        if path.startswith("/v1/mock/media/"):
+            stored = UPLOADS.get(path.rsplit("/", 1)[-1])
+            if stored is None:
+                return self._send(404, {"message": "No such upload."})
+            data, kind = stored
+            self.send_response(200)
+            self.send_header("Content-Type", kind)
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+            return None
         if path in EMPTY:
             return self._send(200, EMPTY[path])
         self._send(404, {"message": f"No route {path}."})
@@ -158,31 +219,47 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(204)
         if path == "/v1/uploads":
             length = int(self.headers.get("Content-Length", 0))
-            self.rfile.read(length)  # discarded — nothing here stores files
+            raw = self.rfile.read(length)
+            data, kind = file_part(self.headers.get("Content-Type", ""), raw)
+            if data is None:
+                return self._send(400, {"message": "No file in the upload."})
             n = _next_id[0]
             _next_id[0] += 1
+            UPLOADS[f"u{n}"] = (data, kind or "application/octet-stream")
             return self._send(200, {"id": f"u{n}"})
         if path == "/v1/avatars":
             length = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(length) or b"{}")
+            if body.get("consent") is not True:
+                return self._send(400, {
+                    "message": "Confirm the photo is you before making an "
+                               "avatar of it."})
+            if body.get("uploadId") not in UPLOADS:
+                return self._send(400, {"message": "Upload the photo first."})
+            n = _next_id[0]
+            _next_id[0] += 1
             avatar = {
-                "id": f"avatar-{len(AVATARS) + 1}",
+                "id": f"avatar-{n}",
                 "name": body.get("name") or "Avatar",
                 "status": "training",
                 "personal": False,
+                "_t0": time.time(),
+                "_upload": body["uploadId"],
             }
             AVATARS.append(avatar)
-            return self._send(200, avatar)
+            return self._send(200, public(avatar))
         if path.startswith("/v1/avatars/") and path.endswith("/personal"):
             avatar_id = path.split("/")[3]
-            made_personal = None
-            for avatar in AVATARS:
-                avatar["personal"] = avatar["id"] == avatar_id
-                if avatar["personal"]:
-                    made_personal = avatar
-            if made_personal is None:
+            settle_avatars()
+            target = next((a for a in AVATARS if a["id"] == avatar_id), None)
+            if target is None:
                 return self._send(404, {"message": f"No avatar {avatar_id}."})
-            return self._send(200, made_personal)
+            if target["status"] != "ready":
+                return self._send(400, {
+                    "message": "Only a finished avatar can be personal."})
+            for avatar in AVATARS:
+                avatar["personal"] = avatar is target
+            return self._send(200, public(target))
         self._send(404, {"message": f"No route {path}."})
 
     def do_PATCH(self):

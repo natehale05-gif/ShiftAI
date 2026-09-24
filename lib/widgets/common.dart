@@ -1214,7 +1214,7 @@ class _AvatarSheet extends StatelessWidget {
             ),
             const SizedBox(height: Space.x2),
             _AvatarOption(
-              name: 'Default voice',
+              name: 'No avatar',
               selected: state.activeAvatarId == null,
               onTap: () => choose(null),
             ),

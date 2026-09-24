@@ -185,6 +185,12 @@ class HttpRepository implements ShiftRepository {
       );
 
   @override
+  Future<List<Avatar>> avatars() async =>
+      Decode.rows(await _api.get(_avatars), 'avatars')
+          .map(Decode.avatar)
+          .toList(growable: false);
+
+  @override
   Future<Avatar> createAvatar({
     required String uploadId,
     required String name,
@@ -192,7 +198,13 @@ class HttpRepository implements ShiftRepository {
       Decode.avatar(
         await _api.post(
           _avatars,
-          body: <String, dynamic>{'uploadId': uploadId, 'name': name},
+          body: <String, dynamic>{
+            'uploadId': uploadId,
+            'name': name,
+            // The create flow cannot be submitted without the person
+            // ticking this; see docs/API.md, "POST /v1/avatars".
+            'consent': true,
+          },
         ) as Map<String, dynamic>,
       );
 
