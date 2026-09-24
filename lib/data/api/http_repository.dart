@@ -1,6 +1,7 @@
 import '../../models/models.dart';
 import 'dart:async';
 
+import '../../util/prompt.dart';
 import '../repository.dart';
 import '../seed_repository.dart';
 import 'api_client.dart';
@@ -153,14 +154,28 @@ class HttpRepository implements ShiftRepository {
 
   @override
   Future<String> polish(String prompt) async {
-    final dynamic body =
-        await _api.post(_polish, body: <String, dynamic>{'prompt': prompt});
-    if (body is Map<String, dynamic> && body['prompt'] is String) {
-      return body['prompt'] as String;
+    final dynamic body;
+    try {
+      body =
+          await _api.post(_polish, body: <String, dynamic>{'prompt': prompt});
+    } on ShiftApiException catch (error) {
+      // An engine with no polisher answers 404 (or 405, the route exists
+      // for something else). That is not the person's problem: the brief
+      // is written here instead, the same one the seeded app writes, so
+      // the sparkle always does something. Anything else, from offline
+      // to out of credits, is a real refusal and goes back to the bar.
+      if (error.status == 404 || error.status == 405) {
+        return Prompt.polish(prompt);
+      }
+      rethrow;
     }
-    // A backend without a polisher is not an error; it just has nothing to
-    // add, and the bar keeps what the person typed.
-    return prompt;
+    final Object? polished = body is Map<String, dynamic>
+        ? (body['prompt'] ?? body['polished'] ?? body['text'])
+        : null;
+    if (polished is String && polished.trim().isNotEmpty) return polished;
+    // It answered, but with nothing usable. Blanking the bar would lose
+    // what the person typed; the local brief keeps the button honest.
+    return Prompt.polish(prompt);
   }
 
   @override

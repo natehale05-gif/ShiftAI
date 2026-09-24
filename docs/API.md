@@ -475,6 +475,23 @@ keeps private threads out of its own storage; honouring this server-side is
 the other half of that promise, and the claim is made to the person in the
 composer's hint text.
 
+### `POST /v1/polish`
+
+The composer's sparkle, "Polish my prompt". Body `{ "prompt": "make a
+poster" }`; answer `{ "prompt": "<the fuller brief>" }`. The client puts
+the answer back in the bar with an Undo; it never sends it on its own.
+
+- **No polisher yet? Answer 404.** The client then writes the brief
+  itself (`lib/util/prompt.dart`), so the button still works. Do not
+  answer 200 with the prompt unchanged: that reads as "already a full
+  brief."
+- **A refusal is shown as one.** Out of credits, moderation, a provider
+  down: answer the usual error shape and the person sees the `message`,
+  with what they typed left alone.
+- Plain text only. If the Suite's polisher is `image/polish-prompt`,
+  this route can wrap it; the studio relay's shape is not one the client
+  reads.
+
 ### `PATCH /v1/me`
 
 ```json

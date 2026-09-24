@@ -126,6 +126,18 @@ class Handler(BaseHTTPRequestHandler):
             length = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(length) or b"{}")
             return self._send(200, answer(body))
+        if path == "/v1/polish":
+            length = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(length) or b"{}")
+            ask = str(body.get("prompt", "")).strip()
+            if not ask:
+                return self._send(400, {"message": "Nothing to polish."})
+            # A stand-in rewrite, marked as the mock's so nobody mistakes
+            # it for a model's work. The shape is what matters: {prompt}.
+            return self._send(200, {
+                "prompt": f"{ask}\n\n(Polished by the mock engine.) "
+                          "Say who it is for, the tone, and what to deliver."
+            })
         if path.startswith("/v1/ecovault/") and path.endswith("/save"):
             return self._send(200, {"id": path.split("/")[3], "saved": True})
         if path == "/v1/auth/sign-in":

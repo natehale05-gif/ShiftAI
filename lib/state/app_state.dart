@@ -1183,14 +1183,19 @@ class AppState extends ChangeNotifier {
   }
 
   /// Rewrites what is in the composer into a fuller brief.
-  Future<String> polishPrompt(String text) async {
+  ///
+  /// `error` is set, and `text` is what was passed in, when the engine
+  /// refused. This leaves [lastError] alone on purpose: that field is what
+  /// the board and the shelf read to say they did not load, so a polish
+  /// that failed must not blank them, and one that worked must not hide
+  /// a load that did not.
+  Future<({String text, ShiftApiException? error})> polishPrompt(
+    String text,
+  ) async {
     try {
-      final String out = await _repo.polish(text);
-      lastError = null;
-      return out;
+      return (text: await _repo.polish(text), error: null);
     } on ShiftApiException catch (error) {
-      lastError = error;
-      return text;
+      return (text: text, error: error);
     }
   }
 

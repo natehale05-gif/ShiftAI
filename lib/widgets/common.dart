@@ -800,6 +800,7 @@ class _PillComposerState extends State<PillComposer> {
   }
 
   void _send() {
+    if (_polishing) return;
     if (_controller.text.trim().isNotEmpty) Haptics.light();
     final String text = _controller.text.trim();
     if (text.isEmpty && _attachments.isEmpty) return;
@@ -826,36 +827,98 @@ class _PillComposerState extends State<PillComposer> {
     final List<PickedFile> picked = await pickAnyFiles();
     if (picked.isEmpty || !mounted) return;
     setState(() => _attachments.addAll(picked));
-    final ScaffoldMessengerState? bar = ScaffoldMessenger.maybeOf(context);
-    bar?.showSnackBar(
-      SnackBar(
-        content: Text(
-          picked.length == 1
-              ? 'Attached ${picked.first.name}'
-              : 'Attached ${picked.length} files',
-        ),
-      ),
+    _say(
+      picked.length == 1
+          ? 'Attached ${picked.first.name}'
+          : 'Attached ${picked.length} files',
     );
+  }
+
+  /// The composer's own snackbars float above it rather than over it. Over
+  /// it, they hid Send and the last lines of a polished brief — the lines
+  /// the message asks you to read — for the four seconds they showed.
+  ///
+  /// It waits a frame, so a pill that just grew to fit a polished brief
+  /// is measured at its new height rather than the one-line one.
+  void _say(String message, {SnackBarAction? action}) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _showAbove(message, action);
+    });
+  }
+
+  void _showAbove(String message, SnackBarAction? action) {
+    final ScaffoldMessengerState? bar = ScaffoldMessenger.maybeOf(context);
+    if (bar == null) return;
+    final RenderObject? box = context.findRenderObject();
+    // The composer's height already counts the home indicator, which the
+    // floating snackbar adds again for itself.
+    final double lift = box is RenderBox && box.hasSize
+        ? math.max(0, box.size.height - MediaQuery.paddingOf(context).bottom)
+        : 0;
+    bar
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          action: action,
+          margin: EdgeInsets.fromLTRB(Space.x4, 0, Space.x4, lift + Space.x2),
+        ),
+      );
   }
 
   /// Polish my prompt: the sparkle rewrites what is in the bar into a
   /// fuller brief and puts it back, so you can read it before sending.
+  ///
+  /// The bar is read-only until the answer lands, so nothing typed in the
+  /// meantime is overwritten, and enter does not send the unpolished text
+  /// underneath it. Every outcome says what happened: the rewrite comes
+  /// with an Undo, text that is already a brief says so, and a refusal
+  /// keeps what you typed and tells you why.
   Future<void> _polish() async {
-    final String text = _controller.text.trim();
+    final String original = _controller.text;
+    final String text = original.trim();
     if (text.isEmpty || _polishing) return;
+    Haptics.light();
     setState(() => _polishing = true);
     // The engine does the rewriting. With no server configured the seeded
     // repository answers locally, so the button behaves the same offline.
-    final String polished = await AppScope.read(context).polishPrompt(text);
+    final ({String text, ShiftApiException? error}) result =
+        await AppScope.read(context).polishPrompt(text);
     if (!mounted) return;
+    final String polished = result.text;
+    final bool changed = result.error == null && polished.trim() != text;
     setState(() {
       _polishing = false;
-      _controller.value = TextEditingValue(
-        text: polished,
-        selection: TextSelection.collapsed(offset: polished.length),
-      );
+      if (changed) {
+        _controller.value = TextEditingValue(
+          text: polished,
+          selection: TextSelection.collapsed(offset: polished.length),
+        );
+      }
     });
     _focus.requestFocus();
+
+    _say(
+      result.error != null
+          ? 'Could not polish it: ${result.error!.message}'
+          : changed
+              ? 'Polished. Read it over before you send.'
+              : 'That is already a full brief.',
+      action: changed
+          ? SnackBarAction(
+              label: 'Undo',
+              onPressed: () {
+                // Only if the brief is still what is there: an Undo
+                // after you have edited it would throw your edits away.
+                if (!mounted || _controller.text != polished) return;
+                _controller.value = TextEditingValue(
+                  text: original,
+                  selection: TextSelection.collapsed(offset: original.length),
+                );
+              },
+            )
+          : null,
+    );
   }
 
   /// Opens the avatar sheet and applies whatever gets tapped. Closing it
@@ -963,6 +1026,7 @@ class _PillComposerState extends State<PillComposer> {
                           child: TextField(
                             controller: _controller,
                             focusNode: _focus,
+                            readOnly: _polishing,
                             minLines: 1,
                             maxLines: 8,
                             keyboardType: TextInputType.multiline,
@@ -1004,27 +1068,38 @@ class _PillComposerState extends State<PillComposer> {
                           ),
                         ),
                       if (widget.showSparkle)
-                        IconButton(
-                          tooltip: 'Polish my prompt',
-                          onPressed: _polishing ? null : _polish,
-                          icon: _polishing
-                              ? SizedBox.square(
-                                  dimension: 18,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    valueColor: AlwaysStoppedAnimation<Color>(
-                                      c.accent,
+                        // Greyed until there is something to polish, so an
+                        // empty bar does not offer a button that does nothing.
+                        ValueListenableBuilder<TextEditingValue>(
+                          valueListenable: _controller,
+                          builder: (BuildContext context,
+                              TextEditingValue value, Widget? _) {
+                            final bool empty = value.text.trim().isEmpty;
+                            return IconButton(
+                              tooltip: 'Polish my prompt',
+                              onPressed: _polishing || empty ? null : _polish,
+                              icon: _polishing
+                                  ? SizedBox.square(
+                                      dimension: 18,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        valueColor:
+                                            AlwaysStoppedAnimation<Color>(
+                                          c.accent,
+                                        ),
+                                      ),
+                                    )
+                                  : Icon(
+                                      Icons.auto_awesome_rounded,
+                                      size: 20,
+                                      color: empty ? c.textMuted : c.accent,
                                     ),
-                                  ),
-                                )
-                              : Icon(
-                                  Icons.auto_awesome_rounded,
-                                  size: 20,
-                                  color: c.accent,
-                                ),
-                          style: IconButton.styleFrom(
-                            minimumSize: const Size(_controlSize, _controlSize),
-                          ),
+                              style: IconButton.styleFrom(
+                                minimumSize:
+                                    const Size(_controlSize, _controlSize),
+                              ),
+                            );
+                          },
                         ),
                       const SizedBox(width: Space.x1),
                       // A full control, 44 like the rest. It was a 40
