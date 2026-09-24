@@ -1637,6 +1637,12 @@ class AppState extends ChangeNotifier {
       if (answer.any((ChatMessage m) => m.attachment != null)) {
         _closeRing(RingKind.create);
       }
+      // The file it made is in the vault on the server, not the one on
+      // screen, which was read before it existed: "Open in Vault" opened
+      // a vault without it until the next refresh.
+      if (answer.any((ChatMessage m) => _notInVault(m.attachment))) {
+        unawaited(refreshVault());
+      }
       _changed();
       return answer;
     } on ShiftApiException catch (error) {
@@ -1663,6 +1669,25 @@ class AppState extends ChangeNotifier {
       messages = <ChatMessage>[...messages, notice];
       _changed();
       return <ChatMessage>[notice];
+    }
+  }
+
+  bool _notInVault(MessageAttachment? file) =>
+      file != null &&
+      file.vaultItemId.isNotEmpty &&
+      !vault.any((VaultItem v) => v.id == file.vaultItemId);
+
+  /// Re-reads the vault on its own. A failure leaves what is on screen:
+  /// the file is still in the thread, and the next refresh brings it.
+  Future<void> refreshVault() async {
+    final int signOuts = _signOuts;
+    try {
+      final List<VaultItem> next = await _repo.vault();
+      if (signOuts != _signOuts) return;
+      vault = next;
+      _changed();
+    } on ShiftApiException catch (error) {
+      debugPrint('vault: not re-read — ${error.message}');
     }
   }
 

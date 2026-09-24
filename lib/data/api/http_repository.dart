@@ -339,6 +339,12 @@ class HttpRepository implements ShiftRepository {
       );
 
   @override
+  Future<List<VaultItem>> vault() async =>
+      Decode.rows(await _api.get(_vault), 'vault')
+          .map(VaultItem.fromJson)
+          .toList(growable: false);
+
+  @override
   Future<List<Avatar>> avatars() async =>
       Decode.rows(await _api.get(_avatars), 'avatars')
           .map(Decode.avatar)

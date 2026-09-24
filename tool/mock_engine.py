@@ -20,6 +20,8 @@ _next_id = [1]
 UPLOADS = {}
 # Saved chats by id, the way /v1/threads keeps them.
 THREADS = {}
+# What the image and video models made, newest first: /v1/vault.
+VAULT = []
 # How long the stand-in "render" takes. Long enough to watch the gallery
 # poll, short enough to wait for: MOCK_TRAIN_SECONDS=5 for a quicker look.
 TRAIN_SECONDS = float(os.environ.get("MOCK_TRAIN_SECONDS", "20"))
@@ -96,6 +98,8 @@ MODELS = [
      "bestFor": ["image"]},
 ]
 
+MODELS_BY_ID = {m["id"]: m["name"] for m in MODELS}
+
 
 def answer(body):
     """A reply that proves the model read the whole conversation.
@@ -124,6 +128,9 @@ def answer(body):
         return [{"id": f"m{len(history) + 1}", "author": "shift",
                  "model": model, "modelName": names.get(model, model),
                  "body": f"Here is the polished prompt: {rewrite}"}]
+    made = make(body, model, history)
+    if made is not None:
+        return [made]
     asked = ask(body, history)
     if asked is not None:
         asked.update({
@@ -150,6 +157,45 @@ def answer(body):
         "modelName": names.get(model, model),
         "body": text,
     }]
+
+
+def make(body, model, history):
+    """What an image or video model answers with: the file, in the vault.
+
+    The row is in /v1/vault before the answer goes, as docs/API.md asks,
+    so the app's "Open in Vault" has something to open. There is no real
+    file behind it; the vault draws its seeded art for a row without one.
+    """
+    kind = {"mock-image": "image", "mock-video": "video"}.get(model)
+    if kind is None:
+        return None
+    n = _next_id[0]
+    _next_id[0] += 1
+    prompt = (body.get("prompt") or "").strip()
+    row = {
+        "id": f"v{n}", "title": prompt[:60] or "Untitled", "kind": kind,
+        "mediaType": kind, "prompt": prompt, "model": MODELS_BY_ID[model],
+        "createdAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "credits": 4 if kind == "image" else 14,
+        "aspect": 1.0 if kind == "image" else 0.5625,
+        "published": False,
+        **({"durationSeconds": 20, "width": 1080, "height": 1920}
+           if kind == "video" else {"width": 1024, "height": 1024}),
+    }
+    VAULT.insert(0, row)
+    name = "png" if kind == "image" else "mp4"
+    return {
+        "id": f"m{len(history) + 1}", "author": "shift", "model": model,
+        "modelName": MODELS_BY_ID[model],
+        "eyebrow": f"ShiftAi · {kind.title()}",
+        "body": f"Made it: {prompt}",
+        "attachment": {
+            "fileName": f"mock-{n}.{name}", "kind": kind,
+            "meta": ("1024 × 1024 · 4 CREDITS" if kind == "image"
+                     else "20S · 1080 × 1920 · 14 CREDITS"),
+            "vaultItemId": row["id"],
+        },
+    }
 
 
 FEEL = "What should it feel like?"
@@ -256,6 +302,8 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(data)
             return None
+        if path == "/v1/vault":
+            return self._send(200, VAULT)
         if path in EMPTY:
             return self._send(200, EMPTY[path])
         self._send(404, {"message": f"No route {path}."})

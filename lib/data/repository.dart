@@ -162,6 +162,10 @@ abstract interface class ShiftRepository {
   Future<League?> shareLocation({required double lat, required double lng});
 
   // Vault ----------------------------------------------------------------
+  /// This creator's vault, on its own: re-read when an answer brings back
+  /// a file the vault on screen does not have yet.
+  Future<List<VaultItem>> vault();
+
   /// Hearts a piece in EcoVault, which is what puts it in the person's own
   /// vault. Saving someone else's work copies nothing and changes nothing
   /// about their piece — it is a bookmark, and it is the viewer's.

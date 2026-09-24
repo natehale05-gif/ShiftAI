@@ -440,6 +440,10 @@ the model call when its caller goes away saves the credits. An answer
 that needs longer than 3 minutes should come back at once as "working on
 it" and land in the vault when it is done.
 
+**A made file.** `attachment.vaultItemId` names a row that is already in
+`GET /v1/vault` when the answer goes. The app re-reads `/v1/vault` when an
+answer names a row it does not have yet, so "Open in Vault" finds it.
+
 **Retry and Edit** re-send an earlier question in place: the history
 then ends before that question, and the reply being replaced (or, for
 an edit, everything after the question) is not in it.
