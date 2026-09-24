@@ -169,13 +169,51 @@ class HttpRepository implements ShiftRepository {
       }
       rethrow;
     }
-    final Object? polished = body is Map<String, dynamic>
-        ? (body['prompt'] ?? body['polished'] ?? body['text'])
-        : null;
-    if (polished is String && polished.trim().isNotEmpty) return polished;
+    final String? polished = _polishedFrom(body);
     // It answered, but with nothing usable. Blanking the bar would lose
     // what the person typed; the local brief keeps the button honest.
-    return Prompt.polish(prompt);
+    if (polished == null) return Prompt.polish(prompt);
+    // It answered with what was sent. Seen on the phone: "make a video of
+    // Miami" came back as itself and the bar said "That is already a
+    // full brief", which it plainly was not. An echo is a server with
+    // nothing to add, the same as a 404, so the brief is written here.
+    // Only text that already is one (Prompt.isPolished) stays as it is.
+    if (polished.trim() == prompt.trim() && !Prompt.isPolished(prompt)) {
+      return Prompt.polish(prompt);
+    }
+    return polished;
+  }
+
+  /// Where a polisher puts its rewrite. The rewrite's own names come
+  /// before `prompt`: a reply carrying both the original (`prompt`) and
+  /// the rewrite (`polished`, `polishedPrompt`, …) used to hand back the
+  /// original, because `prompt` was read first. Rex's routes wrap their
+  /// answers in `data`, so that is looked inside too.
+  static const List<String> _polishedKeys = <String>[
+    'polished',
+    'polishedPrompt',
+    'polished_prompt',
+    'improvedPrompt',
+    'enhancedPrompt',
+    'rewritten',
+    'result',
+    'output',
+    'text',
+    'prompt',
+  ];
+
+  static String? _polishedFrom(Object? body, [int depth = 0]) {
+    if (body is String) return body.trim().isEmpty ? null : body;
+    if (body is! Map<String, dynamic> || depth > 2) return null;
+    for (final String key in _polishedKeys) {
+      final Object? value = body[key];
+      if (value is String && value.trim().isNotEmpty) return value;
+    }
+    for (final String key in <String>['data', 'result']) {
+      final String? inner = _polishedFrom(body[key], depth + 1);
+      if (inner != null) return inner;
+    }
+    return null;
   }
 
   @override

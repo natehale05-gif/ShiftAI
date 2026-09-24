@@ -511,9 +511,13 @@ poster" }`; answer `{ "prompt": "<the fuller brief>" }`. The client puts
 the answer back in the bar with an Undo; it never sends it on its own.
 
 - **No polisher yet? Answer 404.** The client then writes the brief
-  itself (`lib/util/prompt.dart`), so the button still works. Do not
-  answer 200 with the prompt unchanged: that reads as "already a full
-  brief."
+  itself (`lib/util/prompt.dart`), so the button still works. An answer
+  that is the prompt unchanged is treated the same way (it used to read
+  as "That is already a full brief" on a one-line ask).
+- **Where the rewrite goes.** `{ "prompt": "..." }` is the shape. The
+  client also reads `polished`, `polishedPrompt`, `result` or `text`,
+  ahead of `prompt`, and looks inside a `data` envelope, so relaying the
+  Suite's `image/polish-prompt` answer as it is works either way.
 - **A refusal is shown as one.** Out of credits, moderation, a provider
   down: answer the usual error shape and the person sees the `message`,
   with what they typed left alone.
