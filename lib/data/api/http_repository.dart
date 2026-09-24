@@ -160,28 +160,99 @@ class HttpRepository implements ShiftRepository {
           await _api.post(_polish, body: <String, dynamic>{'prompt': prompt});
     } on ShiftApiException catch (error) {
       // An engine with no polisher answers 404 (or 405, the route exists
-      // for something else). That is not the person's problem: the brief
-      // is written here instead, the same one the seeded app writes, so
-      // the sparkle always does something. Anything else, from offline
-      // to out of credits, is a real refusal and goes back to the bar.
+      // for something else). The connected AI still polishes it, through
+      // the chat route every engine has. Anything else, from offline to
+      // out of credits, is a real refusal and goes back to the bar.
       if (error.status == 404 || error.status == 405) {
-        return Prompt.polish(prompt);
+        return _polishByChat(prompt);
       }
       rethrow;
     }
     final String? polished = _polishedFrom(body);
-    // It answered, but with nothing usable. Blanking the bar would lose
-    // what the person typed; the local brief keeps the button honest.
-    if (polished == null) return Prompt.polish(prompt);
-    // It answered with what was sent. Seen on the phone: "make a video of
-    // Miami" came back as itself and the bar said "That is already a
-    // full brief", which it plainly was not. An echo is a server with
-    // nothing to add, the same as a 404, so the brief is written here.
-    // Only text that already is one (Prompt.isPolished) stays as it is.
-    if (polished.trim() == prompt.trim() && !Prompt.isPolished(prompt)) {
-      return Prompt.polish(prompt);
+    // It answered with nothing usable, or with what was sent ("make a
+    // video of Miami" came back as itself). Either is an engine with no
+    // polisher of its own; the AI does it instead.
+    if (polished == null ||
+        (polished.trim() == prompt.trim() && !Prompt.isPolished(prompt))) {
+      return _polishByChat(prompt);
     }
     return polished;
+  }
+
+  /// Polishing with the AI the Suite already talks to, when the engine has
+  /// no /v1/polish of its own.
+  ///
+  /// This used to fall back to the brief lib/util/prompt.dart writes: a
+  /// fixed template, which on the phone turned "What time is it" into
+  /// "What time is it. Audience: someone new to this. Tone: plain and
+  /// specific. …" — a question made a statement, with a brief nobody
+  /// asked for. The template now only serves the demo, with no server.
+  ///
+  /// It goes as a private, one-off message with no history, so the
+  /// thread never sees it and a server that honours `private` keeps
+  /// nothing. The reply is the rewrite and only the rewrite; a preamble
+  /// ("Here is a polished version:") or quotes round it are taken off.
+  Future<String> _polishByChat(String prompt) async {
+    final List<ChatMessage> reply =
+        await send(polishInstruction(prompt), private: true);
+    for (final ChatMessage m in reply) {
+      if (m.author == MessageAuthor.you) continue;
+      if (m.failure != null) {
+        throw ShiftApiException(
+          ShiftApiErrorKind.server,
+          m.failure!.sentence,
+        );
+      }
+      final String? cleaned = cleanRewrite(<String>[
+        if (m.body.trim().isNotEmpty) m.body,
+        ...m.bullets.map((String b) => '- $b'),
+      ].join('\n'));
+      if (cleaned != null) return cleaned;
+    }
+    throw const ShiftApiException(
+      ShiftApiErrorKind.malformed,
+      'The AI sent back nothing to use. Try again, or send it as it is.',
+    );
+  }
+
+  /// What the AI is asked. Kept to one job: the person's own prompt,
+  /// sharper, in their words, a question still a question.
+  static String polishInstruction(String prompt) =>
+      'Rewrite the prompt below so an AI model can do it well. Keep what '
+      'the person wants, their wording where it works, and every specific '
+      'they gave. Add only what is missing and would change the result '
+      '(format, length, audience, style), and nothing that is not implied. '
+      'If it is a question, keep it a question. Reply with the rewritten '
+      'prompt only: no preamble, no quotes, no explanation.\n\n'
+      'Prompt:\n$prompt';
+
+  static final RegExp _preamble = RegExp(
+    r'^\s*(?:(?:sure|okay|ok)[,!.]?\s*)?'
+    r"(?:here(?:'s| is)\s+(?:the|a|your)\s+)?"
+    r'(?:polished|rewritten|improved|refined|revised|clearer)\s+'
+    r'(?:version|prompt)?[^:\n]{0,40}:\s*',
+    caseSensitive: false,
+  );
+
+  /// The rewrite alone: a label or preamble line off the front, a code
+  /// fence or quotes off the outside. Null when nothing is left.
+  static String? cleanRewrite(String raw) {
+    String text = raw.trim();
+    final RegExpMatch? fence =
+        RegExp(r'^```[a-z]*\n([\s\S]*?)\n```$').firstMatch(text);
+    if (fence != null) text = fence.group(1)!.trim();
+    text = text.replaceFirst(_preamble, '').trim();
+    for (final (String open, String close) in <(String, String)>[
+      ('"', '"'),
+      ('\u201c', '\u201d'),
+      ("'", "'"),
+      ('`', '`'),
+    ]) {
+      if (text.length > 1 && text.startsWith(open) && text.endsWith(close)) {
+        text = text.substring(open.length, text.length - close.length).trim();
+      }
+    }
+    return text.isEmpty ? null : text;
   }
 
   /// Where a polisher puts its rewrite. The rewrite's own names come

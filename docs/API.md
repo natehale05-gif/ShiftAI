@@ -545,10 +545,14 @@ The composer's sparkle, "Polish my prompt". Body `{ "prompt": "make a
 poster" }`; answer `{ "prompt": "<the fuller brief>" }`. The client puts
 the answer back in the bar with an Undo; it never sends it on its own.
 
-- **No polisher yet? Answer 404.** The client then writes the brief
-  itself (`lib/util/prompt.dart`), so the button still works. An answer
-  that is the prompt unchanged is treated the same way (it used to read
-  as "That is already a full brief" on a one-line ask).
+- **No polisher yet? Answer 404.** The client then asks the connected
+  AI itself, through `POST /v1/messages`: one `private: true` message
+  with no history, an instruction to rewrite the prompt and reply with
+  the rewrite only, and the prompt. The reply's `body` is the rewrite (a
+  "Here is the polished prompt:" preamble and quotes are taken off). An
+  answer here that is the prompt unchanged, or has no rewrite in it, is
+  treated the same way. Only with no server at all does the app write
+  its own template brief.
 - **Where the rewrite goes.** `{ "prompt": "..." }` is the shape. The
   client also reads `polished`, `polishedPrompt`, `result` or `text`,
   ahead of `prompt`, and looks inside a `data` envelope, so relaying the

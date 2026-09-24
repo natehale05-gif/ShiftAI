@@ -98,6 +98,21 @@ def answer(body):
     names = {m["id"]: m["name"] for m in MODELS}
     model = body.get("model") or MODELS[0]["id"]
     history = body.get("history") or []
+    prompt = body.get("prompt") or ""
+    # The app's polish fallback: when an engine has no /v1/polish, the
+    # rewrite is asked for through this route. Answered with a preamble,
+    # the way models do, so the app's clean-up is exercised too.
+    if prompt.startswith("Rewrite the prompt below"):
+        original = prompt.split("Prompt:\n", 1)[-1].strip()
+        keep = original.rstrip(".?! ")
+        rewrite = (f"{keep} — answered for right now, where I am?"
+                   if original.endswith("?") or keep.lower().startswith(
+                       ("what", "when", "where", "who", "why", "how"))
+                   else f"{keep}. Vertical 1080 × 1920, about 20 seconds, "
+                        "for people seeing it for the first time.")
+        return [{"id": f"m{len(history) + 1}", "author": "shift",
+                 "model": model, "modelName": names.get(model, model),
+                 "body": f"Here is the polished prompt: {rewrite}"}]
     asked = ask(body, history)
     if asked is not None:
         asked.update({

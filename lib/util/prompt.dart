@@ -17,10 +17,20 @@ abstract final class Prompt {
     if (text.isEmpty || isPolished(text)) return text;
 
     final String ask = _stripLeadIn(text);
+    // A question stays a question. The template used to end every ask
+    // with a full stop and a production brief, so "What time is it"
+    // became "What time is it." with an audience and a tone. This brief
+    // is only the demo's now; a server polishes with its AI.
+    if (_isQuestion(ask)) {
+      final String q = _capitalise(ask.replaceFirst(RegExp(r'[.!?]*$'), ''));
+      return '$q?\n\n'
+          'Deliver: a direct answer first, then anything worth knowing. '
+          'Say what you assumed if anything here was unclear.';
+    }
     final _Guess guess = _Guess.from(ask);
 
     final StringBuffer out = StringBuffer()
-      ..writeln(_capitalise(ask.endsWith('.') ? ask : '$ask.'))
+      ..writeln(_capitalise(RegExp(r'[.!]$').hasMatch(ask) ? ask : '$ask.'))
       ..writeln()
       ..writeln('Audience: ${guess.audience}.')
       ..writeln('Tone: ${guess.tone}.')
@@ -28,6 +38,19 @@ abstract final class Prompt {
       ..write('Deliver: ${guess.deliverable}. '
           'Say what you assumed if anything here was unclear.');
     return out.toString();
+  }
+
+  static final RegExp _questionWord = RegExp(
+    r'^(what|when|where|who|whom|whose|which|why|how|is|are|am|was|were|'
+    r'do|does|did|can|could|should|would|will|may|might|shall|have|has)\b',
+    caseSensitive: false,
+  );
+
+  static bool _isQuestion(String ask) {
+    if (ask.trimRight().endsWith('?')) return true;
+    // "can you make me…" is a request, not a question; the lead-ins are
+    // stripped before this, so what is left starting "can" is a question.
+    return _questionWord.hasMatch(ask.trim()) && !ask.contains('\n');
   }
 
   /// "can you please make me a…" carries no information; the ask does.
