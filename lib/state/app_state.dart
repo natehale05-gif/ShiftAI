@@ -157,19 +157,7 @@ class AppState extends ChangeNotifier {
     lastError = null;
     notifyListeners();
     try {
-      _snap = await _repo.load();
-      standings = List<StandingRow>.of(_snap.standings);
-      ecoVault = List<VaultItem>.of(_snap.ecoVault);
-      trophies = List<Trophy>.of(_snap.trophies);
-      vault = List<VaultItem>.of(_snap.vault);
-      notes = List<Note>.of(_snap.notes);
-      threads = _mergeThreads(threads, _snap.threads);
-      agentRuns = List<AgentRun>.of(_snap.agentRuns);
-      jobs = List<JobRow>.of(_snap.jobs);
-      designs = List<DesignDoc>.of(_snap.designs);
-      avatars = List<Avatar>.of(_snap.avatars);
-      league = _snap.league;
-      showingCached = false;
+      _applySnapshot(await _repo.load());
     } on ShiftApiException catch (error) {
       // Keep what is on screen. An empty list would read as "you have
       // nothing", which is a different and wrong statement.
@@ -179,6 +167,47 @@ class AppState extends ChangeNotifier {
       _changed();
       unawaited(WidgetSync.push(this));
     }
+  }
+
+  /// Puts what the engine answered on screen, over whatever was there.
+  void _applySnapshot(ShiftSnapshot snap) {
+    _snap = snap;
+    standings = List<StandingRow>.of(_snap.standings);
+    ecoVault = List<VaultItem>.of(_snap.ecoVault);
+    trophies = List<Trophy>.of(_snap.trophies);
+    vault = List<VaultItem>.of(_snap.vault);
+    notes = List<Note>.of(_snap.notes);
+    threads = _mergeThreads(threads, _snap.threads);
+    agentRuns = List<AgentRun>.of(_snap.agentRuns);
+    jobs = List<JobRow>.of(_snap.jobs);
+    designs = List<DesignDoc>.of(_snap.designs);
+    avatars = List<Avatar>.of(_snap.avatars);
+    league = _snap.league;
+    showingCached = false;
+  }
+
+  /// The rest of a load that ran past [load]'s first-screen budget. It
+  /// lands like a refresh; a refusal leaves the last-seen copy showing
+  /// and says why, the same as a load that failed outright.
+  void _finishLoad(Future<ShiftSnapshot> pending) {
+    refreshing = true;
+    final int session = _signOuts;
+    unawaited(() async {
+      try {
+        final ShiftSnapshot snap = await pending;
+        // Signed out while it was on its way: it is the last account's.
+        if (session != _signOuts) return;
+        _applySnapshot(snap);
+        lastError = null;
+      } on ShiftApiException catch (error) {
+        if (session != _signOuts) return;
+        lastError = error;
+      } finally {
+        refreshing = false;
+        _changed();
+        unawaited(WidgetSync.push(this));
+      }
+    }());
   }
 
   /// Runs a write against the engine and rolls the screen back if it is
@@ -235,6 +264,7 @@ class AppState extends ChangeNotifier {
     ShiftRepository? repository,
     Backend? engine,
     TokenStore? tokenStore,
+    Duration firstScreenBudget = const Duration(seconds: 3),
   }) async {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     Map<String, dynamic> blob = <String, dynamic>{};
@@ -265,12 +295,23 @@ class AppState extends ChangeNotifier {
 
     ShiftSnapshot snapshot;
     ShiftApiException? failure;
+    // A load still running when the first screen is due. The app used to
+    // wait for all of it — sixteen requests, each allowed 20 seconds, a
+    // token refresh first if one was due — behind a spinner, which on a
+    // slow engine or a weak signal read as a load that never finished.
+    // Now it waits [firstScreenBudget], then opens on the last-seen copy
+    // for this account (or empty screens) and lets this land when it does.
+    Future<ShiftSnapshot>? pending;
     if (!seeded && !backend.auth.signedIn) {
       // Nothing to fetch and nobody to fetch it for. The gate is next.
       snapshot = emptySnapshot();
     } else {
+      final Future<ShiftSnapshot> loading = repo.load();
       try {
-        snapshot = await repo.load();
+        snapshot = await loading.timeout(firstScreenBudget);
+      } on TimeoutException {
+        pending = loading;
+        snapshot = emptySnapshot();
       } on ShiftApiException catch (error) {
         failure = error;
         snapshot = seeded ? await SeedRepository().load() : emptySnapshot();
@@ -290,11 +331,14 @@ class AppState extends ChangeNotifier {
     // session, or a blob naming anyone else, still gets nothing.
     bool cachedWhileOffline = false;
     if (!seeded) {
-      final String who = failure == null
-          ? snapshot.creator.email
-          : backend.auth.creator?.email ?? '';
+      // Still loading is like offline for this: the engine has not said
+      // who this is yet, so the session does.
+      final bool unanswered = failure != null || pending != null;
+      final String who = unanswered
+          ? backend.auth.creator?.email ?? ''
+          : snapshot.creator.email;
       final bool sameAccount = who.isNotEmpty && blob['account'] == who;
-      cachedWhileOffline = failure != null && sameAccount;
+      cachedWhileOffline = unanswered && sameAccount;
       if (!sameAccount) {
         blob = Map<String, dynamic>.of(blob)
           ..remove('vault')
@@ -302,6 +346,9 @@ class AppState extends ChangeNotifier {
           ..remove('notes')
           ..remove('standings')
           ..remove('trophies')
+          // Saved chats are the account's like the rest: someone else
+          // signing in on this device must not get this one's Recents.
+          ..remove('threads')
           ..remove('rings');
       }
     }
@@ -314,6 +361,7 @@ class AppState extends ChangeNotifier {
     if (!seeded) state.signedIn = backend.auth.signedIn;
     unawaited(WidgetSync.configure());
     unawaited(WidgetSync.push(state));
+    if (pending != null) state._finishLoad(pending);
     return state;
   }
 
@@ -1245,7 +1293,12 @@ class AppState extends ChangeNotifier {
   /// Signing out empties the screens and the cache with them. Leaving a
   /// vault on the device for the next person to sign in is the same leak
   /// as showing them the seeded one.
+  /// Counts sign-outs, so an answer that was on its way for the last
+  /// account is not put on screen after it left.
+  int _signOuts = 0;
+
   Future<void> signOut() async {
+    _signOuts++;
     await _auth.signOut();
     signedIn = false;
     selectedVaultId = null;
