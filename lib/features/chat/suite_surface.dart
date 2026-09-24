@@ -6,6 +6,7 @@ import '../../models/models.dart';
 import '../../state/app_state.dart';
 import '../../theme/tokens.dart';
 import '../../theme/type.dart';
+import '../../util/choices.dart';
 import '../../util/haptics.dart';
 import '../../widgets/common.dart';
 import 'failure_card.dart';
@@ -333,6 +334,18 @@ class _MessageTile extends StatelessWidget {
       );
     }
 
+    // A question with answers to tap, on the newest reply only: once
+    // something has been said after it, it has been answered, and the
+    // older reply reads as it was written.
+    final bool latest = state.messages.isNotEmpty &&
+        identical(state.messages.last, message) &&
+        !state.thinking &&
+        !state.chatNeedsSignIn;
+    final OfferedChoices? offer = latest ? OfferedChoices.of(message) : null;
+    final String body = offer?.body ?? message.body;
+    final bool showBullets =
+        message.bullets.isNotEmpty && !(offer?.hideBullets ?? false);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
@@ -363,9 +376,8 @@ class _MessageTile extends StatelessWidget {
           ),
           const SizedBox(height: Space.x3),
         ],
-        if (message.body.isNotEmpty)
-          Text(message.body, style: ShiftType.body(c.text)),
-        if (message.bullets.isNotEmpty) ...<Widget>[
+        if (body.isNotEmpty) Text(body, style: ShiftType.body(c.text)),
+        if (showBullets) ...<Widget>[
           const SizedBox(height: Space.x3),
           ...message.bullets.map(
             (String line) => Padding(
@@ -396,9 +408,198 @@ class _MessageTile extends StatelessWidget {
           const SizedBox(height: Space.x4),
           ArtifactCard(attachment: message.attachment!),
         ],
+        if (offer != null) ...<Widget>[
+          const SizedBox(height: Space.x4),
+          ChoiceButtons(
+            key: ValueKey<String>('choices-${message.id}'),
+            offer: offer,
+            onAnswer: state.sendMessage,
+          ),
+        ],
         const SizedBox(height: Space.x2),
         _MessageActions(message: message),
       ],
+    );
+  }
+}
+
+/// A reply's question, answered with a tap: one button per answer, the
+/// way Claude asks. One tap sends that answer as your message. When it
+/// asks for several, each tap ticks one and Send sends them together.
+/// Typing in the bar still works for anything the buttons do not cover.
+class ChoiceButtons extends StatefulWidget {
+  const ChoiceButtons({
+    required this.offer,
+    required this.onAnswer,
+    super.key,
+  });
+
+  final OfferedChoices offer;
+
+  /// Sends the answer; false when it could not be sent.
+  final bool Function(String answer) onAnswer;
+
+  @override
+  State<ChoiceButtons> createState() => _ChoiceButtonsState();
+}
+
+class _ChoiceButtonsState extends State<ChoiceButtons> {
+  final Set<ChatChoice> _picked = <ChatChoice>{};
+
+  /// Set once an answer has gone, so a second tap before the reply lands
+  /// cannot send a second answer.
+  bool _sent = false;
+
+  void _send(Iterable<ChatChoice> picked) {
+    if (_sent) return;
+    final String answer = widget.offer.answer(picked);
+    if (answer.isEmpty) return;
+    Haptics.light();
+    if (widget.onAnswer(answer)) setState(() => _sent = true);
+  }
+
+  void _tap(ChatChoice choice) {
+    if (!widget.offer.multiSelect) {
+      _send(<ChatChoice>[choice]);
+      return;
+    }
+    Haptics.selection();
+    setState(() {
+      if (!_picked.remove(choice)) _picked.add(choice);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ShiftColors c = ShiftColors.of(context);
+    final OfferedChoices offer = widget.offer;
+    final bool multi = offer.multiSelect;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        for (int i = 0; i < offer.choices.length; i++) ...<Widget>[
+          if (i > 0) const SizedBox(height: Space.x2),
+          _ChoiceButton(
+            number: i + 1,
+            choice: offer.choices[i],
+            multi: multi,
+            picked: _picked.contains(offer.choices[i]),
+            onTap: _sent ? null : () => _tap(offer.choices[i]),
+          ),
+        ],
+        const SizedBox(height: Space.x2),
+        Row(
+          children: <Widget>[
+            Expanded(
+              child: Text(
+                multi
+                    ? 'Pick any that fit, or type your own below.'
+                    : 'Or type your own answer below.',
+                style: ShiftType.caption(c.textMuted),
+              ),
+            ),
+            if (multi)
+              FilledButton(
+                onPressed:
+                    _picked.isEmpty || _sent ? null : () => _send(_picked),
+                style: FilledButton.styleFrom(minimumSize: const Size(0, 44)),
+                child: Text(
+                  _picked.isEmpty ? 'Send' : 'Send ${_picked.length}',
+                ),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _ChoiceButton extends StatelessWidget {
+  const _ChoiceButton({
+    required this.number,
+    required this.choice,
+    required this.multi,
+    required this.picked,
+    required this.onTap,
+  });
+
+  final int number;
+  final ChatChoice choice;
+  final bool multi;
+  final bool picked;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final ShiftColors c = ShiftColors.of(context);
+    final String? detail = choice.description;
+
+    return Semantics(
+      button: true,
+      toggled: multi ? picked : null,
+      child: Material(
+        color: picked ? c.accentSoft : c.surfaceRaised,
+        shape: RoundedRectangleBorder(
+          borderRadius: Radii.mdAll,
+          side: BorderSide(color: picked ? c.accent : c.border),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 48),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: Space.x3,
+                vertical: Space.x3,
+              ),
+              child: Row(
+                children: <Widget>[
+                  Container(
+                    width: 26,
+                    height: 26,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: picked ? c.accent : c.surface,
+                      borderRadius: Radii.smAll,
+                      border: Border.all(color: picked ? c.accent : c.border),
+                    ),
+                    child: multi && picked
+                        ? Icon(Icons.check_rounded, size: 16, color: c.onAccent)
+                        : Text(
+                            '$number',
+                            style: ShiftType.copy(
+                              picked ? c.onAccent : c.textMuted,
+                              size: 13,
+                              weight: 600,
+                            ),
+                          ),
+                  ),
+                  const SizedBox(width: Space.x3),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        Text(
+                          choice.label,
+                          style: ShiftType.copy(c.text, size: 15, weight: 600),
+                        ),
+                        if (detail != null)
+                          Text(detail, style: ShiftType.caption(c.textMuted)),
+                      ],
+                    ),
+                  ),
+                  if (!multi)
+                    Icon(Icons.arrow_forward_rounded,
+                        size: 18, color: c.textMuted),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -522,6 +723,7 @@ class _MessageActions extends StatelessWidget {
   String get _plainText => <String>[
         if (message.body.isNotEmpty) message.body,
         ...message.bullets.map((String b) => '• $b'),
+        ...message.choices.map((ChatChoice c) => '• ${c.label}'),
         if (message.attachment != null)
           '${message.attachment!.fileName} — ${message.attachment!.meta}',
       ].join('\n');

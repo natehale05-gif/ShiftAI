@@ -853,11 +853,22 @@ class ChatMessage {
     this.failure,
     this.model,
     this.modelName,
+    this.choices = const <ChatChoice>[],
+    this.multiSelect = false,
   });
 
   final String id;
   final MessageAuthor author;
   final String body;
+
+  /// Answers the model is offering to its own question, drawn as buttons
+  /// under the reply the way Claude asks. Empty for a reply that asks
+  /// nothing — and for one that does in plain text, which
+  /// `OfferedChoices` still turns into buttons where it can.
+  final List<ChatChoice> choices;
+
+  /// Whether several of [choices] can be picked and sent together.
+  final bool multiSelect;
 
   /// Which AI wrote this reply, and its name for the label over it. Null
   /// for your own messages and for an engine that does not say.
@@ -876,22 +887,97 @@ class ChatMessage {
         'bullets': bullets,
         if (model != null) 'model': model,
         if (modelName != null) 'modelName': modelName,
+        if (choices.isNotEmpty)
+          'choices': choices.map((ChatChoice c) => c.toJson()).toList(),
+        if (multiSelect) 'multiSelect': true,
       };
 
-  factory ChatMessage.fromJson(Map<String, dynamic> json) => ChatMessage(
-        id: json['id'] as String,
-        author: MessageAuthor.values.firstWhere(
-          (MessageAuthor a) => a.name == json['author'],
-          orElse: () => MessageAuthor.you,
-        ),
-        body: json['body'] as String? ?? '',
-        eyebrow: json['eyebrow'] as String?,
-        bullets: (json['bullets'] as List<dynamic>? ?? <dynamic>[])
-            .map((dynamic b) => b as String)
-            .toList(),
-        model: json['model'] as String?,
-        modelName: json['modelName'] as String?,
-      );
+  /// `choices` at the top level, or the `question: {options, multiSelect}`
+  /// shape a tool call like Claude's AskUserQuestion comes back in. Either
+  /// takes plain strings or `{label, description}`.
+  static (List<ChatChoice>, bool) _choicesFrom(Map<String, dynamic> json) {
+    final Object? question = json['question'];
+    final Map<String, dynamic> from =
+        question is Map<String, dynamic> ? question : json;
+    final Object? raw = from['choices'] ?? from['options'];
+    final List<ChatChoice> choices = raw is List
+        ? raw
+            .map(ChatChoice.tryParse)
+            .whereType<ChatChoice>()
+            .take(ChatChoice.max)
+            .toList(growable: false)
+        : const <ChatChoice>[];
+    final bool multi = from['multiSelect'] == true ||
+        from['multi_select'] == true ||
+        json['multiSelect'] == true;
+    return (choices, multi);
+  }
+
+  factory ChatMessage.fromJson(Map<String, dynamic> json) {
+    final (List<ChatChoice> choices, bool multiSelect) = _choicesFrom(json);
+    return ChatMessage(
+      id: json['id'] as String,
+      author: MessageAuthor.values.firstWhere(
+        (MessageAuthor a) => a.name == json['author'],
+        orElse: () => MessageAuthor.you,
+      ),
+      body: json['body'] as String? ?? '',
+      eyebrow: json['eyebrow'] as String?,
+      bullets: (json['bullets'] as List<dynamic>? ?? <dynamic>[])
+          .map((dynamic b) => b as String)
+          .toList(),
+      model: json['model'] as String?,
+      modelName: json['modelName'] as String?,
+      choices: choices,
+      multiSelect: multiSelect,
+    );
+  }
+}
+
+/// One answer a reply offers. [label] is what is sent when it is tapped;
+/// [description] is the line of detail under it, never sent.
+@immutable
+class ChatChoice {
+  const ChatChoice(this.label, {this.description});
+
+  final String label;
+  final String? description;
+
+  /// More than this and it is a list to read, not a question to answer.
+  static const int max = 8;
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'label': label,
+        if (description != null) 'description': description,
+      };
+
+  static ChatChoice? tryParse(Object? raw) {
+    if (raw is String) {
+      return raw.trim().isEmpty ? null : ChatChoice(raw.trim());
+    }
+    if (raw is! Map) return null;
+    final Object? label = raw['label'] ?? raw['title'] ?? raw['text'];
+    if (label is! String || label.trim().isEmpty) return null;
+    final Object? description = raw['description'] ?? raw['detail'];
+    return ChatChoice(
+      label.trim(),
+      description: description is String && description.trim().isNotEmpty
+          ? description.trim()
+          : null,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is ChatChoice &&
+      other.label == label &&
+      other.description == description;
+
+  @override
+  int get hashCode => Object.hash(label, description);
+
+  @override
+  String toString() => 'ChatChoice($label)';
 }
 
 @immutable
