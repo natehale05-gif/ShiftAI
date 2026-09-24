@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shift_ai/app/app.dart';
@@ -123,5 +124,46 @@ void main() {
     expect(Fmt.ago(DateTime(2026, 9, 24, 9), now: now), '3 hours ago');
     expect(Fmt.ago(DateTime(2026, 9, 22, 12), now: now), '2 days ago');
     expect(Fmt.ago(DateTime(2026, 9, 1), now: now), '1 Sep 2026');
+  });
+
+  test('sharing a piece hands over who made it, the prompt and its link', () {
+    final VaultItem post = VaultItem.fromJson(<String, dynamic>{
+      ...Seed.ecoVault.first.toJson(),
+      'mediaUrl': 'https://app.example.com/media/abc123.mp4',
+    });
+    final String text = pieceShareText(post);
+    expect(
+        text,
+        startsWith('${post.title} · By ${post.byName} '
+            '(@${post.byHandle}) on ShiftAi'));
+    expect(text, contains('Prompt: ${post.prompt}'));
+    expect(text, endsWith('https://app.example.com/media/abc123.mp4'));
+    final VaultItem mine = Seed.vault.first;
+    expect(
+        pieceShareText(mine), startsWith('${mine.title} · Made with ShiftAi'));
+  });
+
+  testWidgets('with no share sheet, Share copies it and says so',
+      (WidgetTester tester) async {
+    String? copied;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (MethodCall call) async {
+        if (call.method == 'Clipboard.setData') {
+          copied = (call.arguments as Map<Object?, Object?>)['text'] as String?;
+        }
+        return null;
+      },
+    );
+    addTearDown(() => tester.binding.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, null));
+    final AppState state = await _openEcoVault(tester);
+    await tester.tap(find.byTooltip('Share').first);
+    // The share plugin's "not here" arrives on the real clock.
+    await tester
+        .runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+    await tester.pumpAndSettle();
+    expect(copied, contains(state.ecoVault.first.title));
+    expect(find.text('Copied, ready to paste anywhere'), findsOneWidget);
   });
 }

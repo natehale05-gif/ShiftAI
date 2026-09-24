@@ -33,3 +33,9 @@
 # video_player (vault playback) is io.flutter.plugins.videoplayer, so the
 # blanket io.flutter.plugins rule at the top already keeps it. The player
 # underneath, androidx.media3 (ExoPlayer), ships its own consumer rules.
+
+# share_plus (Share on a vault or EcoVault piece) is not under
+# io.flutter.plugins either. Its result comes back through a
+# BroadcastReceiver (SharePlusPendingIntent) that the sheet calls by name,
+# so it is kept whole, like the plugins above.
+-keep class dev.fluttercommunity.plus.share.** { *; }
