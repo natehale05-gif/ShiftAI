@@ -7,13 +7,42 @@ import 'package:flutter/material.dart';
 import '../../theme/tokens.dart';
 import '../../theme/type.dart';
 
-/// The longest side a picked avatar photo is allowed. Big enough to stay
-/// sharp at every size the app draws it, small enough to keep in storage.
-const int kAvatarMaxSide = 512;
+/// The longest side of the photo sent to train an avatar. It used to be
+/// 512 — a size chosen when this was a profile picture — which is far too
+/// little for HeyGen to build a likeness from. 2048 keeps a phone photo's
+/// detail and still caps a 48-megapixel original at a few megabytes.
+const int kAvatarMaxSide = 2048;
 
-/// Scales a picked image down and re-encodes it as PNG. Returns null if the
-/// bytes are not an image the engine can read.
-Future<Uint8List?> prepareAvatarBytes(Uint8List source) async {
+/// Below this on the shorter side there is not enough face to train on.
+/// Better to say so here than to upload it and fail minutes later.
+const int kAvatarMinSide = 256;
+
+/// A photo ready to upload, or the sentence saying why it is not.
+class PreparedPhoto {
+  const PreparedPhoto._({
+    this.bytes,
+    this.mimeType = 'image/png',
+    this.fileName = 'avatar.png',
+    this.problem,
+  });
+
+  final Uint8List? bytes;
+
+  /// Always matches [bytes]. A small JPEG used to go up unchanged but
+  /// labelled `image/png`, which is the kind of mismatch a renderer
+  /// rejects without saying why.
+  final String mimeType;
+  final String fileName;
+  final String? problem;
+}
+
+/// Checks a picked photo and scales it down if it is huge. Kept as it is
+/// when it is already a sensible size, so nothing is lost to re-encoding.
+Future<PreparedPhoto> prepareAvatarPhoto(
+  Uint8List source, {
+  required String fileName,
+  required String mimeType,
+}) async {
   try {
     // Decode once to learn the size, then decode again at the size we
     // actually want. Re-encoding through the canvas keeps this working on
@@ -24,10 +53,22 @@ Future<Uint8List?> prepareAvatarBytes(Uint8List source) async {
     final int h = first.image.height;
     first.image.dispose();
     probe.dispose();
-    if (w == 0 || h == 0) return null;
+    if (w == 0 || h == 0) return _unreadable(fileName);
+    if (math.min(w, h) < kAvatarMinSide) {
+      return PreparedPhoto._(
+        problem: '$fileName is $w × $h. Use a photo at least '
+            '$kAvatarMinSide pixels on each side, face clearly in view.',
+      );
+    }
 
     final int longest = math.max(w, h);
-    if (longest <= kAvatarMaxSide) return source;
+    if (longest <= kAvatarMaxSide) {
+      return PreparedPhoto._(
+        bytes: source,
+        mimeType: _imageType(mimeType, fileName),
+        fileName: fileName,
+      );
+    }
 
     final double factor = kAvatarMaxSide / longest;
     final ui.Codec codec = await ui.instantiateImageCodec(
@@ -41,12 +82,48 @@ Future<Uint8List?> prepareAvatarBytes(Uint8List source) async {
     frame.image.dispose();
     codec.dispose();
     // If re-encoding is not available, the original still works — it is
-    // only bigger.
-    return png?.buffer.asUint8List() ?? source;
+    // only bigger — and keeps its own type.
+    if (png == null) {
+      return PreparedPhoto._(
+        bytes: source,
+        mimeType: _imageType(mimeType, fileName),
+        fileName: fileName,
+      );
+    }
+    return PreparedPhoto._(
+      bytes: png.buffer.asUint8List(),
+      fileName: '${_stem(fileName)}.png',
+    );
   } on Object catch (error) {
     debugPrint('avatar: could not read the picture — $error');
-    return null;
+    return _unreadable(fileName);
   }
+}
+
+PreparedPhoto _unreadable(String fileName) => PreparedPhoto._(
+      problem: 'Could not read $fileName as a picture. '
+          'Try a JPEG or PNG.',
+    );
+
+String _stem(String fileName) {
+  final int dot = fileName.lastIndexOf('.');
+  return dot <= 0 ? fileName : fileName.substring(0, dot);
+}
+
+/// The picker's type when it is an image type, otherwise one read off the
+/// extension. Never `application/octet-stream` for something that decoded
+/// as a picture.
+String _imageType(String mimeType, String fileName) {
+  if (mimeType.startsWith('image/')) return mimeType;
+  final String ext = fileName.split('.').last.toLowerCase();
+  return switch (ext) {
+    'jpg' || 'jpeg' => 'image/jpeg',
+    'webp' => 'image/webp',
+    'gif' => 'image/gif',
+    'heic' => 'image/heic',
+    'heif' => 'image/heif',
+    _ => 'image/png',
+  };
 }
 
 /// The avatar: the personal HeyGen avatar's preview when there is a

@@ -473,7 +473,16 @@ void main() {
     await tester.tap(find.text('Create an avatar'));
     await tester.pump();
 
-    expect(find.text('Choose a photo or clip'), findsOneWidget);
+    // A photo, not "a photo or clip": the picker only ever took images.
+    expect(find.text('Choose a photo'), findsOneWidget);
+    expect(
+      tester
+          .widget<CheckboxListTile>(
+              find.byKey(const ValueKey<String>('avatar-consent')))
+          .value,
+      isFalse,
+      reason: 'consent is never pre-ticked',
+    );
     final FilledButton create = tester.widget<FilledButton>(
       find.widgetWithText(FilledButton, 'Create'),
     );

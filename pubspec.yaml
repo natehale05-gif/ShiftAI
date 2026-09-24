@@ -28,6 +28,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/brand/
+    - assets/avatars/
   fonts:
     - family: Outfit
       fonts:

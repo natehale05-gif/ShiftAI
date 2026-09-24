@@ -782,12 +782,24 @@ class AppState extends ChangeNotifier {
   /// for the engine rather than showing a row with a made-up id or a
   /// training state it has not actually confirmed — same reasoning as
   /// [addNote]. Null means the engine refused, and [lastError] says why.
+  ///
+  /// [consented] is the person's own tick: this photo is them, and they
+  /// agree to it being made into an avatar. Nothing is uploaded without it.
   Future<Avatar?> createAvatar(
     List<int> bytes, {
     required String name,
+    required bool consented,
     String fileName = 'avatar.png',
     String mimeType = 'image/png',
   }) async {
+    if (!consented) {
+      lastError = const ShiftApiException(
+        ShiftApiErrorKind.badRequest,
+        'Confirm the photo is you before making an avatar of it.',
+      );
+      _changed();
+      return null;
+    }
     try {
       final String uploadId = await _repo.upload(
         fileName: fileName,
@@ -806,6 +818,36 @@ class AppState extends ChangeNotifier {
       lastError = error;
       _changed();
       return null;
+    }
+  }
+
+  /// Whether any avatar is still being rendered, which is what the gallery
+  /// keeps re-reading for.
+  bool get avatarsTraining =>
+      avatars.any((Avatar a) => a.status == AvatarStatus.training);
+
+  /// Re-reads only the avatars, so one that finished training turns ready
+  /// without the person reopening the app. The seeded catalogue has no
+  /// renderer behind it, so there it never asks.
+  ///
+  /// A failed read keeps what is showing and says nothing: the next tick
+  /// asks again, and a poll that throws up an error every twenty seconds
+  /// would be worse than one that waits.
+  Future<void> refreshAvatars() async {
+    if (seededDemo) return;
+    try {
+      final List<Avatar> next = await _repo.avatars();
+      avatars = next;
+      // Generating as an avatar that is gone, or no longer ready, would
+      // send an id the server refuses; fall back to no avatar instead.
+      final String? active = activeAvatarId;
+      if (active != null &&
+          !next.any((Avatar a) => a.id == active && a.ready)) {
+        activeAvatarId = null;
+      }
+      _changed();
+    } on ShiftApiException {
+      return;
     }
   }
 

@@ -117,9 +117,17 @@ abstract interface class ShiftRepository {
   Future<Creator> updateHandle(String handle);
 
   // Avatars ----------------------------------------------------------------
-  /// Starts training a new avatar from an already-[upload]ed photo or
-  /// clip. Comes back `training` — HeyGen does not render synchronously,
-  /// so a later [load] or [refresh] is what learns it finished.
+  /// This creator's avatars, on their own: what the gallery re-reads while
+  /// one is training, without reloading everything else.
+  Future<List<Avatar>> avatars();
+
+  /// Starts training a new avatar from an already-[upload]ed photo. Comes
+  /// back `training` — HeyGen does not render synchronously, so [avatars]
+  /// is what learns it finished.
+  ///
+  /// Only ever called after the person has confirmed the photo is of them
+  /// and agreed to it being used for their likeness; the request says so,
+  /// so the server can record it where the Suite records likeness consent.
   Future<Avatar> createAvatar({required String uploadId, required String name});
 
   /// Makes this the avatar shown as the profile picture and on the

@@ -99,6 +99,9 @@ class SeedRepository implements ShiftRepository {
   }
 
   @override
+  Future<List<Avatar>> avatars() async => List<Avatar>.of(_avatars);
+
+  @override
   Future<Avatar> createAvatar({
     required String uploadId,
     required String name,

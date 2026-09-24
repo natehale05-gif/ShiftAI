@@ -118,6 +118,16 @@ empty, on 127.0.0.1:8111. Point the app at it to see exactly what a brand
 new account sees. It is also the fastest way to check a real server: any
 screen that differs is a place the shapes diverge.
 
+Avatars run on `/v1/avatars` (list, create with `consent: true`, make
+personal, delete), and Rex's preview still answers that route empty. The
+app side is done: consent before upload, a trainable photo, a still
+`previewUrl` (a video there is moved to `clipUrl`), and the gallery
+re-reading every 15 s while one trains. `docs/API.md` has the rest.
+The built-in avatar, "ShiftAi default" (`BuiltInAvatars.shiftai`, an
+AI-generated face shipped in `assets/avatars/`), is who the Suite
+generates as until someone picks their own; no `avatarId` means her. She
+is never anyone's profile picture or leaderboard face.
+
 `DELETE /v1/me` is store-blocking — Apple rejects account creation
 without in-app deletion (Guideline 5.1.1(v)). The button and the
 confirmation exist; they need something to call.
@@ -139,6 +149,6 @@ exploratory, branch.
 flutter analyze && flutter test
 ```
 
-231 tests. They have caught every regression listed above at least once,
+249 tests. They have caught every regression listed above at least once,
 including several of mine. If one fails, read it before changing it —
 twice now the test was right and my expectation was wrong.

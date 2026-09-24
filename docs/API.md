@@ -72,18 +72,38 @@ name when absent.
 
 ```json
 [{ "id": "a1", "name": "Everyday", "status": "ready", "personal": true,
-   "previewUrl": "https://cdn.example.com/avatars/a1.mp4" },
+   "previewUrl": "https://cdn.example.com/avatars/a1.png",
+   "clipUrl": "https://cdn.example.com/avatars/a1.mp4" },
  { "id": "a2", "name": "Studio lighting", "status": "training",
-   "personal": false }]
+   "personal": false },
+ { "id": "a3", "name": "Hat", "status": "failed", "personal": false,
+   "failureReason": "The face was covered. Try a photo without a hat." }]
 ```
 
 `id` and `name` are required. `status` is one of `training`, `ready` or
 `failed`, and falls back to `training` if it is anything else — a status
-the client does not recognise should not read as ready. `personal` marks
-the one shown as the profile picture and on the leaderboard; the server
-is the one enforcing that exactly one is ever true, the client just
-reflects it. `previewUrl` is the still or looping clip HeyGen rendered;
-send it once `status` is `ready`, omit it otherwise.
+the client does not recognise should not read as ready.
+
+- **`previewUrl` is a still image** (PNG, JPEG or WebP) — HeyGen's
+  preview image, not its video. It is the profile picture, the
+  leaderboard face and the gallery tile, and every one of those is drawn
+  as a picture. A video here cannot be drawn: the client moves anything
+  ending `.mp4`, `.mov`, `.webm`, `.m4v` or `.m3u8` to `clipUrl` and
+  shows initials until a still arrives. Send it once `status` is
+  `ready`, omit it otherwise.
+- **`clipUrl`** is the looping video, when there is one. Optional; the
+  client keeps it but does not play it yet.
+- **`failureReason`** is one sentence the person can act on, shown
+  under "Failed". Optional, only with `failed`.
+- **`personal`** marks the one shown as the profile picture and on the
+  leaderboard; the server enforces that at most one is ever true, the
+  client just reflects it. When an account's first avatar finishes and
+  none is personal, make that one personal: nobody should have to find
+  a button before their face shows up.
+
+The client re-reads this route on its own every 15 seconds while any
+avatar is `training` and the gallery is open, and once when the gallery
+opens. Keep it cheap: it is the whole of the training "push" for now.
 
 The same `previewUrl`, for whichever avatar is personal, belongs on the
 signed-in creator's own row in `/v1/standings` as `avatarUrl` — that is
@@ -372,7 +392,7 @@ account, just on a smaller board.
 | POST | `/v1/designs/{id}/duplicate` | — | the new design |
 | DELETE | `/v1/designs/{id}` | — | — |
 | POST | `/v1/uploads` | multipart, field `file` | `{id}` |
-| POST | `/v1/avatars` | `{uploadId, name}` | the avatar, `training` |
+| POST | `/v1/avatars` | `{uploadId, name, consent}` | the avatar, `training` |
 | POST | `/v1/avatars/{id}/personal` | — | the avatar, now `personal` |
 | DELETE | `/v1/avatars/{id}` | — | — |
 | PATCH | `/v1/me/location` | `{lat, lng}` | the league placement |
@@ -385,9 +405,18 @@ account, just on a smaller board.
 ```
 
 `avatarId` is optional and names one of this creator's own avatars —
-generate as that likeness rather than in whatever voice the engine
-answers in by default. An id that is not theirs, not found, or not yet
-`ready` is a `badRequest`, with a sentence for it.
+generate as that likeness. An id that is not theirs, not found, or not
+yet `ready` is a `badRequest`, with a sentence for it.
+
+**No `avatarId` means the built-in avatar, `shiftai-default`.** She ships
+with the app (`assets/avatars/shiftai-default.jpg`) and is what the Suite
+generates as until someone picks one of their own, like HeyGen's stock
+presenters. Train her once on the server from the full-size original,
+`docs/avatars/shiftai-default-1024.jpg` (AI-generated for ShiftAi, not a
+real person, so no likeness consent applies), and use her whenever
+`avatarId` is absent or is `"shiftai-default"`. She is never in
+`GET /v1/avatars` and never anyone's `personal` avatar or leaderboard
+face: those stay the person's own.
 
 Answer with one or more messages, in the order they should appear:
 
@@ -507,18 +536,28 @@ A handle already taken is a `badRequest`, with a sentence for it in
 ### `POST /v1/avatars`
 
 ```json
-{ "uploadId": "u1", "name": "Studio lighting" }
+{ "uploadId": "u1", "name": "Studio lighting", "consent": true }
 ```
 
-`uploadId` is the id `POST /v1/uploads` handed back for a photo or clip
-of this creator. Kick off training with HeyGen (or whatever renders it)
-and answer immediately with the new avatar at `status: "training"` —
-this does not wait for the render. `GET /v1/avatars` on a later `load`
-or `refresh` is how the client learns it finished; there is no push for
-this yet, see "Not built yet".
+`uploadId` is the id `POST /v1/uploads` handed back for a photo of this
+creator: one image, `image/png`, `image/jpeg` or `image/webp` (and HEIC
+from an iPhone), at least 256 px on the short side and at most 2048 px on
+the long side. The multipart part's content type always matches its bytes.
+
+`consent: true` means the person ticked "This photo is of me, and I agree
+to ShiftAi making an animated avatar of my likeness from it". The client
+cannot send this route without it. Record it wherever the Suite records
+likeness consent (its `likeness-consent` studio route), and refuse a
+request without it as a `badRequest`.
+
+Kick off training with HeyGen (or whatever renders it) and answer
+immediately with the new avatar at `status: "training"` — this does not
+wait for the render. `GET /v1/avatars` is how the client learns it
+finished; see above for how often it asks.
 
 `POST /v1/avatars/{id}/personal` takes no body and answers with that
-avatar at `personal: true`. Every other avatar this creator has should
+avatar at `personal: true`. Only a `ready` avatar can be personal; refuse
+the others as a `badRequest`. Every other avatar this creator has should
 come back `personal: false` on the next read — the server owns "exactly
 one," the client only asks for a specific one to be it.
 
@@ -673,9 +712,10 @@ you before it can be written:
   want a socket or SSE to feel live.
 - **Upload progress.** `POST /v1/uploads` is one shot with no progress
   reporting and no resume.
-- **Avatar training status is poll-only.** A creator has to reopen or
-  refresh to learn a `training` avatar became `ready`; there is no push
-  for it. Realtime, above, would cover this too if it gets built.
+- **Avatar training status is poll-only.** The gallery re-reads
+  `/v1/avatars` every 15 seconds while one is training; leave the
+  gallery and it waits until you come back. Realtime, above, would
+  replace the poll if it gets built.
 - **Which provider renders an avatar.** This document assumes HeyGen
   because that is the plan, but nothing in the contract names it — the
   client only ever sees `training` / `ready` / `failed` and a URL.

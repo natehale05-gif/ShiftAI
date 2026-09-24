@@ -481,8 +481,8 @@ void main() {
           await _server(repo: SeedRepository(replyDelay: Duration.zero), signedIn: true);
       final int before = state.avatars.length;
 
-      final Avatar? created =
-          await state.createAvatar(<int>[1, 2, 3], name: 'New face');
+      final Avatar? created = await state
+          .createAvatar(<int>[1, 2, 3], name: 'New face', consented: true);
       expect(created, isNotNull);
       expect(created!.status, AvatarStatus.training);
       expect(state.avatars.length, before + 1);
@@ -493,8 +493,8 @@ void main() {
       final AppState state = await _server(repo: _RefusingAvatarRepo(), signedIn: true);
       final int before = state.avatars.length;
 
-      final Avatar? created =
-          await state.createAvatar(<int>[1, 2, 3], name: 'New face');
+      final Avatar? created = await state
+          .createAvatar(<int>[1, 2, 3], name: 'New face', consented: true);
       expect(created, isNull);
       expect(state.avatars.length, before);
       expect(state.lastError?.message, 'Refused.');
