@@ -34,6 +34,7 @@ class HttpRepository implements ShiftRepository {
   static const String _avatars = '/v1/avatars';
   static const String _league = '/v1/league';
   static const String _boards = '/v1/boards';
+  static const String _models = '/v1/models';
   static const String _location = '/v1/me/location';
 
   /// The Suite's boards, if this engine serves them. Optional: an engine
@@ -48,9 +49,22 @@ class HttpRepository implements ShiftRepository {
     }
   }
 
+  /// The AIs this engine has connected. Optional, like the boards: an
+  /// engine without the route answers with whichever model it chooses.
+  Future<List<ChatModel>> _chatModels() async {
+    try {
+      return Decode.rows(await _api.get(_models), 'models')
+          .map(ChatModel.fromJson)
+          .toList(growable: false);
+    } on ShiftApiException {
+      return const <ChatModel>[];
+    }
+  }
+
   @override
   Future<ShiftSnapshot> load() async {
     final Future<SuiteBoards?> boards = _suiteBoards();
+    final Future<List<ChatModel>> models = _chatModels();
     // One round trip each, in parallel. A backend that would rather answer
     // in one shot can add a /v1/snapshot and this becomes a single call.
     final List<dynamic> parts = await Future.wait(<Future<dynamic>>[
@@ -106,6 +120,7 @@ class HttpRepository implements ShiftRepository {
           ? League.fromJson(parts[12] as Map<String, dynamic>)
           : null,
       boards: await boards,
+      models: await models,
     );
   }
 
@@ -114,15 +129,21 @@ class HttpRepository implements ShiftRepository {
     String prompt, {
     bool private = false,
     String? avatarId,
+    String? model,
+    List<ChatTurn> history = const <ChatTurn>[],
   }) async {
     final dynamic body = await _api.post(
       _messages,
       // `private` tells the server not to retain the exchange. The client
-      // already keeps it out of its own storage.
+      // already keeps it out of its own storage. The whole conversation
+      // goes with every message, so the server never has to keep a thread
+      // for the model to read it.
       body: <String, dynamic>{
         'prompt': prompt,
         'private': private,
         if (avatarId != null) 'avatarId': avatarId,
+        if (model != null) 'model': model,
+        'history': history.map((ChatTurn t) => t.toJson()).toList(),
       },
     );
     return Decode.rows(body, 'messages')

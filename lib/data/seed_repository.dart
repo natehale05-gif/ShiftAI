@@ -54,6 +54,8 @@ class SeedRepository implements ShiftRepository {
     String prompt, {
     bool private = false,
     String? avatarId,
+    String? model,
+    List<ChatTurn> history = const <ChatTurn>[],
   }) async {
     if (replyDelay > Duration.zero) await Future<void>.delayed(replyDelay);
     final String stamp = DateTime.now().microsecondsSinceEpoch.toString();

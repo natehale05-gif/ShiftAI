@@ -6,6 +6,7 @@ import '../../models/models.dart';
 import '../../state/app_state.dart';
 import '../../theme/tokens.dart';
 import '../../theme/type.dart';
+import '../../util/haptics.dart';
 import '../../widgets/common.dart';
 import 'failure_card.dart';
 
@@ -88,6 +89,10 @@ class _SuiteSurfaceState extends State<SuiteSurface> {
         // sparkle rewrites what is in it, and both should still work
         // while there is nobody to send to.
         if (state.chatNeedsSignIn) const _SignInToChat(),
+        // Which AI answers next. Only when the server has connected more
+        // than one: with one, or none listed, there is nothing to choose.
+        if (!state.chatNeedsSignIn && state.chatModels.length > 1)
+          const _ModelLine(),
         PillComposer(
           hint: state.privateChat
               ? 'Private chat — nothing here is saved'
@@ -331,6 +336,16 @@ class _MessageTile extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
+        // Who wrote this reply, when the engine says. With several AIs in
+        // one conversation this is how you tell them apart; each of them
+        // reads the others' replies as its own.
+        if (message.modelName != null) ...<Widget>[
+          Text(
+            message.modelName!,
+            style: ShiftType.copy(c.textMuted, size: 13, weight: 600),
+          ),
+          const SizedBox(height: Space.x2),
+        ],
         if (message.eyebrow != null) ...<Widget>[
           Row(
             children: <Widget>[
@@ -624,4 +639,162 @@ class _MessageAction extends StatelessWidget {
       ),
     );
   }
+}
+
+/// "Answering: Claude Opus 5.5" over the composer. Tapping it picks which
+/// connected AI answers the next message. Switching mid-conversation is
+/// the point: the next model reads the whole thread, the other models'
+/// replies included, and carries on from them.
+class _ModelLine extends StatelessWidget {
+  const _ModelLine();
+
+  @override
+  Widget build(BuildContext context) {
+    final AppState state = AppScope.of(context);
+    final ShiftColors c = ShiftColors.of(context);
+    final ChatModel? picked = state.chatModel;
+    final String name = picked?.name ?? 'Auto';
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(Space.x5, Space.x1, Space.x5, 0),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Semantics(
+          button: true,
+          label: 'Answering: $name. Change which AI answers.',
+          excludeSemantics: true,
+          child: InkWell(
+            borderRadius: Radii.pillAll,
+            onTap: () => _pickModel(context, state),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 44),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: Space.x2),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    Icon(Icons.hub_outlined, size: 16, color: c.textMuted),
+                    const SizedBox(width: Space.x2),
+                    Text(
+                      'Answering: ',
+                      style: ShiftType.copy(c.textMuted, size: 14),
+                    ),
+                    // A model's name has no length limit; it shrinks
+                    // before the line runs off the screen.
+                    Flexible(
+                      child: Text(
+                        name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: ShiftType.copy(c.accent, size: 14, weight: 600),
+                      ),
+                    ),
+                    Icon(
+                      Icons.keyboard_arrow_down_rounded,
+                      size: 18,
+                      color: c.accent,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+Future<void> _pickModel(BuildContext context, AppState state) {
+  return showModalBottomSheet<void>(
+    context: context,
+    builder: (BuildContext context) {
+      final ShiftColors c = ShiftColors.of(context);
+      Widget option({
+        required String? id,
+        required String name,
+        required String detail,
+      }) {
+        final bool on = state.chatModel?.id == id;
+        return InkWell(
+          onTap: () {
+            Haptics.selection();
+            state.setChatModel(id);
+            Navigator.of(context).pop();
+          },
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 56),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: Space.x4),
+              child: Row(
+                children: <Widget>[
+                  Expanded(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Text(
+                          name,
+                          style: ShiftType.copy(c.text, size: 16, weight: 600),
+                        ),
+                        if (detail.isNotEmpty)
+                          Text(detail, style: ShiftType.caption(c.textMuted)),
+                      ],
+                    ),
+                  ),
+                  if (on) Icon(Icons.check_rounded, color: c.accent, size: 22),
+                ],
+              ),
+            ),
+          ),
+        );
+      }
+
+      final ChatModel? fallback =
+          state.chatModels.where((ChatModel m) => m.isDefault).firstOrNull;
+      return SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(
+            Space.x5,
+            Space.x4,
+            Space.x5,
+            Space.x5,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              Semantics(
+                header: true,
+                child: Text(
+                  'Who answers',
+                  style: ShiftType.sectionTitle(c.text),
+                ),
+              ),
+              const SizedBox(height: Space.x1),
+              Text(
+                'Switch at any point. The next one reads the whole '
+                'conversation, every reply included, and carries on from it.',
+                style: ShiftType.bodySm(c.textMuted),
+              ),
+              const SizedBox(height: Space.x4),
+              GroupedList(
+                children: <Widget>[
+                  option(
+                    id: null,
+                    name: 'Auto',
+                    detail: fallback == null
+                        ? 'The server picks'
+                        : 'The server picks · usually ${fallback.name}',
+                  ),
+                  for (final ChatModel m in state.chatModels)
+                    option(id: m.id, name: m.name, detail: m.provider),
+                ],
+              ),
+            ],
+          ),
+        ),
+      );
+    },
+  );
 }

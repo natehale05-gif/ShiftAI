@@ -754,6 +754,57 @@ class SourceOption {
 
 enum MessageAuthor { you, shift }
 
+/// An AI the server has connected, which can answer in the Suite.
+@immutable
+class ChatModel {
+  const ChatModel({
+    required this.id,
+    required this.name,
+    this.provider = '',
+    this.isDefault = false,
+  });
+
+  final String id;
+  final String name;
+  final String provider;
+
+  /// The one that answers when nobody has picked.
+  final bool isDefault;
+
+  factory ChatModel.fromJson(Map<String, dynamic> json) => ChatModel(
+        id: json['id'] as String,
+        name: (json['name'] as String?)?.trim().isNotEmpty ?? false
+            ? json['name'] as String
+            : json['id'] as String,
+        provider: json['provider'] as String? ?? '',
+        isDefault: json['default'] == true,
+      );
+}
+
+/// One earlier turn of a conversation, as sent with the next message so
+/// whichever model answers can read everything said so far.
+///
+/// Every reply is `assistant`, whichever model wrote it. That is what lets
+/// several models share one conversation as though they were one: each
+/// reads the others' answers as its own and carries on from them. [model]
+/// is who actually wrote it, for the server's records, not for the
+/// model's context.
+@immutable
+class ChatTurn {
+  const ChatTurn({required this.role, required this.body, this.model});
+
+  /// `user` or `assistant`.
+  final String role;
+  final String body;
+  final String? model;
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'role': role,
+        'body': body,
+        if (model != null) 'model': model,
+      };
+}
+
 @immutable
 class ChatMessage {
   const ChatMessage({
@@ -764,11 +815,18 @@ class ChatMessage {
     this.bullets = const <String>[],
     this.attachment,
     this.failure,
+    this.model,
+    this.modelName,
   });
 
   final String id;
   final MessageAuthor author;
   final String body;
+
+  /// Which AI wrote this reply, and its name for the label over it. Null
+  /// for your own messages and for an engine that does not say.
+  final String? model;
+  final String? modelName;
   final String? eyebrow;
   final List<String> bullets;
   final MessageAttachment? attachment;
@@ -780,6 +838,8 @@ class ChatMessage {
         'body': body,
         'eyebrow': eyebrow,
         'bullets': bullets,
+        if (model != null) 'model': model,
+        if (modelName != null) 'modelName': modelName,
       };
 
   factory ChatMessage.fromJson(Map<String, dynamic> json) => ChatMessage(
@@ -793,6 +853,8 @@ class ChatMessage {
         bullets: (json['bullets'] as List<dynamic>? ?? <dynamic>[])
             .map((dynamic b) => b as String)
             .toList(),
+        model: json['model'] as String?,
+        modelName: json['modelName'] as String?,
       );
 }
 
