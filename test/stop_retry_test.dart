@@ -72,6 +72,7 @@ class _Engine extends SeedRepository {
     List<ChatTurn> history = const <ChatTurn>[],
     Future<void>? cancel,
     void Function(String soFar)? onText,
+    List<SentFile> files = const <SentFile>[],
   }) {
     final _Call call = _Call(prompt, model, history, cancel);
     calls.add(call);

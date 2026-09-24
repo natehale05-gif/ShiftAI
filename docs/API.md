@@ -450,6 +450,24 @@ the model call when its caller goes away saves the credits. An answer
 that needs longer than 3 minutes should come back at once as "working on
 it" and land in the vault when it is done.
 
+**Files sent with a message.** Anything attached with "+" is uploaded
+first (`POST /v1/uploads`, one file per request) and the message names
+the files by upload id:
+
+```json
+{ "prompt": "What is in this photo?",
+  "attachments": [{ "uploadId": "u1", "name": "ferry.png",
+                    "mimeType": "image/png", "sizeBytes": 48213 }],
+  "history": [ ... ] }
+```
+
+Give the model the files themselves: images as images, a PDF or text as
+its contents, whatever the provider takes. Each earlier turn in
+`history` carries its own `attachments` the same way, so a model that
+picks the conversation up later can be given them too. Before this the
+app sent only the names, as text in the prompt, and no model ever saw a
+file. A file with `private: true` is not kept after the answer.
+
 **A made file.** `attachment.vaultItemId` names a row that is already in
 `GET /v1/vault` when the answer goes. The app re-reads `/v1/vault` when an
 answer names a row it does not have yet, so "Open in Vault" finds it.

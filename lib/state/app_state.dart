@@ -20,6 +20,7 @@ import 'daily_rings.dart';
 import 'greetings.dart';
 import '../util/haptics.dart';
 import '../util/model_router.dart';
+import '../util/picked_file.dart';
 
 /// Storage keys. Everything money related persists so a reload never resets
 /// the account. Nothing else writes these keys, and a key this app did not
@@ -690,6 +691,7 @@ class AppState extends ChangeNotifier {
           if (m.attachment != null) '[Attached: ${m.attachment!.fileName}]',
         ].join('\n'),
         model: m.model,
+        files: m.files.where((SentFile f) => !f.uploading).toList(),
       );
 
   /// The connector catalogue the engine knows about.
@@ -1441,10 +1443,19 @@ class AppState extends ChangeNotifier {
 
   /// False when the message was refused, which is the caller's cue to say
   /// so rather than leave the composer looking like it sent.
-  bool sendMessage(String text, {bool reply = false}) {
+  ///
+  /// [files] are picked files to send with it: each is uploaded first
+  /// (`POST /v1/uploads`) and goes by its id. [keep] are ones already up,
+  /// from the message an Edit replaces.
+  bool sendMessage(
+    String text, {
+    bool reply = false,
+    List<PickedFile> files = const <PickedFile>[],
+    List<SentFile> keep = const <SentFile>[],
+  }) {
     if (chatNeedsSignIn) return false;
     final String body = text.trim();
-    if (body.isEmpty) return false;
+    if (body.isEmpty && files.isEmpty && keep.isEmpty) return false;
     final String stamp = DateTime.now().microsecondsSinceEpoch.toString();
     // Taken before the new message is added: the history is what came
     // before this prompt, and the prompt travels on its own.
@@ -1452,9 +1463,30 @@ class AppState extends ChangeNotifier {
     final ModelRoute route = routeFor(body, reply: reply);
     messages = <ChatMessage>[
       ...messages,
-      ChatMessage(id: 'you-$stamp', author: MessageAuthor.you, body: body),
+      ChatMessage(
+        id: 'you-$stamp',
+        author: MessageAuthor.you,
+        body: body,
+        files: <SentFile>[
+          ...keep,
+          for (final PickedFile f in files)
+            SentFile(
+              uploadId: '',
+              name: f.name,
+              mimeType: f.mimeType,
+              sizeBytes: f.sizeBytes,
+            ),
+        ],
+      ),
     ];
-    _ask(body, stamp: stamp, history: history, route: route);
+    _ask(
+      body,
+      stamp: stamp,
+      history: history,
+      route: route,
+      question: 'you-$stamp',
+      toUpload: files,
+    );
     return true;
   }
 
@@ -1496,6 +1528,7 @@ class AppState extends ChangeNotifier {
       stamp: DateTime.now().microsecondsSinceEpoch.toString(),
       history: history,
       route: route,
+      question: question.id,
     );
     return true;
   }
@@ -1509,8 +1542,11 @@ class AppState extends ChangeNotifier {
       (ChatMessage m) => m.id == messageId && m.author == MessageAuthor.you,
     );
     if (at < 0) return false;
+    // The files it carried go again, without being uploaded twice.
+    final List<SentFile> files =
+        messages[at].files.where((SentFile f) => !f.uploading).toList();
     messages = messages.sublist(0, at);
-    return sendMessage(text);
+    return sendMessage(text, keep: files);
   }
 
   /// Stop: gives up on the answer being waited for. The request is
@@ -1520,6 +1556,7 @@ class AppState extends ChangeNotifier {
     if (!thinking) return;
     final bool partial = streamingId != null;
     _dropReply();
+    _dropUploading();
     stopped = true;
     // What was written before Stop stays, as it would in Claude: it is
     // what the model said, and the next message reads it.
@@ -1542,13 +1579,47 @@ class AppState extends ChangeNotifier {
     streamingId = null;
   }
 
+  /// Files still on their way up when the ask they belonged to ended go
+  /// from the message: they were never sent.
+  void _dropUploading() {
+    messages = <ChatMessage>[
+      for (final ChatMessage m in messages)
+        m.files.any((SentFile f) => f.uploading)
+            ? _withFiles(m, <SentFile>[
+                ...m.files.where((SentFile f) => !f.uploading),
+              ])
+            : m,
+    ];
+  }
+
+  static ChatMessage _withFiles(ChatMessage m, List<SentFile> files) =>
+      ChatMessage(
+        id: m.id,
+        author: m.author,
+        body: m.body,
+        eyebrow: m.eyebrow,
+        bullets: m.bullets,
+        attachment: m.attachment,
+        failure: m.failure,
+        model: m.model,
+        modelName: m.modelName,
+        choices: m.choices,
+        multiSelect: m.multiSelect,
+        files: files,
+      );
+
   /// Asks [prompt], which is already on screen as the newest message, and
   /// puts the answer under it. [history] is everything before [prompt].
+  ///
+  /// [question] is that message's id: the files on it go with the prompt,
+  /// and [toUpload] are uploaded first and put on it as they land.
   void _ask(
     String prompt, {
     required String stamp,
     required List<ChatTurn> history,
     required ModelRoute route,
+    String? question,
+    List<PickedFile> toUpload = const <PickedFile>[],
   }) {
     // A newer message, a Retry, an Edit or a cleared thread ends the one
     // before it: its late answer is not appended to a conversation that
@@ -1561,6 +1632,7 @@ class AppState extends ChangeNotifier {
     // the picture it cannot draw, and charged for it.
     final TaskKind? missing = route.missing;
     if (missing != null) {
+      _dropUploading();
       messages = <ChatMessage>[
         ...messages,
         ChatMessage(
@@ -1625,6 +1697,71 @@ class AppState extends ChangeNotifier {
     // a server can be told not to retain it, on top of this client never
     // writing it down.
     _reply = () async {
+      // The files first. Each goes up on its own, and the prompt carries
+      // their ids; one that will not go up ends the ask before anything
+      // reaches a model.
+      final List<SentFile> up = <SentFile>[];
+      for (final PickedFile f in toUpload) {
+        try {
+          final String id = await _repo.upload(
+            fileName: f.name,
+            mimeType: f.mimeType,
+            bytes: f.bytes,
+          );
+          if (!current()) return;
+          up.add(SentFile(
+            uploadId: id,
+            name: f.name,
+            mimeType: f.mimeType,
+            sizeBytes: f.sizeBytes,
+          ));
+        } on ShiftApiException catch (error) {
+          if (!current()) return;
+          _slowTimer?.cancel();
+          slowReply = false;
+          thinking = false;
+          _dropUploading();
+          messages = <ChatMessage>[
+            ...messages,
+            ChatMessage(
+              id: 'upload-$stamp',
+              author: MessageAuthor.shift,
+              body: '',
+              failure: FailureInfo(
+                sentence: 'Could not upload ${f.name}.',
+                reassurance: 'Nothing was sent to the AI, and nothing was '
+                    'charged.',
+                details: error.status == null
+                    ? error.message
+                    : '${error.status} · ${error.message}',
+                offersAccount: error.kind == ShiftApiErrorKind.unauthorised,
+              ),
+            ),
+          ];
+          _changed();
+          return;
+        }
+      }
+      if (up.isNotEmpty) {
+        messages = <ChatMessage>[
+          for (final ChatMessage m in messages)
+            m.id == question
+                ? _withFiles(m, <SentFile>[
+                    ...m.files.where((SentFile f) => !f.uploading),
+                    ...up,
+                  ])
+                : m,
+        ];
+        _saveThread();
+        _changed();
+      }
+      final List<SentFile> files = messages
+              .where((ChatMessage m) => m.id == question)
+              .firstOrNull
+              ?.files
+              .where((SentFile f) => !f.uploading)
+              .toList() ??
+          const <SentFile>[];
       await _answer(
         stamp,
         prompt,
@@ -1635,6 +1772,7 @@ class AppState extends ChangeNotifier {
         cancel: stop.future,
         onText: grow,
         replacing: live,
+        files: files,
       );
       if (!current()) return;
       _slowTimer?.cancel();
@@ -1668,6 +1806,7 @@ class AppState extends ChangeNotifier {
     Future<void>? cancel,
     void Function(String soFar)? onText,
     String? replacing,
+    List<SentFile> files = const <SentFile>[],
   }) async {
     try {
       final List<ChatMessage> answer = (await _repo.send(
@@ -1678,6 +1817,7 @@ class AppState extends ChangeNotifier {
         history: history,
         cancel: cancel,
         onText: onText,
+        files: files,
       ))
           .map((ChatMessage a) => as == null || a.model != null
               ? a

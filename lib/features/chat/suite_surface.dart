@@ -9,8 +9,10 @@ import '../../theme/type.dart';
 import '../../util/choices.dart';
 import '../../util/haptics.dart';
 import '../../util/model_router.dart';
+import '../../util/picked_file.dart';
 import '../../widgets/common.dart';
 import '../../widgets/markdown_text.dart';
+import '../../widgets/spinner.dart';
 import 'failure_card.dart';
 import '../../widgets/alert.dart';
 
@@ -129,6 +131,9 @@ class _SuiteSurfaceState extends State<SuiteSurface> {
           showSparkle: true,
           showAvatarPicker: true,
           onSend: state.sendMessage,
+          // The files themselves, to be uploaded and handed to the model.
+          onSendFiles: (String text, List<PickedFile> files) =>
+              state.sendMessage(text, files: files),
           onStop: state.thinking ? state.stopReply : null,
         ),
       ],
@@ -415,16 +420,35 @@ class _MessageTile extends StatelessWidget {
         alignment: Alignment.centerRight,
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 560),
-          child: Container(
-            padding: const EdgeInsets.symmetric(
-              horizontal: Space.x4,
-              vertical: Space.x3,
-            ),
-            decoration: BoxDecoration(
-              color: c.surfaceRaised,
-              borderRadius: Radii.lgAll,
-            ),
-            child: Text(message.body, style: ShiftType.bodySm(c.text)),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              // What was sent with it, above the words, as in Messages.
+              if (message.files.isNotEmpty) ...<Widget>[
+                Wrap(
+                  alignment: WrapAlignment.end,
+                  spacing: Space.x2,
+                  runSpacing: Space.x2,
+                  children: <Widget>[
+                    for (final SentFile f in message.files) SentFileChip(f),
+                  ],
+                ),
+                if (message.body.isNotEmpty) const SizedBox(height: Space.x2),
+              ],
+              if (message.body.isNotEmpty)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: Space.x4,
+                    vertical: Space.x3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: c.surfaceRaised,
+                    borderRadius: Radii.lgAll,
+                  ),
+                  child: Text(message.body, style: ShiftType.bodySm(c.text)),
+                ),
+            ],
           ),
         ),
       );
@@ -522,6 +546,61 @@ class _MessageTile extends StatelessWidget {
         else
           _MessageActions(message: message),
       ],
+    );
+  }
+}
+
+/// A file sent with one of your messages: a spinner while it goes up,
+/// then what it is.
+class SentFileChip extends StatelessWidget {
+  const SentFileChip(this.file, {super.key});
+
+  final SentFile file;
+
+  @override
+  Widget build(BuildContext context) {
+    final ShiftColors c = ShiftColors.of(context);
+    final String m = file.mimeType.toLowerCase();
+    final IconData glyph = m.startsWith('image/')
+        ? Icons.image_outlined
+        : m.startsWith('video/')
+            ? Icons.movie_outlined
+            : m.startsWith('audio/')
+                ? Icons.graphic_eq_rounded
+                : Icons.description_outlined;
+    return Semantics(
+      label: file.uploading ? 'Uploading ${file.name}' : 'Sent ${file.name}',
+      excludeSemantics: true,
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: Space.x3,
+          vertical: Space.x2,
+        ),
+        decoration: BoxDecoration(
+          color: c.surface,
+          borderRadius: Radii.mdAll,
+          border: Border.all(color: c.border),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            if (file.uploading)
+              ShiftSpinner(color: c.textMuted, size: 14)
+            else
+              Icon(glyph, size: 16, color: c.sky),
+            const SizedBox(width: Space.x2),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 200),
+              child: Text(
+                file.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: ShiftType.bodySm(c.text),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

@@ -111,6 +111,9 @@ abstract interface class ShiftRepository {
   /// [onText] is handed the answer so far, each time more of it arrives,
   /// when the engine writes it out as it goes. The returned messages are
   /// the finished answer either way.
+  ///
+  /// [files] are what was attached, already uploaded (see [upload]); the
+  /// engine gives them to the model with the prompt.
   Future<List<ChatMessage>> send(
     String prompt, {
     bool private = false,
@@ -119,6 +122,7 @@ abstract interface class ShiftRepository {
     List<ChatTurn> history = const <ChatTurn>[],
     Future<void>? cancel,
     void Function(String soFar)? onText,
+    List<SentFile> files = const <SentFile>[],
   });
 
   /// Rewrite a rough ask into a fuller brief. Returning the text unchanged

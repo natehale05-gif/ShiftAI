@@ -171,6 +171,7 @@ class HttpRepository implements ShiftRepository {
     List<ChatTurn> history = const <ChatTurn>[],
     Future<void>? cancel,
     void Function(String soFar)? onText,
+    List<SentFile> files = const <SentFile>[],
   }) async {
     final StringBuffer soFar = StringBuffer();
     final dynamic body = await _api.postEvents(
@@ -198,6 +199,11 @@ class HttpRepository implements ShiftRepository {
         if (avatarId != null) 'avatarId': avatarId,
         if (model != null) 'model': model,
         'history': history.map((ChatTurn t) => t.toJson()).toList(),
+        // The files themselves, by upload id. It used to send only their
+        // names, as text in the prompt ("[2 attached: photo.png, …]"), so
+        // no model ever saw a file anyone attached.
+        if (files.isNotEmpty)
+          'attachments': files.map((SentFile f) => f.toJson()).toList(),
       },
     );
     if (body == null) {
@@ -506,6 +512,9 @@ class HttpRepository implements ShiftRepository {
   }) async {
     final dynamic body = await _api.upload(
       _uploads,
+      // A photo from a phone, or a clip, is more than 20 s of upload on a
+      // weak signal.
+      wait: const Duration(minutes: 2),
       field: 'file',
       fileName: fileName,
       mimeType: mimeType,

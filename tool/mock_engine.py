@@ -155,6 +155,16 @@ def answer(body):
     replies = [t for t in history if t.get("role") == "assistant"]
     text = (f"I can read all {len(history)} earlier turns of this "
             f"conversation.")
+    # The files sent with it, by upload id, and what they are: proof the
+    # file itself arrived, not only its name.
+    files = body.get("attachments") or []
+    if files:
+        seen = []
+        for f in files:
+            stored = UPLOADS.get(f.get("uploadId"))
+            size = f"{len(stored[0])} bytes" if stored else "not uploaded"
+            seen.append(f"{f.get('name')} ({f.get('mimeType')}, {size})")
+        text = f"I have {len(files)} file(s): {', '.join(seen)}. " + text
     if replies:
         last = replies[-1]
         wrote = names.get(last.get("model"), "an earlier answer")

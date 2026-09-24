@@ -933,18 +933,68 @@ enum TaskKind {
 /// model's context.
 @immutable
 class ChatTurn {
-  const ChatTurn({required this.role, required this.body, this.model});
+  const ChatTurn({
+    required this.role,
+    required this.body,
+    this.model,
+    this.files = const <SentFile>[],
+  });
 
   /// `user` or `assistant`.
   final String role;
   final String body;
   final String? model;
 
+  /// What was sent with this turn, so a model that picks the conversation
+  /// up later can be given the files too.
+  final List<SentFile> files;
+
   Map<String, dynamic> toJson() => <String, dynamic>{
         'role': role,
         'body': body,
         if (model != null) 'model': model,
+        if (files.isNotEmpty)
+          'attachments': files.map((SentFile f) => f.toJson()).toList(),
       };
+}
+
+/// A file sent with a message: the id `POST /v1/uploads` gave it, and
+/// what it is. An empty [uploadId] is one still on its way up.
+@immutable
+class SentFile {
+  const SentFile({
+    required this.uploadId,
+    required this.name,
+    required this.mimeType,
+    this.sizeBytes,
+  });
+
+  final String uploadId;
+  final String name;
+  final String mimeType;
+  final int? sizeBytes;
+
+  bool get uploading => uploadId.isEmpty;
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'uploadId': uploadId,
+        'name': name,
+        'mimeType': mimeType,
+        if (sizeBytes != null) 'sizeBytes': sizeBytes,
+      };
+
+  static SentFile? tryParse(Object? raw) {
+    if (raw is! Map<String, dynamic>) return null;
+    final Object? id = raw['uploadId'];
+    final Object? name = raw['name'];
+    if (id is! String || id.isEmpty || name is! String) return null;
+    return SentFile(
+      uploadId: id,
+      name: name,
+      mimeType: raw['mimeType'] as String? ?? 'application/octet-stream',
+      sizeBytes: (raw['sizeBytes'] as num?)?.toInt(),
+    );
+  }
 }
 
 @immutable
@@ -961,11 +1011,16 @@ class ChatMessage {
     this.modelName,
     this.choices = const <ChatChoice>[],
     this.multiSelect = false,
+    this.files = const <SentFile>[],
   });
 
   final String id;
   final MessageAuthor author;
   final String body;
+
+  /// The files you sent with this message, shown under it and sent again
+  /// on a Retry or an Edit without uploading them twice.
+  final List<SentFile> files;
 
   /// Answers the model is offering to its own question, drawn as buttons
   /// under the reply the way Claude asks. Empty for a reply that asks
@@ -997,6 +1052,12 @@ class ChatMessage {
           'choices': choices.map((ChatChoice c) => c.toJson()).toList(),
         if (multiSelect) 'multiSelect': true,
         if (attachment != null) 'attachment': attachment!.toJson(),
+        // One still uploading has no id to keep; it is not saved.
+        if (files.any((SentFile f) => !f.uploading))
+          'files': files
+              .where((SentFile f) => !f.uploading)
+              .map((SentFile f) => f.toJson())
+              .toList(),
       };
 
   /// `choices` at the top level, or the `question: {options, multiSelect}`
@@ -1038,6 +1099,12 @@ class ChatMessage {
       choices: choices,
       multiSelect: multiSelect,
       attachment: MessageAttachment.tryParse(json['attachment']),
+      files: json['files'] is List
+          ? (json['files'] as List<dynamic>)
+              .map(SentFile.tryParse)
+              .whereType<SentFile>()
+              .toList(growable: false)
+          : const <SentFile>[],
     );
   }
 }
