@@ -599,12 +599,28 @@ class AppState extends ChangeNotifier {
 
   /// Where [prompt] goes, or what it asked for that nothing connected can
   /// make.
-  ModelRoute routeFor(String prompt) => ModelRouter.route(
-        chatModels,
-        prompt,
-        picked: chatModel,
-        lastModelId: _lastAnswerer,
+  ///
+  /// [reply] is an answer tapped from a reply's own buttons: it goes back
+  /// to the model that asked, whatever its words. "Instagram Reels and
+  /// YouTube", tapped in answer to "Where will it go?", is not a request
+  /// for a video, and was being held back as one.
+  ModelRoute routeFor(String prompt, {bool reply = false}) {
+    if (reply) {
+      final String? asker = _lastAnswerer;
+      return ModelRoute(
+        chatModels.where((ChatModel m) => m.id == asker).firstOrNull,
       );
+    }
+    return ModelRouter.route(
+      chatModels,
+      prompt,
+      picked: chatModel,
+      lastModelId: _lastAnswerer,
+    );
+  }
+
+  /// Sends an answer tapped from the latest reply's buttons.
+  bool answerChoice(String text) => sendMessage(text, reply: true);
 
   /// The model that wrote the latest real reply, so a follow-up ("make it
   /// shorter") stays with it rather than hopping.
@@ -1378,7 +1394,7 @@ class AppState extends ChangeNotifier {
 
   /// False when the message was refused, which is the caller's cue to say
   /// so rather than leave the composer looking like it sent.
-  bool sendMessage(String text) {
+  bool sendMessage(String text, {bool reply = false}) {
     if (chatNeedsSignIn) return false;
     final String body = text.trim();
     if (body.isEmpty) return false;
@@ -1387,7 +1403,7 @@ class AppState extends ChangeNotifier {
     // Taken before the new message is added: the history is what came
     // before this prompt, and the prompt travels on its own.
     final List<ChatTurn> history = chatHistory;
-    final ModelRoute route = routeFor(body);
+    final ModelRoute route = routeFor(body, reply: reply);
     final ChatModel? answerer = route.model;
     messages = <ChatMessage>[
       ...messages,
