@@ -736,8 +736,11 @@ class _PodiumSpot extends StatelessWidget {
                         child: Text(
                           '${row.rank}',
                           textAlign: TextAlign.center,
-                          style: ShiftType.subheading(medal)
-                              .copyWith(fontSize: lead ? 22 : 18),
+                          // Title 2 for the leader, title 3 below: 22 and
+                          // 20 on Apple's ramp, where 18 was on none.
+                          style: lead
+                              ? ShiftType.title2(medal)
+                              : ShiftType.subheading(medal),
                         ),
                       ),
                     ),
@@ -966,7 +969,7 @@ class _GapLine extends StatelessWidget {
               ),
             ),
             const SizedBox(width: Space.x3),
-            Text(gap, style: ShiftType.figures(tone, size: 14)),
+            Text(gap, style: ShiftType.figures(tone, size: 13)),
           ],
         ),
       ),

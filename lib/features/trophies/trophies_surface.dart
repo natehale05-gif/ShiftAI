@@ -535,7 +535,7 @@ Future<void> _showTrophy(BuildContext context, Trophy trophy) {
                 child: Text(
                   trophy.name,
                   textAlign: TextAlign.center,
-                  style: ShiftType.largeTitle(c.text).copyWith(fontSize: 26),
+                  style: ShiftType.title1(c.text),
                 ),
               ),
               const SizedBox(height: Space.x1),

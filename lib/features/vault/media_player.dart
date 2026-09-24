@@ -115,7 +115,7 @@ class _VideoViewState extends State<_VideoView> {
               ),
               child: Text(
                 'This clip would not play.',
-                style: ShiftType.copy(MediaInk.onMedia, size: 14, weight: 500),
+                style: ShiftType.copy(MediaInk.onMedia, size: 15, weight: 500),
               ),
             ),
           )

@@ -514,7 +514,7 @@ class _DesignCard extends StatelessWidget {
                   const SizedBox(height: 2),
                   Text(
                     doc.versionLabel,
-                    style: ShiftType.copy(c.textMuted, size: 14),
+                    style: ShiftType.caption(c.textMuted),
                   ),
                   const SizedBox(height: Space.x2),
                   Row(

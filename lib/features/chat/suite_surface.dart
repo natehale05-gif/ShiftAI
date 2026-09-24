@@ -864,7 +864,7 @@ class _ModelLine extends StatelessWidget {
                     const SizedBox(width: Space.x2),
                     Text(
                       'Answering: ',
-                      style: ShiftType.copy(c.textMuted, size: 14),
+                      style: ShiftType.copy(c.textMuted, size: 15),
                     ),
                     // A model's name has no length limit; it shrinks
                     // before the line runs off the screen.
@@ -873,7 +873,7 @@ class _ModelLine extends StatelessWidget {
                         name,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: ShiftType.copy(c.accent, size: 14, weight: 600),
+                        style: ShiftType.copy(c.accent, size: 15, weight: 600),
                       ),
                     ),
                     Icon(

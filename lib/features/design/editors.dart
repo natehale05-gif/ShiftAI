@@ -297,7 +297,7 @@ class _ChatPane extends StatelessWidget {
                   child: Text(
                     kind.prompt,
                     textAlign: TextAlign.center,
-                    style: ShiftType.largeTitle(c.text).copyWith(fontSize: 28),
+                    style: ShiftType.title1(c.text),
                   ),
                 ),
                 const SizedBox(height: Space.x6),

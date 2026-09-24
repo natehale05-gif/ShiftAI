@@ -481,8 +481,7 @@ class _NoteEditorState extends State<_NoteEditor> {
                                   _title.text.isEmpty,
                               textInputAction: TextInputAction.next,
                               onSubmitted: (_) => _bodyFocus.requestFocus(),
-                              style: ShiftType.largeTitle(c.text)
-                                  .copyWith(fontSize: 26),
+                              style: ShiftType.title1(c.text),
                               decoration: InputDecoration(
                                 filled: false,
                                 border: InputBorder.none,
@@ -490,8 +489,7 @@ class _NoteEditorState extends State<_NoteEditor> {
                                 focusedBorder: InputBorder.none,
                                 contentPadding: EdgeInsets.zero,
                                 hintText: 'Title',
-                                hintStyle: ShiftType.largeTitle(c.textMuted)
-                                    .copyWith(fontSize: 26),
+                                hintStyle: ShiftType.title1(c.textMuted),
                               ),
                             ),
                             const SizedBox(height: Space.x2),

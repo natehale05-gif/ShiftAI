@@ -285,7 +285,7 @@ class _Count extends StatelessWidget {
               children: <Widget>[
                 Text(
                   '$value',
-                  style: ShiftType.figures(color, size: 24, weight: 700),
+                  style: ShiftType.figures(color, size: 22, weight: 700),
                 ),
                 const SizedBox(height: 2),
                 Text(

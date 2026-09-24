@@ -592,7 +592,7 @@ class _DetailPanel extends StatelessWidget {
               header: true,
               child: Text(
                 item.title,
-                style: ShiftType.largeTitle(c.text).copyWith(fontSize: 28),
+                style: ShiftType.title1(c.text),
               ),
             ),
             if (!item.mine) ...<Widget>[
