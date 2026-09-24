@@ -76,6 +76,13 @@ and release crashes the first time someone signs in or taps "+".
 reference, Runner group, and the Resources build phase. A manifest that
 is not in Copy Bundle Resources is one Apple never sees.
 
+**Nothing waits forever at startup.** The web app's offline worker
+serves each build's files from that build's cache and gives the network
+2 s for the page before opening on its last copy; it used to be network
+first with no limit, and a stalled request meant a loading screen for
+good. `AppState.load` gives the engine 3 s and then opens on the
+account's last-seen copy while the rest lands.
+
 **Bundle ids are `club.shiftai.app` on both platforms** and cannot change
 after the first upload.
 
@@ -170,6 +177,6 @@ exploratory, branch.
 flutter analyze && flutter test
 ```
 
-306 tests. They have caught every regression listed above at least once,
+310 tests. They have caught every regression listed above at least once,
 including several of mine. If one fails, read it before changing it —
 twice now the test was right and my expectation was wrong.
