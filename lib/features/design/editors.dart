@@ -6,6 +6,7 @@ import '../../state/app_state.dart';
 import '../../theme/tokens.dart';
 import '../../theme/type.dart';
 import '../../widgets/common.dart';
+import '../../widgets/alert.dart';
 
 /// A piece opened for work: the conversation on the left, what it is making
 /// on the right. The shell steps out of the way — this takes the window.
@@ -296,7 +297,7 @@ class _ChatPane extends StatelessWidget {
                   child: Text(
                     kind.prompt,
                     textAlign: TextAlign.center,
-                    style: ShiftType.largeTitle(c.text).copyWith(fontSize: 28),
+                    style: ShiftType.title1(c.text),
                   ),
                 ),
                 const SizedBox(height: Space.x6),
@@ -709,43 +710,13 @@ Future<void> _chooseBrand(BuildContext context) async {
 }
 
 Future<void> _share(BuildContext context, DesignKind kind) {
-  return showDialog<void>(
-    context: context,
-    builder: (BuildContext context) {
-      final ShiftColors c = ShiftColors.of(context);
-      return AlertDialog(
-        backgroundColor: c.surface,
-        shape: const RoundedRectangleBorder(borderRadius: Radii.lgAll),
-        title: Text('Share', style: ShiftType.subheading(c.text)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Row(
-              children: <Widget>[
-                Icon(Icons.lock_outline_rounded, size: 16, color: c.textMuted),
-                const SizedBox(width: Space.x2),
-                Text(
-                  'Only you can open this',
-                  style: ShiftType.bodySm(c.textMuted),
-                ),
-              ],
-            ),
-            const SizedBox(height: Space.x4),
-            Text(
-              'Sharing needs the backend to mint a link — nothing leaves this '
-              'device yet.',
-              style: ShiftType.bodySm(c.text),
-            ),
-          ],
-        ),
-        actions: <Widget>[
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Close'),
-          ),
-        ],
-      );
-    },
+  return showShiftAlert<void>(
+    context,
+    title: 'Share',
+    message: 'Only you can open this. Sharing needs the backend to mint a '
+        'link — nothing leaves this device yet.',
+    actions: const <ShiftAlertAction<void>>[
+      ShiftAlertAction<void>('OK', isDefault: true),
+    ],
   );
 }

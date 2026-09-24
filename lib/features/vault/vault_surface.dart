@@ -7,6 +7,7 @@ import '../../theme/type.dart';
 import '../../util/format.dart';
 import '../../widgets/common.dart';
 import 'media_player.dart';
+import '../../widgets/alert.dart';
 
 /// Media only, with a two way scope toggle: your own generations, or the
 /// published work in EcoVault. Picking a tile opens the detail panel.
@@ -450,36 +451,20 @@ class _DetailPanel extends StatelessWidget {
 
   Future<void> _rename(BuildContext context) async {
     final AppState state = AppScope.read(context);
-    final TextEditingController controller =
-        TextEditingController(text: item.title);
-    final String? next = await showDialog<String>(
-      context: context,
-      builder: (BuildContext context) {
-        final ShiftColors c = ShiftColors.of(context);
-        return AlertDialog(
-          backgroundColor: c.surface,
-          shape: const RoundedRectangleBorder(borderRadius: Radii.lgAll),
-          title: Text('Rename', style: ShiftType.subheading(c.text)),
-          content: TextField(
-            controller: controller,
-            autofocus: true,
-            style: ShiftType.bodySm(c.text),
-            decoration: const InputDecoration(labelText: 'Title'),
-          ),
-          actions: <Widget>[
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(controller.text),
-              child: const Text('Save'),
-            ),
-          ],
-        );
-      },
+    final String? next = await showShiftAlert<String>(
+      context,
+      title: 'Rename',
+      field: ShiftAlertField(initial: item.title, placeholder: 'Title'),
+      actions: <ShiftAlertAction<String>>[
+        const ShiftAlertAction<String>('Cancel'),
+        ShiftAlertAction<String>(
+          'Save',
+          isDefault: true,
+          valueOf: (String typed) => typed,
+          enabled: (String typed) => typed.trim().isNotEmpty,
+        ),
+      ],
     );
-    controller.dispose();
     if (next == null || next.trim().isEmpty || !context.mounted) return;
     final ScaffoldMessengerState bar = ScaffoldMessenger.of(context);
     if (!await state.renameVaultItem(item.id, next.trim())) {
@@ -503,35 +488,15 @@ class _DetailPanel extends StatelessWidget {
 
   Future<void> _delete(BuildContext context) async {
     final AppState state = AppScope.read(context);
-    final bool? confirmed = await showDialog<bool>(
-      context: context,
-      builder: (BuildContext context) {
-        final ShiftColors c = ShiftColors.of(context);
-        return AlertDialog(
-          backgroundColor: c.surface,
-          shape: const RoundedRectangleBorder(borderRadius: Radii.lgAll),
-          title: Text('Delete this item?', style: ShiftType.subheading(c.text)),
-          content: Text(
-            'It leaves your vault for good. Anything published from it stays '
-            'in EcoVault.',
-            style: ShiftType.bodySm(c.textMuted),
-          ),
-          actions: <Widget>[
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              style: FilledButton.styleFrom(
-                backgroundColor: c.danger,
-                foregroundColor: c.onStatus,
-              ),
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Delete'),
-            ),
-          ],
-        );
-      },
+    final bool? confirmed = await showShiftAlert<bool>(
+      context,
+      title: 'Delete this item?',
+      message: 'It leaves your vault for good. Anything published from it '
+          'stays in EcoVault.',
+      actions: const <ShiftAlertAction<bool>>[
+        ShiftAlertAction<bool>('Cancel', value: false, isDefault: true),
+        ShiftAlertAction<bool>('Delete', value: true, destructive: true),
+      ],
     );
     if (!(confirmed ?? false) || !context.mounted) return;
     final ScaffoldMessengerState bar = ScaffoldMessenger.of(context);
@@ -627,7 +592,7 @@ class _DetailPanel extends StatelessWidget {
               header: true,
               child: Text(
                 item.title,
-                style: ShiftType.largeTitle(c.text).copyWith(fontSize: 28),
+                style: ShiftType.title1(c.text),
               ),
             ),
             if (!item.mine) ...<Widget>[

@@ -9,6 +9,7 @@ import '../../theme/tokens.dart';
 import '../../theme/type.dart';
 import '../../util/format.dart';
 import '../../widgets/common.dart';
+import '../../widgets/alert.dart';
 
 /// A flat list. A note is a title and what it says — nothing else earns a
 /// place here.
@@ -143,34 +144,14 @@ class NotesSurface extends StatelessWidget {
 /// Deleting asks first — the other two lists do, and a note has no undo.
 Future<void> _deleteNote(BuildContext context, Note note) async {
   final AppState state = AppScope.read(context);
-  final bool? yes = await showDialog<bool>(
-    context: context,
-    builder: (BuildContext context) {
-      final ShiftColors c = ShiftColors.of(context);
-      return AlertDialog(
-        backgroundColor: c.surface,
-        shape: const RoundedRectangleBorder(borderRadius: Radii.lgAll),
-        title: Text('Delete this note?', style: ShiftType.subheading(c.text)),
-        content: Text(
-          '\u201c${note.title}\u201d goes for good.',
-          style: ShiftType.bodySm(c.textMuted),
-        ),
-        actions: <Widget>[
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: c.danger,
-              foregroundColor: c.onStatus,
-            ),
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Delete'),
-          ),
-        ],
-      );
-    },
+  final bool? yes = await showShiftAlert<bool>(
+    context,
+    title: 'Delete this note?',
+    message: '\u201c${note.title}\u201d goes for good.',
+    actions: const <ShiftAlertAction<bool>>[
+      ShiftAlertAction<bool>('Cancel', value: false, isDefault: true),
+      ShiftAlertAction<bool>('Delete', value: true, destructive: true),
+    ],
   );
   if (!(yes ?? false) || !context.mounted) return;
   final ScaffoldMessengerState bar = ScaffoldMessenger.of(context);
@@ -397,30 +378,14 @@ class _NoteEditorState extends State<_NoteEditor> {
 
   Future<void> _delete() async {
     final NavigatorState nav = Navigator.of(context);
-    final bool? yes = await showDialog<bool>(
-      context: context,
-      builder: (BuildContext context) {
-        final ShiftColors c = ShiftColors.of(context);
-        return AlertDialog(
-          title: Text('Delete this note?', style: ShiftType.subheading(c.text)),
-          content:
-              Text('It goes for good.', style: ShiftType.bodySm(c.textMuted)),
-          actions: <Widget>[
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              style: FilledButton.styleFrom(
-                backgroundColor: c.danger,
-                foregroundColor: c.onStatus,
-              ),
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Delete'),
-            ),
-          ],
-        );
-      },
+    final bool? yes = await showShiftAlert<bool>(
+      context,
+      title: 'Delete this note?',
+      message: 'It goes for good.',
+      actions: const <ShiftAlertAction<bool>>[
+        ShiftAlertAction<bool>('Cancel', value: false, isDefault: true),
+        ShiftAlertAction<bool>('Delete', value: true, destructive: true),
+      ],
     );
     if (!(yes ?? false)) return;
     _pending?.cancel();
@@ -516,8 +481,7 @@ class _NoteEditorState extends State<_NoteEditor> {
                                   _title.text.isEmpty,
                               textInputAction: TextInputAction.next,
                               onSubmitted: (_) => _bodyFocus.requestFocus(),
-                              style: ShiftType.largeTitle(c.text)
-                                  .copyWith(fontSize: 26),
+                              style: ShiftType.title1(c.text),
                               decoration: InputDecoration(
                                 filled: false,
                                 border: InputBorder.none,
@@ -525,8 +489,7 @@ class _NoteEditorState extends State<_NoteEditor> {
                                 focusedBorder: InputBorder.none,
                                 contentPadding: EdgeInsets.zero,
                                 hintText: 'Title',
-                                hintStyle: ShiftType.largeTitle(c.textMuted)
-                                    .copyWith(fontSize: 26),
+                                hintStyle: ShiftType.title1(c.textMuted),
                               ),
                             ),
                             const SizedBox(height: Space.x2),

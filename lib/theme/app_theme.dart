@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import 'tokens.dart';
@@ -54,6 +55,33 @@ abstract final class ShiftTheme {
 
     return ThemeData(
       useMaterial3: true,
+      // iOS behaviour on every platform, the Pixel's web app included:
+      // screens slide in from the right and swipe back from the edge,
+      // lists bounce at their ends, text selection uses iOS handles, and
+      // every .adaptive widget draws its Cupertino self. Without this
+      // the app read as iOS-styled Android: Material page fades, a glow
+      // at the end of a list, the ripple below.
+      platform: TargetPlatform.iOS,
+      pageTransitionsTheme: const PageTransitionsTheme(
+        builders: <TargetPlatform, PageTransitionsBuilder>{
+          TargetPlatform.android: CupertinoPageTransitionsBuilder(),
+          TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+          TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
+          TargetPlatform.windows: CupertinoPageTransitionsBuilder(),
+          TargetPlatform.linux: CupertinoPageTransitionsBuilder(),
+          TargetPlatform.fuchsia: CupertinoPageTransitionsBuilder(),
+        },
+      ),
+      // The Cupertino widgets (alerts, switches, the activity indicator)
+      // take the accent and the ground from this product's tokens rather
+      // than system blue.
+      cupertinoOverrideTheme: CupertinoThemeData(
+        brightness: brightness,
+        primaryColor: c.accent,
+        primaryContrastingColor: c.onAccent,
+        scaffoldBackgroundColor: c.bg,
+        barBackgroundColor: c.surface,
+      ),
       brightness: brightness,
       colorScheme: scheme,
       scaffoldBackgroundColor: c.bg,
@@ -65,10 +93,12 @@ abstract final class ShiftTheme {
       extensions: <ThemeExtension<dynamic>>[c],
       dividerTheme: DividerThemeData(color: c.border, thickness: 1, space: 1),
       // Pointer feedback, once, in the theme: every row and card gets the
-      // same lift on hover and the same quiet press.
+      // same lift on hover and the same quiet press. A press dims, the
+      // way a row does on iOS; there is no ripple spreading from the
+      // finger, which is Android's and nowhere in Apple's software.
       hoverColor: c.surfaceRaised.withValues(alpha: 0.55),
-      splashColor: c.accentSoft.withValues(alpha: 0.5),
-      highlightColor: c.surfaceRaised.withValues(alpha: 0.35),
+      splashColor: Colors.transparent,
+      highlightColor: c.surfaceRaised.withValues(alpha: 0.6),
       textTheme: TextTheme(
         displayLarge: ShiftType.displayXl(c.text),
         displayMedium: ShiftType.displayL(c.text),
@@ -88,9 +118,19 @@ abstract final class ShiftTheme {
         radius: Radii.pill,
         thickness: const WidgetStatePropertyAll<double>(6),
       ),
-      // InkRipple rather than InkSparkle: the sparkle splash pulls a shader
-      // asset at runtime, which the hosted build has no use for.
-      splashFactory: InkRipple.splashFactory,
+      splashFactory: NoSplash.splashFactory,
+      // iOS navigation bars: flat, the ground colour, the title centred
+      // in the headline weight, and no shadow when content scrolls under.
+      appBarTheme: AppBarTheme(
+        backgroundColor: c.bg,
+        foregroundColor: c.text,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        centerTitle: true,
+        titleTextStyle: ShiftType.headline(c.text),
+        iconTheme: IconThemeData(color: c.text, size: 22),
+      ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
           backgroundColor: c.accent,

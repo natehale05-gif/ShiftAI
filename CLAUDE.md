@@ -79,6 +79,15 @@ is not in Copy Bundle Resources is one Apple never sees.
 **Bundle ids are `club.shiftai.app` on both platforms** and cannot change
 after the first upload.
 
+**It looks and behaves like an Apple app on every platform**, the Pixel's
+web app included. `ThemeData.platform` is iOS (slide-in screens, swipe
+back, bounce), there is no ink ripple, confirmations are
+`showShiftAlert` (a Cupertino alert, never a Material `AlertDialog`),
+spinners are `ShiftSpinner`, ticks are `ShiftCheckRow`, and type is a
+named `ShiftType` style on Apple's ramp. Colour comes only from
+`tokens.dart` (`ShiftColors`, `MediaInk` over media, `ShiftShadow`).
+`test/design_system_test.dart` scans `lib/` and fails if any of it slips.
+
 ## Shape of the code
 
 - `lib/data/repository.dart` — the seam. Every screen reads and writes
@@ -149,6 +158,6 @@ exploratory, branch.
 flutter analyze && flutter test
 ```
 
-257 tests. They have caught every regression listed above at least once,
+281 tests. They have caught every regression listed above at least once,
 including several of mine. If one fails, read it before changing it —
 twice now the test was right and my expectation was wrong.

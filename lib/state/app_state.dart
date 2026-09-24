@@ -446,6 +446,11 @@ class AppState extends ChangeNotifier {
               body: <String>[
                 if (m.body.isNotEmpty) m.body,
                 ...m.bullets.map((String b) => '- $b'),
+                // The answers it offered, so the next model knows what
+                // "the second one" means.
+                ...m.choices.map((ChatChoice c) => c.description == null
+                    ? '- ${c.label}'
+                    : '- ${c.label}: ${c.description}'),
                 if (m.attachment != null)
                   '[Attached: ${m.attachment!.fileName}]',
               ].join('\n'),

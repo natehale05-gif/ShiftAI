@@ -17,6 +17,7 @@ import 'package:shift_ai/theme/tokens.dart';
 import 'package:shift_ai/util/file_pick.dart';
 import 'package:shift_ai/util/prompt.dart';
 import 'package:shift_ai/util/system_bars.dart';
+import 'package:shift_ai/widgets/common.dart';
 
 Future<AppState> _freshState() async {
   SharedPreferences.setMockInitialValues(<String, Object>{});
@@ -477,7 +478,7 @@ void main() {
     expect(find.text('Choose a photo'), findsOneWidget);
     expect(
       tester
-          .widget<CheckboxListTile>(
+          .widget<ShiftCheckRow>(
               find.byKey(const ValueKey<String>('avatar-consent')))
           .value,
       isFalse,

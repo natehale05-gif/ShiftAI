@@ -431,7 +431,42 @@ Answer with one or more messages, in the order they should appear:
 
 `author` is `you` or `shift`. Every field except `id` and `author` is
 optional — a message can be prose, bullets, an attachment card, a failure
-notice, or any combination.
+notice, a question with answers to tap, or any combination.
+
+### Questions with answers to tap
+
+When a model needs to ask before it goes on, the app draws its answers
+as buttons under the reply, the way Claude asks. Tapping one sends its
+`label` as the person's next message; typing works too.
+
+```json
+[{ "id": "m2", "author": "shift",
+   "body": "What should it feel like?",
+   "choices": [
+     { "label": "Cinematic", "description": "Slow drone shots, golden hour" },
+     { "label": "High energy", "description": "Fast cuts on the beat" },
+     "Calm"],
+   "multiSelect": false }]
+```
+
+- `choices` holds up to 8 answers, each `{label, description?}` or a
+  plain string. `label` is what gets sent; `description` is only shown.
+- `multiSelect: true` lets the person tick several and send them
+  together, as "Instagram Reels, TikTok and YouTube".
+- `question: { options: [...], multiSelect }` is read too, so the input
+  of a tool call like Claude's AskUserQuestion can be passed on as it
+  is. The simplest way to get this from any model: give it an
+  `ask_user` tool with that schema, and when it calls it, answer with
+  the tool's input as this message and stop the turn there.
+- Only the newest reply shows buttons. On the next message the
+  offered answers come back in `history` inside that reply's `body`,
+  one `- label: description` line each, so "the second one" means
+  something to whichever model answers next.
+- Without `choices`, a reply that ends in a question with 2 to 8 short
+  listed options right against it ("1. …", "- …", "A) …") gets buttons
+  anyway, and those lines move from the text into the buttons. That
+  covers models writing their questions out; `choices` is still the
+  reliable way.
 
 ### Several AIs in one conversation
 

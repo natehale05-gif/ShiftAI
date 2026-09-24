@@ -56,10 +56,8 @@ class _FailureCardState extends State<FailureCard> {
                   children: <Widget>[
                     Text(
                       widget.failure.sentence,
-                      style: ShiftType.bodyStrong(c.text).copyWith(
-                        fontSize: 16,
-                        height: 24 / 16,
-                      ),
+                      // Callout, emphasised.
+                      style: ShiftType.copy(c.text, size: 16, weight: 600),
                     ),
                     const SizedBox(height: Space.x1),
                     Text(

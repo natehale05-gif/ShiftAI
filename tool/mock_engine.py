@@ -98,6 +98,15 @@ def answer(body):
     names = {m["id"]: m["name"] for m in MODELS}
     model = body.get("model") or MODELS[0]["id"]
     history = body.get("history") or []
+    asked = ask(body, history)
+    if asked is not None:
+        asked.update({
+            "id": f"m{len(history) + 1}",
+            "author": "shift",
+            "model": model,
+            "modelName": names.get(model, model),
+        })
+        return [asked]
     replies = [t for t in history if t.get("role") == "assistant"]
     text = (f"I can read all {len(history)} earlier turns of this "
             f"conversation.")
@@ -114,6 +123,45 @@ def answer(body):
         "modelName": names.get(model, model),
         "body": text,
     }]
+
+
+FEEL = "What should it feel like?"
+WHERE = "Where will it go? Pick any that fit."
+
+
+def ask(body, history):
+    """Questions with answers to tap, the way docs/API.md says to send them.
+
+    "make …" to start a conversation gets a question with `choices`;
+    answering it gets one that takes several (`multiSelect`); then it
+    answers as usual. "ask me in text" gets the question written out as
+    plain text instead, which the client turns into buttons by itself.
+    """
+    prompt = (body.get("prompt") or "").strip().lower()
+    last = history[-1]["body"] if history else ""
+    if prompt.startswith("ask me in text"):
+        return {"body": "Which length works best?\n"
+                        "1. 15 seconds — a quick hook\n"
+                        "2. 30 seconds\n"
+                        "3. 60 seconds — room for a story"}
+    if not history and prompt.split(" ")[0] in ("make", "create", "build"):
+        return {
+            "body": FEEL,
+            "choices": [
+                {"label": "Cinematic",
+                 "description": "Slow drone shots, golden hour"},
+                {"label": "High energy",
+                 "description": "Fast cuts on the beat"},
+                {"label": "Calm", "description": "Long takes, soft music"},
+            ],
+        }
+    if last.startswith(FEEL):
+        return {
+            "body": WHERE,
+            "choices": ["Instagram Reels", "TikTok", "YouTube", "Website"],
+            "multiSelect": True,
+        }
+    return None
 
 
 EMPTY = {

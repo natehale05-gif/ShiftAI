@@ -316,3 +316,21 @@ abstract final class Radii {
   static const BorderRadius lgAll = BorderRadius.all(lg);
   static const BorderRadius pillAll = BorderRadius.all(pill);
 }
+
+/// Ink over photos and video: the play controls, the scrim behind them,
+/// the spinner while a clip loads. The same in every theme, because what
+/// is under it is the picture, not the ground — white on a light theme's
+/// paper would vanish, but white on a video never does.
+abstract final class MediaInk {
+  /// Text and glyphs drawn on media.
+  static const Color onMedia = Color(0xFFFFFFFF);
+
+  /// The dark wash under them, used at an alpha.
+  static const Color scrim = Color(0xFF000000);
+}
+
+/// The colour of a drop shadow, at an alpha: black under every theme, as
+/// on iOS, with the strength chosen per ground at the call site.
+abstract final class ShiftShadow {
+  static const Color color = Color(0xFF000000);
+}
