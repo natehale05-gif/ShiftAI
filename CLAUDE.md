@@ -80,7 +80,10 @@ is not in Copy Bundle Resources is one Apple never sees.
 serves each build's files from that build's cache and gives the network
 2 s for the page before opening on its last copy; it used to be network
 first with no limit, and a stalled request meant a loading screen for
-good. `AppState.load` gives the engine 3 s and then opens on the
+good. It caches only the build's own files, listed by name at build time:
+the preview serves the API from the same origin, and a worker that cached
+every GET answered `/v1/vault`, `/v1/avatars` and `/v1/me` from their
+first copy until the next deploy, whoever was signed in. `AppState.load` gives the engine 3 s and then opens on the
 account's last-seen copy while the rest lands.
 
 **Bundle ids are `club.shiftai.app` on both platforms** and cannot change
@@ -179,6 +182,6 @@ exploratory, branch.
 flutter analyze && flutter test
 ```
 
-310 tests. They have caught every regression listed above at least once,
+312 tests. They have caught every regression listed above at least once,
 including several of mine. If one fails, read it before changing it —
 twice now the test was right and my expectation was wrong.
