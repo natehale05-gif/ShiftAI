@@ -122,6 +122,10 @@ class _StubAuth implements AuthService {
   int refreshes = 0;
   bool deleted = false;
 
+  /// What DELETE /v1/me answers: a queued deletion's sentence, or a refusal.
+  String? deleteNote;
+  ShiftApiException? deleteRefusal;
+
   @override
   Future<Session> signIn({
     required String email,
@@ -156,7 +160,12 @@ class _StubAuth implements AuthService {
   Future<void> signOut(String refreshToken) async {}
 
   @override
-  Future<void> deleteAccount() async => deleted = true;
+  Future<String?> deleteAccount() async {
+    final ShiftApiException? refusal = deleteRefusal;
+    if (refusal != null) throw refusal;
+    deleted = true;
+    return deleteNote;
+  }
 }
 
 Session _liveSession(Creator who) => Session(
@@ -413,11 +422,43 @@ void main() {
       final AppState state = await _server(auth: auth, store: store);
       await state.signIn('rae@example.com', 'right');
 
-      expect(await state.deleteAccount(), isNull);
+      expect((await state.deleteAccount()).deleted, isTrue);
       expect(auth.deleted, isTrue);
       expect(state.signedIn, isFalse);
       expect(await store.read(), isNull);
       expect(state.vault, isEmpty);
+    });
+
+    test('a queued deletion says when, in the server\'s words', () async {
+      final _StubAuth auth = _StubAuth(_other)
+        ..deleteNote = 'Your account will be deleted on 3 October.';
+      final AppState state = await _server(auth: auth);
+      await state.signIn('rae@example.com', 'right');
+      final ({bool deleted, String message}) outcome =
+          await state.deleteAccount();
+      expect(outcome.deleted, isTrue);
+      expect(outcome.message, 'Your account will be deleted on 3 October.',
+          reason: 'it used to say "has been deleted" whatever came back');
+    });
+
+    test('a server without the route deletes nothing and says so plainly',
+        () async {
+      final _StubAuth auth = _StubAuth(_other)
+        ..deleteRefusal = const ShiftApiException(
+          ShiftApiErrorKind.notFound,
+          'No route /v1/me.',
+          status: 404,
+        );
+      final MemoryTokenStore store = MemoryTokenStore();
+      final AppState state = await _server(auth: auth, store: store);
+      await state.signIn('rae@example.com', 'right');
+      final ({bool deleted, String message}) outcome =
+          await state.deleteAccount();
+      expect(outcome.deleted, isFalse);
+      expect(outcome.message, contains('nothing was deleted'));
+      expect(outcome.message, isNot(contains('No route')));
+      expect(state.signedIn, isTrue);
+      expect(await store.read(), isNotNull);
     });
   });
 

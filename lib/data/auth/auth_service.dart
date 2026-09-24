@@ -9,7 +9,9 @@ abstract interface class AuthService {
   Future<Session> signIn({required String email, required String password});
   Future<Session> refresh(String refreshToken);
   Future<void> signOut(String refreshToken);
-  Future<void> deleteAccount();
+  /// Null once it is gone, or the server's sentence when it is queued
+  /// (202, "Your account will be deleted on 3 October").
+  Future<String?> deleteAccount();
 }
 
 class HttpAuthService implements AuthService {
@@ -49,7 +51,12 @@ class HttpAuthService implements AuthService {
       });
 
   @override
-  Future<void> deleteAccount() => _api.delete(_me);
+  Future<String?> deleteAccount() async {
+    final dynamic body = await _api.delete(_me);
+    if (body is! Map<String, dynamic>) return null;
+    final Object? message = body['message'];
+    return message is String && message.trim().isNotEmpty ? message : null;
+  }
 }
 
 /// With no engine configured, the gate still has to open — otherwise the
@@ -89,7 +96,7 @@ class SeedAuthService implements AuthService {
   Future<void> signOut(String refreshToken) async {}
 
   @override
-  Future<void> deleteAccount() async {}
+  Future<String?> deleteAccount() async => null;
 }
 
 /// Holds the session, hands the access token to [ApiClient], and owns the
@@ -179,9 +186,10 @@ class AuthController {
   }
 
   /// Apple requires this to be reachable from inside the app.
-  Future<void> deleteAccount() async {
-    await _service.deleteAccount();
+  Future<String?> deleteAccount() async {
+    final String? note = await _service.deleteAccount();
     await forget();
+    return note;
   }
 
   Future<void> forget() async {

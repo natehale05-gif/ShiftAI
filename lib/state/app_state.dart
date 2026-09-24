@@ -1379,15 +1379,31 @@ class AppState extends ChangeNotifier {
 
   /// Deletes the account and everything under it. Apple requires this to
   /// be reachable from inside the app when the app can create accounts
-  /// (Guideline 5.1.1(v)). Returns null on success, or what went wrong.
-  Future<String?> deleteAccount() async {
+  /// (Guideline 5.1.1(v)).
+  ///
+  /// [message] is what to tell the person: that it is gone, the server's
+  /// own sentence when it is queued rather than immediate (a 202 with the
+  /// date it completes), or why it was not deleted.
+  Future<({bool deleted, String message})> deleteAccount() async {
+    final String? note;
     try {
-      await _auth.deleteAccount();
+      note = await _auth.deleteAccount();
     } on ShiftApiException catch (error) {
-      return error.message;
+      return (
+        deleted: false,
+        // A server without the route answered with its own 404 text, which
+        // read as though the account were missing rather than the button.
+        message: error.kind == ShiftApiErrorKind.notFound
+            ? 'This server cannot delete accounts yet, so nothing was '
+                'deleted and you are still signed in.'
+            : error.message,
+      );
     }
     await signOut();
-    return null;
+    return (
+      deleted: true,
+      message: note ?? 'Your account has been deleted.',
+    );
   }
 
   void setBackendBaseUrl(String? url) {
