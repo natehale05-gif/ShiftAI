@@ -131,6 +131,39 @@ void main() {
       }
     });
 
+    test(
+        'an echo is no polish: "make a video of Miami" coming back as itself '
+        'gets the local brief, not "already a full brief"', () async {
+      final HttpRepository repo = _over((http.Request r) {
+        final String sent =
+            (jsonDecode(r.body) as Map<String, dynamic>)['prompt'] as String;
+        return http.Response(jsonEncode(<String, String>{'prompt': sent}), 200);
+      });
+      final String out = await repo.polish('make a video of Miami');
+      expect(out, Prompt.polish('make a video of Miami'));
+      expect(Prompt.isPolished(out), isTrue);
+
+      // Text that already is a brief does stay as it is.
+      final String brief = Prompt.polish('make a video of Miami');
+      expect(await repo.polish(brief), brief);
+    });
+
+    test('the rewrite is found whatever it is called, and inside data',
+        () async {
+      for (final String body in <String>[
+        '{"prompt":"make a poster","polished":"A bold poster."}',
+        '{"prompt":"make a poster","polishedPrompt":"A bold poster."}',
+        '{"data":{"prompt":"make a poster","polished_prompt":"A bold poster."}}',
+        '{"data":{"prompt":"A bold poster."}}',
+        '{"result":"A bold poster."}',
+        '"A bold poster."',
+      ]) {
+        final HttpRepository repo = _over((_) => http.Response(body, 200));
+        expect(await repo.polish('make a poster'), 'A bold poster.',
+            reason: body);
+      }
+    });
+
     test('an answer with nothing usable in it never blanks the bar', () async {
       for (final String body in <String>['{}', '{"prompt":"  "}', '[]']) {
         final HttpRepository repo = _over((_) => http.Response(body, 200));
