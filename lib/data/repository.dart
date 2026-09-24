@@ -104,12 +104,21 @@ abstract interface class ShiftRepository {
   /// [model] names which AI answers; null lets the server pick. [history]
   /// is the whole conversation before [prompt], so the model that answers
   /// reads everything said so far, including other models' replies.
+  ///
+  /// Completing [cancel] stops the request (Stop in the composer); the
+  /// call then throws, and the caller has already moved on.
+  ///
+  /// [onText] is handed the answer so far, each time more of it arrives,
+  /// when the engine writes it out as it goes. The returned messages are
+  /// the finished answer either way.
   Future<List<ChatMessage>> send(
     String prompt, {
     bool private = false,
     String? avatarId,
     String? model,
     List<ChatTurn> history = const <ChatTurn>[],
+    Future<void>? cancel,
+    void Function(String soFar)? onText,
   });
 
   /// Rewrite a rough ask into a fuller brief. Returning the text unchanged
@@ -158,6 +167,10 @@ abstract interface class ShiftRepository {
   Future<League?> shareLocation({required double lat, required double lng});
 
   // Vault ----------------------------------------------------------------
+  /// This creator's vault, on its own: re-read when an answer brings back
+  /// a file the vault on screen does not have yet.
+  Future<List<VaultItem>> vault();
+
   /// Hearts a piece in EcoVault, which is what puts it in the person's own
   /// vault. Saving someone else's work copies nothing and changes nothing
   /// about their piece — it is a bookmark, and it is the viewer's.

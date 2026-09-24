@@ -64,13 +64,184 @@ class ApiClient {
           .get(_uri(path, query), headers: await _headers(json: false))
           .timeout(timeout));
 
-  Future<dynamic> post(String path, {Object? body}) => _send(() async => _client
-      .post(
-        _uri(path),
-        headers: await _headers(),
-        body: body == null ? null : jsonEncode(body),
-      )
-      .timeout(timeout));
+  /// [wait] replaces [timeout] for one call that is expected to take
+  /// longer (a model writing a long answer, or making a file). Completing
+  /// [abort] cancels the request, and the call throws.
+  Future<dynamic> post(
+    String path, {
+    Object? body,
+    Duration? wait,
+    Future<void>? abort,
+  }) {
+    if (abort == null) {
+      return _send(() async => _client
+          .post(
+            _uri(path),
+            headers: await _headers(),
+            body: body == null ? null : jsonEncode(body),
+          )
+          .timeout(wait ?? timeout));
+    }
+    return _send(() async {
+      final http.AbortableRequest request =
+          http.AbortableRequest('POST', _uri(path), abortTrigger: abort)
+            ..headers.addAll(await _headers());
+      if (body != null) request.body = jsonEncode(body);
+      final http.StreamedResponse streamed =
+          await _client.send(request).timeout(wait ?? timeout);
+      return http.Response.fromStream(streamed);
+    });
+  }
+
+  /// A post whose answer may arrive as it is written.
+  ///
+  /// It asks for `text/event-stream` as well as JSON. A server that
+  /// streams sends `text` events, each `{"text": "<the next words>"}`,
+  /// handed to [onText] as they land, then one `messages` event with the
+  /// finished answer, which is what this returns; an `error` event is
+  /// thrown as a server error. A server that does not stream answers JSON
+  /// as usual and [onText] is never called. A stream that ends with no
+  /// `messages` event returns null.
+  ///
+  /// [wait] is how long the server may take to start answering, and then
+  /// how long it may go quiet mid-answer. [abort] cancels, as for [post].
+  Future<dynamic> postEvents(
+    String path, {
+    Object? body,
+    Duration? wait,
+    Future<void>? abort,
+    void Function(String text)? onText,
+  }) async {
+    final Duration limit = wait ?? timeout;
+    Future<http.StreamedResponse> open() async {
+      final http.AbortableRequest request =
+          http.AbortableRequest('POST', _uri(path), abortTrigger: abort)
+            ..headers.addAll(await _headers())
+            ..headers['Accept'] = 'text/event-stream, application/json';
+      if (body != null) request.body = jsonEncode(body);
+      return _client.send(request).timeout(limit);
+    }
+
+    Future<http.StreamedResponse> guarded(
+      Future<http.StreamedResponse> Function() run,
+    ) async {
+      try {
+        return await run();
+      } on TimeoutException {
+        throw const ShiftApiException(
+          ShiftApiErrorKind.timeout,
+          'The server did not answer in time.',
+        );
+      } on Object catch (error) {
+        throw ShiftApiException(
+          ShiftApiErrorKind.offline,
+          'Could not reach the server. $error',
+        );
+      }
+    }
+
+    http.StreamedResponse response = await guarded(open);
+    if (response.statusCode == 401 && onUnauthorised != null) {
+      await response.stream.drain<void>();
+      final String? fresh = await onUnauthorised!();
+      if (fresh != null && fresh.isNotEmpty) response = await guarded(open);
+    }
+    final String type = response.headers['content-type'] ?? '';
+    final bool ok = response.statusCode >= 200 && response.statusCode < 300;
+    if (!ok || !type.startsWith('text/event-stream')) {
+      final http.Response whole;
+      try {
+        whole = await http.Response.fromStream(response);
+      } on Object catch (error) {
+        throw ShiftApiException(
+          ShiftApiErrorKind.offline,
+          'The answer was cut off. $error',
+        );
+      }
+      return _decode(whole);
+    }
+    return _readEvents(response.stream, limit: limit, onText: onText);
+  }
+
+  /// Server-sent events, one `event:` and its `data:` lines per blank-line
+  /// separated block.
+  static Future<dynamic> _readEvents(
+    Stream<List<int>> bytes, {
+    required Duration limit,
+    void Function(String text)? onText,
+  }) async {
+    String event = 'message';
+    final List<String> data = <String>[];
+    dynamic finished;
+
+    void dispatch() {
+      if (data.isEmpty) {
+        event = 'message';
+        return;
+      }
+      final String raw = data.join('\n');
+      data.clear();
+      final String name = event;
+      event = 'message';
+      final Object? decoded;
+      try {
+        decoded = jsonDecode(raw);
+      } on FormatException {
+        throw const ShiftApiException(
+          ShiftApiErrorKind.malformed,
+          'The server sent an event that is not JSON.',
+        );
+      }
+      switch (name) {
+        case 'text':
+          final Object? text =
+              decoded is Map<String, dynamic> ? decoded['text'] : null;
+          if (text is String && text.isNotEmpty) onText?.call(text);
+        case 'messages':
+          finished = decoded;
+        case 'error':
+          throw ShiftApiException(
+            ShiftApiErrorKind.server,
+            (decoded is Map<String, dynamic>
+                    ? _firstMessage(decoded)
+                    : null) ??
+                'The answer stopped part way.',
+          );
+      }
+    }
+
+    try {
+      await for (final String line in bytes
+          .timeout(limit)
+          .transform(const Utf8Decoder(allowMalformed: true))
+          .transform(const LineSplitter())) {
+        if (line.isEmpty) {
+          dispatch();
+        } else if (line.startsWith(':')) {
+          // A comment: servers send these to keep the connection open.
+        } else if (line.startsWith('event:')) {
+          event = line.substring(6).trim();
+        } else if (line.startsWith('data:')) {
+          final String value = line.substring(5);
+          data.add(value.startsWith(' ') ? value.substring(1) : value);
+        }
+      }
+      dispatch();
+    } on ShiftApiException {
+      rethrow;
+    } on TimeoutException {
+      throw const ShiftApiException(
+        ShiftApiErrorKind.timeout,
+        'The answer stopped coming.',
+      );
+    } on Object catch (error) {
+      throw ShiftApiException(
+        ShiftApiErrorKind.offline,
+        'The answer was cut off. $error',
+      );
+    }
+    return finished;
+  }
 
   Future<dynamic> patch(String path, {Object? body}) =>
       _send(() async => _client
@@ -155,6 +326,12 @@ class ApiClient {
         return _send(run, allowRetry: false);
       }
     }
+    return _decode(response);
+  }
+
+  /// A whole response as JSON, or the [ShiftApiException] its status means.
+  static dynamic _decode(http.Response response) {
+    final int status = response.statusCode;
     // JSON is UTF-8 by definition (RFC 8259), whatever the Content-Type
     // says. response.body decodes by the header and falls back to
     // Latin-1 when it names no charset and is not application/json, so a
@@ -193,14 +370,17 @@ class ApiClient {
     if (body.isEmpty) return null;
     try {
       final Object? decoded = jsonDecode(body);
-      if (decoded is Map<String, dynamic>) {
-        for (final String key in <String>['message', 'error', 'detail']) {
-          final Object? value = decoded[key];
-          if (value is String && value.isNotEmpty) return value;
-        }
-      }
+      if (decoded is Map<String, dynamic>) return _firstMessage(decoded);
     } on FormatException {
       // Not JSON; nothing useful to show.
+    }
+    return null;
+  }
+
+  static String? _firstMessage(Map<String, dynamic> body) {
+    for (final String key in <String>['message', 'error', 'detail']) {
+      final Object? value = body[key];
+      if (value is String && value.isNotEmpty) return value;
     }
     return null;
   }

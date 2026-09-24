@@ -30,6 +30,9 @@ class HttpRepository implements ShiftRepository {
   static const String _connections = '/v1/connections';
   static const String _week = '/v1/week';
   static const String _messages = '/v1/messages';
+
+  /// How long an answer may take before the app gives up on it.
+  static const Duration replyWait = Duration(minutes: 3);
   static const String _polish = '/v1/polish';
   static const String _uploads = '/v1/uploads';
   static const String _avatars = '/v1/avatars';
@@ -166,9 +169,25 @@ class HttpRepository implements ShiftRepository {
     String? avatarId,
     String? model,
     List<ChatTurn> history = const <ChatTurn>[],
+    Future<void>? cancel,
+    void Function(String soFar)? onText,
   }) async {
-    final dynamic body = await _api.post(
+    final StringBuffer soFar = StringBuffer();
+    final dynamic body = await _api.postEvents(
       _messages,
+      // Written out as it comes, when the engine streams: the words show
+      // as they are written instead of all at once after a wait.
+      onText: (String more) {
+        soFar.write(more);
+        onText?.call(soFar.toString());
+      },
+      // A model writing a long answer, with the whole conversation to
+      // read, or making a picture, often takes more than the 20 s every
+      // other call gets. At 20 s the app said the server had not answered
+      // while the server went on and charged for the answer. Stop is how
+      // a person gives up sooner.
+      wait: replyWait,
+      abort: cancel,
       // `private` tells the server not to retain the exchange. The client
       // already keeps it out of its own storage. The whole conversation
       // goes with every message, so the server never has to keep a thread
@@ -181,6 +200,24 @@ class HttpRepository implements ShiftRepository {
         'history': history.map((ChatTurn t) => t.toJson()).toList(),
       },
     );
+    if (body == null) {
+      // A stream that ended without its finished answer: what it wrote is
+      // the answer.
+      if (soFar.isEmpty) {
+        throw const ShiftApiException(
+          ShiftApiErrorKind.malformed,
+          'The answer came back empty.',
+        );
+      }
+      return <ChatMessage>[
+        ChatMessage(
+          id: 'streamed-${DateTime.now().microsecondsSinceEpoch}',
+          author: MessageAuthor.shift,
+          body: soFar.toString(),
+          model: model,
+        ),
+      ];
+    }
     return Decode.rows(body, 'messages')
         .map(ChatMessage.fromJson)
         .toList(growable: false);
@@ -326,6 +363,12 @@ class HttpRepository implements ShiftRepository {
         await _api.patch(_me, body: <String, dynamic>{'handle': handle})
             as Map<String, dynamic>,
       );
+
+  @override
+  Future<List<VaultItem>> vault() async =>
+      Decode.rows(await _api.get(_vault), 'vault')
+          .map(VaultItem.fromJson)
+          .toList(growable: false);
 
   @override
   Future<List<Avatar>> avatars() async =>

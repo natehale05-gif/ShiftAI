@@ -43,6 +43,9 @@ grep -q "club.shiftai.app" ios/Runner.xcodeproj/project.pbxproj \
 grep -q "NSLocationWhenInUseUsageDescription" ios/Runner/Info.plist \
   && ok "location usage string set (the local league needs it)" \
   || bad "no NSLocationWhenInUseUsageDescription: asking for location crashes"
+grep -q "^Pod::PICKER_AUDIO = false" ios/Podfile 2>/dev/null \
+  && ok "file_picker's Apple Music picker is compiled out" \
+  || bad "ios/Podfile lost Pod::PICKER_AUDIO = false: the upload asks for an NSAppleMusicUsageDescription (ITMS-90683)"
 
 echo
 echo "Home screen widgets"

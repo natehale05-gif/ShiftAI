@@ -371,6 +371,12 @@ class AppState extends ChangeNotifier {
   Timer? _writeTimer;
   Future<void>? _reply;
 
+  /// Completed to cancel the request [_reply] is waiting on.
+  Completer<void>? _stop;
+
+  /// Turns [slowReply] on once an answer has taken [slowReplyAfter].
+  Timer? _slowTimer;
+
   // Shell ---------------------------------------------------------------
   /// The theme picked by hand. While [followSystem] is on it names the pair
   /// to follow the system within; [activeTheme] is what is showing.
@@ -479,9 +485,7 @@ class AppState extends ChangeNotifier {
     final ChatThread? thread =
         threads.where((ChatThread t) => t.id == id).firstOrNull;
     if (thread == null) return;
-    _round++;
-    _reply?.ignore();
-    thinking = false;
+    _dropReply();
     privateChat = false;
     messages = List<ChatMessage>.of(thread.messages);
     currentThreadId = thread.id;
@@ -548,6 +552,21 @@ class AppState extends ChangeNotifier {
 
   /// True between a message going out and its answer landing.
   bool thinking = false;
+
+  /// True once the answer being waited for has taken [slowReplyAfter], so
+  /// the thread says it is still working and Stop is the obvious way out.
+  bool slowReply = false;
+
+  /// When "Working" becomes "Still working". Settable for tests.
+  Duration slowReplyAfter = const Duration(seconds: 20);
+
+  /// True when the last answer was stopped before it came, so the thread
+  /// offers to ask again. Not saved: it describes this sitting only.
+  bool stopped = false;
+
+  /// The reply being written out as it arrives, while it is: shown in the
+  /// thread as it grows, without Copy, Retry or Edit until it is done.
+  String? streamingId;
 
   VaultScope vaultScope = VaultScope.mine;
   String? selectedVaultId;
@@ -651,8 +670,10 @@ class AppState extends ChangeNotifier {
   /// reply's list is folded into its text, since the model has no other
   /// way to see it. Failure notices are the app's, not anybody's answer,
   /// and stay out.
-  List<ChatTurn> get chatHistory => <ChatTurn>[
-        for (final ChatMessage m in messages)
+  List<ChatTurn> get chatHistory => _historyOf(messages);
+
+  static List<ChatTurn> _historyOf(List<ChatMessage> thread) => <ChatTurn>[
+        for (final ChatMessage m in thread)
           if (m.failure == null) _turnOf(m),
       ];
 
@@ -879,7 +900,16 @@ class AppState extends ChangeNotifier {
     final List<VaultItem> beforeEco = ecoVault;
     final List<VaultItem> beforeMine = vault;
 
-    VaultItem apply(VaultItem v) => v.id == id ? v.copyWith(saved: next) : v;
+    // The count moves with the heart, when there is one: the feed's
+    // "12 hearts" should not wait on the server to say 13.
+    VaultItem apply(VaultItem v) => v.id != id
+        ? v
+        : v.copyWith(
+            saved: next,
+            hearts: v.hearts == null
+                ? null
+                : (v.hearts! + (next ? 1 : -1)).clamp(0, 1 << 31),
+          );
     ecoVault = ecoVault.map(apply).toList();
     vault = vault.map(apply).toList();
     _changed();
@@ -1315,6 +1345,7 @@ class AppState extends ChangeNotifier {
 
   Future<void> signOut() async {
     _signOuts++;
+    _dropReply();
     await _auth.signOut();
     signedIn = false;
     selectedVaultId = null;
@@ -1348,15 +1379,31 @@ class AppState extends ChangeNotifier {
 
   /// Deletes the account and everything under it. Apple requires this to
   /// be reachable from inside the app when the app can create accounts
-  /// (Guideline 5.1.1(v)). Returns null on success, or what went wrong.
-  Future<String?> deleteAccount() async {
+  /// (Guideline 5.1.1(v)).
+  ///
+  /// [message] is what to tell the person: that it is gone, the server's
+  /// own sentence when it is queued rather than immediate (a 202 with the
+  /// date it completes), or why it was not deleted.
+  Future<({bool deleted, String message})> deleteAccount() async {
+    final String? note;
     try {
-      await _auth.deleteAccount();
+      note = await _auth.deleteAccount();
     } on ShiftApiException catch (error) {
-      return error.message;
+      return (
+        deleted: false,
+        // A server without the route answered with its own 404 text, which
+        // read as though the account were missing rather than the button.
+        message: error.kind == ShiftApiErrorKind.notFound
+            ? 'This server cannot delete accounts yet, so nothing was '
+                'deleted and you are still signed in.'
+            : error.message,
+      );
     }
     await signOut();
-    return null;
+    return (
+      deleted: true,
+      message: note ?? 'Your account has been deleted.',
+    );
   }
 
   void setBackendBaseUrl(String? url) {
@@ -1398,25 +1445,122 @@ class AppState extends ChangeNotifier {
     if (chatNeedsSignIn) return false;
     final String body = text.trim();
     if (body.isEmpty) return false;
-    lastAsk = body;
     final String stamp = DateTime.now().microsecondsSinceEpoch.toString();
     // Taken before the new message is added: the history is what came
     // before this prompt, and the prompt travels on its own.
     final List<ChatTurn> history = chatHistory;
     final ModelRoute route = routeFor(body, reply: reply);
-    final ChatModel? answerer = route.model;
     messages = <ChatMessage>[
       ...messages,
       ChatMessage(id: 'you-$stamp', author: MessageAuthor.you, body: body),
     ];
+    _ask(body, stamp: stamp, history: history, route: route);
+    return true;
+  }
+
+  /// Retry: asks the question behind [replyId] (the newest reply when
+  /// null) again, in place. That reply and everything after it go, and
+  /// the new answer takes its place, so the thread reads as one answer to
+  /// one question rather than the question twice.
+  ///
+  /// It goes to the model that answered it, unless [using] names another.
+  /// Either way an image, a video or audio still only goes to a model that
+  /// makes it (see [routeFor]).
+  bool regenerate({String? replyId, ChatModel? using}) {
+    if (chatNeedsSignIn) return false;
+    final int reply = replyId == null
+        ? messages.length
+        : messages.indexWhere((ChatMessage m) => m.id == replyId);
+    if (reply < 0) return false;
+    int asked = reply - 1;
+    while (asked >= 0 && messages[asked].author != MessageAuthor.you) {
+      asked--;
+    }
+    if (asked < 0) return false;
+    final ChatMessage question = messages[asked];
+    final String? answeredBy = <ChatMessage>[
+      ...messages.skip(asked + 1),
+    ].where((ChatMessage m) => m.model != null).firstOrNull?.model;
+    final ChatModel? same =
+        chatModels.where((ChatModel m) => m.id == answeredBy).firstOrNull;
+    final List<ChatTurn> history = _historyOf(messages.sublist(0, asked));
+    messages = messages.sublist(0, asked + 1);
+    final ModelRoute route = ModelRouter.route(
+      chatModels,
+      question.body,
+      picked: using ?? same ?? chatModel,
+      lastModelId: answeredBy,
+    );
+    _ask(
+      question.body,
+      stamp: DateTime.now().microsecondsSinceEpoch.toString(),
+      history: history,
+      route: route,
+    );
+    return true;
+  }
+
+  /// Edit: changes what you asked in [messageId] and asks again from
+  /// there. What came after it goes, as it answered a question that is no
+  /// longer the one on screen.
+  bool editMessage(String messageId, String text) {
+    if (chatNeedsSignIn || text.trim().isEmpty) return false;
+    final int at = messages.indexWhere(
+      (ChatMessage m) => m.id == messageId && m.author == MessageAuthor.you,
+    );
+    if (at < 0) return false;
+    messages = messages.sublist(0, at);
+    return sendMessage(text);
+  }
+
+  /// Stop: gives up on the answer being waited for. The request is
+  /// cancelled, not only ignored, so a server that stops work when its
+  /// caller goes away stops this. Whatever was asked stays on screen.
+  void stopReply() {
+    if (!thinking) return;
+    final bool partial = streamingId != null;
+    _dropReply();
+    stopped = true;
+    // What was written before Stop stays, as it would in Claude: it is
+    // what the model said, and the next message reads it.
+    if (partial) _saveThread();
+    _changed();
+  }
+
+  /// Ends the wait for an answer: it is cancelled, and will not be put on
+  /// screen if it arrives anyway.
+  void _dropReply() {
+    _round++;
+    _reply?.ignore();
+    final Completer<void>? stop = _stop;
+    if (stop != null && !stop.isCompleted) stop.complete();
+    _stop = null;
+    _slowTimer?.cancel();
+    slowReply = false;
+    thinking = false;
+    stopped = false;
+    streamingId = null;
+  }
+
+  /// Asks [prompt], which is already on screen as the newest message, and
+  /// puts the answer under it. [history] is everything before [prompt].
+  void _ask(
+    String prompt, {
+    required String stamp,
+    required List<ChatTurn> history,
+    required ModelRoute route,
+  }) {
+    // A newer message, a Retry, an Edit or a cleared thread ends the one
+    // before it: its late answer is not appended to a conversation that
+    // moved on, and the request is cancelled.
+    _dropReply();
+    lastAsk = prompt;
     _saveThread();
     // An image (or video, or audio) with no model connected that makes
     // one: nothing is sent. A chat model would only have written about
     // the picture it cannot draw, and charged for it.
     final TaskKind? missing = route.missing;
     if (missing != null) {
-      _round++;
-      thinking = false;
       messages = <ChatMessage>[
         ...messages,
         ChatMessage(
@@ -1434,34 +1578,71 @@ class AppState extends ChangeNotifier {
         ),
       ];
       _changed();
-      return true;
+      return;
     }
+    final ChatModel? answerer = route.model;
     thinking = true;
     _changed();
 
-    // A newer message, or a cleared thread, ends this one: its late answer
-    // is not appended to a conversation that moved on.
-    final int round = ++_round;
+    final int round = _round;
     bool current() => round == _round;
+    final Completer<void> stop = Completer<void>();
+    _stop = stop;
+    _slowTimer = Timer(slowReplyAfter, () {
+      if (!current() || !thinking) return;
+      slowReply = true;
+      notifyListeners();
+    });
+
+    // Written out as it arrives, when the engine streams: one reply that
+    // grows in place, replaced by the finished answer when that lands.
+    final String live = 'live-$stamp';
+    void grow(String soFar) {
+      if (!current()) return;
+      _slowTimer?.cancel();
+      slowReply = false;
+      streamingId = live;
+      final ChatMessage partial = ChatMessage(
+        id: live,
+        author: MessageAuthor.shift,
+        body: soFar,
+        model: answerer?.id,
+        modelName: answerer?.name,
+      );
+      final int at = messages.indexWhere((ChatMessage m) => m.id == live);
+      messages = at < 0
+          ? <ChatMessage>[...messages, partial]
+          : <ChatMessage>[
+              ...messages.sublist(0, at),
+              partial,
+              ...messages.sublist(at + 1),
+            ];
+      // Every few words: redrawn, not written to storage each time.
+      notifyListeners();
+    }
 
     // The answer comes from the engine. Private chat is passed through so
     // a server can be told not to retain it, on top of this client never
     // writing it down.
-    _reply?.ignore();
     _reply = () async {
       await _answer(
         stamp,
-        body,
+        prompt,
         model: answerer?.id,
         history: history,
         as: answerer,
         stillCurrent: current,
+        cancel: stop.future,
+        onText: grow,
+        replacing: live,
       );
       if (!current()) return;
+      _slowTimer?.cancel();
+      slowReply = false;
       thinking = false;
+      streamingId = null;
       _changed();
     }();
-    return true;
   }
 
   int _round = 0;
@@ -1484,6 +1665,9 @@ class AppState extends ChangeNotifier {
     required List<ChatTurn> history,
     ChatModel? as,
     bool Function()? stillCurrent,
+    Future<void>? cancel,
+    void Function(String soFar)? onText,
+    String? replacing,
   }) async {
     try {
       final List<ChatMessage> answer = (await _repo.send(
@@ -1492,6 +1676,8 @@ class AppState extends ChangeNotifier {
         avatarId: activeAvatarId,
         model: model,
         history: history,
+        cancel: cancel,
+        onText: onText,
       ))
           .map((ChatMessage a) => as == null || a.model != null
               ? a
@@ -1510,13 +1696,24 @@ class AppState extends ChangeNotifier {
                 ))
           .toList();
       if (!(stillCurrent?.call() ?? true)) return const <ChatMessage>[];
-      messages = <ChatMessage>[...messages, ...answer];
+      // The finished answer takes the place of the one written out as it
+      // came.
+      messages = <ChatMessage>[
+        ...messages.where((ChatMessage m) => m.id != replacing),
+        ...answer,
+      ];
       _saveThread();
       lastError = null;
       // Coming back with something made is the ring, whether or not it
       // ever lands in the vault — a private ask still counts.
       if (answer.any((ChatMessage m) => m.attachment != null)) {
         _closeRing(RingKind.create);
+      }
+      // The file it made is in the vault on the server, not the one on
+      // screen, which was read before it existed: "Open in Vault" opened
+      // a vault without it until the next refresh.
+      if (answer.any((ChatMessage m) => _notInVault(m.attachment))) {
+        unawaited(refreshVault());
       }
       _changed();
       return answer;
@@ -1547,6 +1744,25 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  bool _notInVault(MessageAttachment? file) =>
+      file != null &&
+      file.vaultItemId.isNotEmpty &&
+      !vault.any((VaultItem v) => v.id == file.vaultItemId);
+
+  /// Re-reads the vault on its own. A failure leaves what is on screen:
+  /// the file is still in the thread, and the next refresh brings it.
+  Future<void> refreshVault() async {
+    final int signOuts = _signOuts;
+    try {
+      final List<VaultItem> next = await _repo.vault();
+      if (signOuts != _signOuts) return;
+      vault = next;
+      _changed();
+    } on ShiftApiException catch (error) {
+      debugPrint('vault: not re-read — ${error.message}');
+    }
+  }
+
   /// Rewrites what is in the composer into a fuller brief.
   ///
   /// `error` is set, and `text` is what was passed in, when the engine
@@ -1565,9 +1781,7 @@ class AppState extends ChangeNotifier {
   }
 
   void clearThread() {
-    _round++;
-    _reply?.ignore();
-    thinking = false;
+    _dropReply();
     messages = <ChatMessage>[];
     // The chat that was on screen is already saved; this is a new one.
     currentThreadId = null;
@@ -1650,6 +1864,7 @@ class AppState extends ChangeNotifier {
 
   @override
   void dispose() {
+    _slowTimer?.cancel();
     _reply?.ignore();
     _writeTimer?.cancel();
     _repo.dispose();

@@ -136,10 +136,14 @@ then answer with an attachment that points at that row:
   `mediaType: "audio"` on the vault row.
 - The row must already be in `GET /v1/vault` by the time you answer.
   Tapping the card opens that vault item.
-- A long render may not fit the client's 20 s timeout. Either answer
-  at once with a "working on it" message and put the row in the vault
-  when it finishes, or keep the request under 20 s. Do not hold the
-  connection open for a minute.
+- The app waits up to **3 minutes** for `/v1/messages` (every other
+  route gets 20 s). After 20 s it tells the person it is still working
+  and offers Stop. A render that takes longer than 3 minutes should
+  answer at once with a "working on it" message and put the row in the
+  vault when it finishes.
+- **Stop cancels the request**: the app closes the connection. When the
+  caller goes away, stop the model call and do not charge for it, if the
+  provider allows that.
 
 **`private: true`** means do not retain the exchange anywhere: no logs of
 the content, and nothing in `/v1/threads`.
@@ -193,6 +197,34 @@ Body `{ "prompt": "make a poster" }`. Answer `{ "prompt": "<the fuller brief>" }
   `image/polish-prompt` answer unchanged works.
 - It is optional. Until it exists, answer 404 and the client asks the chat
   model instead.
+
+## 4b. Stream the answer (optional, and worth it)
+
+The app now asks `/v1/messages` for `text/event-stream` as well as JSON.
+Answer JSON and nothing changes. Stream it and the reply appears word by
+word instead of all at once after a wait:
+
+```
+event: text
+data: {"text": "Harbour light, "}
+
+event: text
+data: {"text": "one crossing."}
+
+event: messages
+data: [ ...the same JSON array you return today... ]
+```
+
+- `text` is the next piece only, not everything so far.
+- `messages` is sent last, and is the finished answer exactly as the
+  non-streaming route returns it (model, modelName, choices,
+  attachment). It replaces what was streamed.
+- `event: error` with `{"message": "..."}` is a refusal the person sees.
+- Map it straight from the provider's stream: for Anthropic, each
+  `content_block_delta` text becomes one `text` event.
+- For an image or video model there is nothing to stream; answer JSON.
+- `python3 tool/mock_engine.py` streams this way, so `curl -N` against it
+  shows the exact bytes.
 
 ## 5. Questions answered with buttons
 
@@ -253,6 +285,19 @@ needs:
   Use it whenever `avatarId` is missing or is `"shiftai-default"`. It is
   never returned by `GET /v1/avatars` and is never anyone's `personal`
   avatar.
+
+## 6b. EcoVault is a feed now: two optional fields
+
+EcoVault shows as an Instagram-style feed. Each `/v1/ecovault` row can
+carry:
+
+- `hearts`: the number of people who have hearted it. It is shown as
+  "1,284 hearts". Leave it out and no count is shown.
+- `byAvatarUrl`: the maker's personal avatar still (its `previewUrl`).
+  Initials are shown without it.
+
+Everything else in the feed (handle, model, title, prompt, date) comes
+from the fields the rows already carry.
 
 ## 7. `DELETE /v1/me` (blocks the App Store)
 

@@ -72,6 +72,8 @@ class _Engine extends SeedRepository {
     String? avatarId,
     String? model,
     List<ChatTurn> history = const <ChatTurn>[],
+    Future<void>? cancel,
+    void Function(String soFar)? onText,
   }) async {
     sent.add((prompt: prompt, model: model, history: history));
     if (model != null && model == failFor) {
@@ -482,6 +484,14 @@ void main() {
         'fix this bug in my Dart function': TaskKind.code,
         'find the latest news on the launch': TaskKind.research,
         'draft an email to the venue': TaskKind.writing,
+        // A plan for a piece is words, whatever the piece is. "Give me a
+        // shot list for the ferry reel" went to the video model and came
+        // back a video.
+        'give me a shot list for the ferry reel': TaskKind.writing,
+        'outline a 30 second promo video': TaskKind.writing,
+        'ideas for a poster about the market': TaskKind.writing,
+        'a content plan for my reels this week': TaskKind.writing,
+        'make a video of the ferry': TaskKind.video,
         'thanks, shorter please': null,
         'why is the sky blue?': null,
       };

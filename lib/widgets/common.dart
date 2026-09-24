@@ -692,27 +692,37 @@ class HeartButton extends StatelessWidget {
     );
   }
 
-  Future<void> _toggle(BuildContext context, AppState state) async {
-    final bool wasOn = item.saved;
-    final ScaffoldMessengerState bar = ScaffoldMessenger.of(context);
-    Haptics.light();
-    final bool took = await state.toggleSaved(item.id);
-    if (!took) {
-      bar.showSnackBar(
-        SnackBar(
-          content: Text(
-            state.lastError?.message ?? 'Could not save it just now.',
-          ),
+  Future<void> _toggle(BuildContext context, AppState state) =>
+      toggleHeart(context, state, item);
+}
+
+/// Hearts [item] or takes the heart off, and says so: a refusal with its
+/// reason, a save with where it went. The heart button and the feed's
+/// heart and double-tap all go through this.
+Future<void> toggleHeart(
+  BuildContext context,
+  AppState state,
+  VaultItem item,
+) async {
+  final bool wasOn = item.saved;
+  final ScaffoldMessengerState bar = ScaffoldMessenger.of(context);
+  Haptics.light();
+  final bool took = await state.toggleSaved(item.id);
+  if (!took) {
+    bar.showSnackBar(
+      SnackBar(
+        content: Text(
+          state.lastError?.message ?? 'Could not save it just now.',
         ),
-      );
-      return;
-    }
-    // Only on the way in: an un-save needs no announcement.
-    if (!wasOn) {
-      bar.showSnackBar(
-        const SnackBar(content: Text('Saved — it is in your vault now.')),
-      );
-    }
+      ),
+    );
+    return;
+  }
+  // Only on the way in: an un-save needs no announcement.
+  if (!wasOn) {
+    bar.showSnackBar(
+      const SnackBar(content: Text('Saved — it is in your vault now.')),
+    );
   }
 }
 
@@ -730,6 +740,7 @@ class PillComposer extends StatefulWidget {
   const PillComposer({
     required this.hint,
     this.onSend,
+    this.onStop,
     this.showSparkle = false,
     this.showAvatarPicker = false,
     this.width = 950,
@@ -743,6 +754,11 @@ class PillComposer extends StatefulWidget {
   /// pressing enter and watching it vanish with nothing to show for it is
   /// the same dead end as being refused, in a worse place.
   final bool Function(String)? onSend;
+
+  /// Set while an answer is on its way: the send button becomes Stop,
+  /// which gives up on it. Enter still sends, and a new message replaces
+  /// the one being waited for.
+  final VoidCallback? onStop;
 
   /// Suite's composer carries the make-something mark; the others do not.
   final bool showSparkle;
@@ -1104,10 +1120,17 @@ class _PillComposerState extends State<PillComposer> {
                             width: _controlSize,
                             height: _controlSize,
                             child: IconButton(
-                              tooltip: 'Send',
-                              onPressed: _send,
-                              icon: const Icon(
-                                Icons.arrow_upward_rounded,
+                              tooltip: widget.onStop == null ? 'Send' : 'Stop',
+                              onPressed: widget.onStop == null
+                                  ? _send
+                                  : () {
+                                      Haptics.light();
+                                      widget.onStop!();
+                                    },
+                              icon: Icon(
+                                widget.onStop == null
+                                    ? Icons.arrow_upward_rounded
+                                    : Icons.stop_rounded,
                                 size: 20,
                               ),
                               style: IconButton.styleFrom(

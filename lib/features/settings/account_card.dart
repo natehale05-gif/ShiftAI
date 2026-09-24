@@ -193,10 +193,6 @@ Future<void> _deleteAccount(BuildContext context) async {
   if (!(sure ?? false) || !context.mounted) return;
 
   final ScaffoldMessengerState bar = ScaffoldMessenger.of(context);
-  final String? failed = await state.deleteAccount();
-  bar.showSnackBar(
-    SnackBar(
-      content: Text(failed ?? 'Your account has been deleted.'),
-    ),
-  );
+  final ({bool deleted, String message}) outcome = await state.deleteAccount();
+  bar.showSnackBar(SnackBar(content: Text(outcome.message)));
 }

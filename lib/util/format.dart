@@ -35,6 +35,18 @@ abstract final class Fmt {
 
   static String seconds(int? value) => value == null ? '' : '${value}s';
 
+  /// How long ago, the way a feed says it: "Just now", "5 minutes ago",
+  /// "3 hours ago", "2 days ago", then the date once it is over a week.
+  static String ago(DateTime when, {DateTime? now}) {
+    final Duration since = (now ?? DateTime.now()).difference(when);
+    String unit(int n, String one) => '$n $one${n == 1 ? '' : 's'} ago';
+    if (since.inMinutes < 1) return 'Just now';
+    if (since.inHours < 1) return unit(since.inMinutes, 'minute');
+    if (since.inDays < 1) return unit(since.inHours, 'hour');
+    if (since.inDays < 7) return unit(since.inDays, 'day');
+    return date(when);
+  }
+
   /// "5d 09:36:49" — days unpadded, the clock padded, so it does not read
   /// like a register being dumped. Null once the week has closed, so the
   /// caller says so in its own words and drops its "Ends in" with it.

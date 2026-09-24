@@ -10,6 +10,8 @@
 #     offline_worker.js replaces it: this build's files from this build's
 #     cache at once, the page from the network if it answers within 2 s
 #     and from its last copy otherwise. A new build clears the old cache.
+#     Only the build's own files are cached (listed at the end); the API
+#     and everything else on the origin go straight to the network.
 #   - AssetManifest.bin is copied to a .wasm name and a small shim in
 #     index.html points the engine at it, because hosts that allow-list
 #     extensions do not serve .bin.
@@ -73,7 +75,18 @@ cat > offline_worker.js <<'JS'
 // file changes with the build id), which clears the old build's cache as
 // it takes over. build_id.txt is never cached; it is how the page
 // notices a new build.
+//
+// Only this build's own files are cached, by name (FILES, written in when
+// the build finishes). Everything else on this origin goes to the network
+// untouched. It used to cache every GET here, and Rex's preview serves
+// the API from the same origin as the page, so /v1/vault, /v1/avatars,
+// /v1/threads and /v1/me were answered from their first copy until the
+// next deploy: a new image never reached the vault, a training avatar
+// never finished, and since a cache match ignores the Authorization
+// header, the next account signed in on that browser would have been
+// handed this one's.
 var BUILD = '__BUILD_ID__';
+var FILES = new Set(__FILES__);
 var KEEP = 'shiftai-' + BUILD;
 // How long the page waits on the network before opening on its last copy.
 var PAGE_WAIT_MS = 2000;
@@ -91,7 +104,10 @@ self.addEventListener('activate', function (event) {
 
 // The page's list of files it fetched before this worker controlled it.
 self.addEventListener('message', function (event) {
-  var urls = (event.data && event.data.keep) || [];
+  var urls = ((event.data && event.data.keep) || []).filter(function (u) {
+    var rel = ours(u);
+    return rel !== null && (rel === '' || FILES.has(rel));
+  });
   event.waitUntil(caches.open(KEEP).then(function (cache) {
     return Promise.all(urls.map(function (u) {
       return cache.match(u, { ignoreSearch: true }).then(function (hit) {
@@ -100,6 +116,16 @@ self.addEventListener('message', function (event) {
     }));
   }));
 });
+
+// [u]'s path under this worker's scope, query left off, or null for
+// anything outside it.
+function ours(u) {
+  var scope = new URL(self.registration.scope);
+  var url = new URL(u, scope);
+  if (url.origin !== scope.origin) return null;
+  if (url.pathname.indexOf(scope.pathname) !== 0) return null;
+  return url.pathname.slice(scope.pathname.length);
+}
 
 function keep(cache, req, res) {
   if (res && res.ok) cache.put(req, res.clone());
@@ -145,12 +171,14 @@ function page(req) {
 self.addEventListener('fetch', function (event) {
   var req = event.request;
   if (req.method !== 'GET') return;
-  var url = new URL(req.url);
-  if (url.origin !== self.location.origin) return;
-  if (url.pathname.endsWith('build_id.txt')) return;
-  var isPage = req.mode === 'navigate' || url.pathname.endsWith('/') ||
-      url.pathname.endsWith('index.html');
-  event.respondWith(isPage ? page(req) : fromBuild(req));
+  var rel = ours(req.url);
+  if (rel === null) return;
+  if (req.mode === 'navigate' || rel === '' || rel === 'index.html') {
+    event.respondWith(page(req));
+  } else if (FILES.has(rel)) {
+    event.respondWith(fromBuild(req));
+  }
+  // Anything else (the API, a vault file, build_id.txt) is the network's.
 });
 JS
 sed -i "s/__BUILD_ID__/${BUILD_ID}/" offline_worker.js
@@ -373,6 +401,22 @@ page = pathlib.Path('index.html')
 html = page.read_text()
 assert '__LOCKUP__' in html
 page.write_text(html.replace('__LOCKUP__', svg.strip()))
+PY
+
+# The worker caches these files and nothing else. Written last, so the
+# list is exactly what ships. The page and the worker are handled on their
+# own, and build_id.txt is never cached.
+python3 - <<'PY'
+import json, pathlib
+skip = {'index.html', 'offline_worker.js', 'build_id.txt'}
+files = sorted(
+    p.as_posix() for p in pathlib.Path('.').rglob('*')
+    if p.is_file() and p.as_posix() not in skip
+)
+worker = pathlib.Path('offline_worker.js')
+js = worker.read_text()
+assert '__FILES__' in js, 'file list placeholder missing from the worker'
+worker.write_text(js.replace('__FILES__', json.dumps(files)))
 PY
 
 echo "built $(find . -type f | wc -l) files, $(du -sh . | cut -f1)"

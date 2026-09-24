@@ -96,15 +96,22 @@ possible** — a new id is a new app, with no reviews and no installs.
 `macos/Runner.xcodeproj` still carries the old `club.shiftai.shiftAi`. That
 is harmless while the Mac App Store is not a target; fix it before it is.
 
-### 3. There is no sign-in
+### 3. Sign-in is real; deletion waits on the server
 
-`signedIn` is a boolean with nothing behind it. Before a store build:
+Sign-in, refresh and sign-out run against the engine (`docs/API.md`,
+Auth), and the tokens live in the Keychain / Keystore.
 
-- a real sign-in, and somewhere to keep the token that is not shared
-  preferences (Keychain on iOS, Keystore on Android);
-- **account deletion inside the app.** Apple has required this since 2022
-  for any app with account creation, and it is a common rejection. A link
-  to a web page is not enough on iOS — the path has to start in the app.
+- **Account deletion inside the app.** Apple has required this since
+  2022 for any app with account creation, and it is a common rejection.
+  The button and its typed confirmation are in Settings; they call
+  `DELETE /v1/me`, which the server does not have yet. Until it does, the
+  app says "This server cannot delete accounts yet, so nothing was
+  deleted" — honest, and still a rejection.
+- **App Review signs in.** Apple's reviewers need a working account
+  (Guideline 2.1): put a demo email and password in App Store Connect →
+  App Review Information, on the production server, with some work in
+  its vault so the screens are not all empty. Google asks for the same
+  under App access.
 
 ### 4. Privacy declarations
 
@@ -155,7 +162,8 @@ Store Connect, because if you claim it Apple will test it.
 ## Before each submission
 
     flutter analyze                 # must be clean
-    flutter test                    # 101 tests
+    flutter test                    # all of them; see CLAUDE.md for the count
+    bash tool/preflight.sh          # the store checks a toolchain cannot do
     flutter build appbundle --release
     flutter build ipa --release
 
@@ -190,15 +198,18 @@ The keystore goes in as a secret and stays out of the repo — same rule as
 `android/key.properties`. Losing it still means never updating the app
 again, so the backup advice above applies to the local copy too.
 
-`.github/workflows/ci.yml` is the cheaper gate: analyzer, the 101 tests,
+`.github/workflows/ci.yml` is the cheaper gate: analyzer, the tests,
 `tool/preflight.sh` and the web bundle, on every push.
 
-## What I could not verify here
+## What has and has not been verified
 
-This session has no Android SDK and no Xcode, so **neither mobile build has
-ever been compiled**. The Dart analyzes clean and the tests pass, and the
-web build runs, but the first `flutter build appbundle` and
-`flutter build ipa` may still surface Gradle, CocoaPods or plugin problems
-— `file_picker` in particular pulls in platform code that has never been
-built here. Run both on a machine with the toolchains before you count on
-the timeline.
+Both mobile builds compile on GitHub's runners (`release.yml`): the
+`.aab` debug-signed, the iOS archive for device without signing. Neither
+has been signed, uploaded or run on a device, so the first upload and the
+first install are still unknown territory.
+
+One upload problem is already fixed: `file_picker` compiled in an Apple
+Music picker the app never opens, and App Store Connect refuses a binary
+that references it without an `NSAppleMusicUsageDescription`
+(ITMS-90683). `ios/Podfile` turns it off (`Pod::PICKER_AUDIO = false`);
+preflight and `test/ios_podfile_test.dart` fail if that line goes.

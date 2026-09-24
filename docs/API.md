@@ -150,6 +150,16 @@ Three fields carry the gallery:
   the person asking, not about the piece, so the same row comes back
   `true` for one account and `false` for another. Default false.
 
+Two more, optional, draw EcoVault as a feed (one post at a time, the
+maker above, the heart and the prompt below, like Instagram):
+
+- **`hearts`** — how many people have hearted it. Shown as "1,284
+  hearts" under the post, moved by one straight away when the viewer
+  hearts it. Omit it and there is no count line at all; the app never
+  guesses one.
+- **`byAvatarUrl`** — the maker's face: the `previewUrl` of their
+  personal avatar, a still image. Initials stand in without it.
+
 `/v1/ecovault` includes the viewer's own published pieces, so the gallery
 reads the same for everyone. Their `saved` is ignored: your own work is
 in your vault because you made it, not because you hearted it.
@@ -432,6 +442,52 @@ Answer with one or more messages, in the order they should appear:
 `author` is `you` or `shift`. Every field except `id` and `author` is
 optional — a message can be prose, bullets, an attachment card, a failure
 notice, a question with answers to tap, or any combination.
+
+**How long it may take.** This route gets 3 minutes; every other route
+gets 20 s. After 20 s the thread says it is still working and the send
+button becomes Stop. Stop closes the connection, so a server that stops
+the model call when its caller goes away saves the credits. An answer
+that needs longer than 3 minutes should come back at once as "working on
+it" and land in the vault when it is done.
+
+**A made file.** `attachment.vaultItemId` names a row that is already in
+`GET /v1/vault` when the answer goes. The app re-reads `/v1/vault` when an
+answer names a row it does not have yet, so "Open in Vault" finds it.
+
+**Retry and Edit** re-send an earlier question in place: the history
+then ends before that question, and the reply being replaced (or, for
+an edit, everything after the question) is not in it.
+
+### Writing the answer out as it comes
+
+Optional, and the app works without it. `POST /v1/messages` is sent
+with `Accept: text/event-stream, application/json`. Answer JSON as above
+and nothing changes. Answer `Content-Type: text/event-stream` instead
+and the reply appears word by word, the way Claude's does:
+
+```
+event: text
+data: {"text": "Harbour light, "}
+
+event: text
+data: {"text": "one crossing."}
+
+event: messages
+data: [{"id": "m4", "author": "shift", "model": "claude-opus-5-5", "modelName": "Claude Opus 5.5", "body": "Harbour light, one crossing."}]
+```
+
+- **`text`** carries the next piece of the reply, not the whole of it so
+  far. The app shows them joined, as one reply that grows.
+- **`messages`** is the finished answer, exactly the JSON the route
+  otherwise returns, choices and attachments included. It replaces what
+  was written out. Send it last.
+- **`error`** with `{"message": "..."}` ends it as a refusal, and the
+  person sees the sentence.
+- A stream that ends with no `messages` keeps what was written as the
+  reply. A comment line (`: keep-alive`) is ignored, so it can hold a
+  quiet connection open; after 3 minutes with nothing, the app gives up.
+- Stop closes the connection mid-stream. What was written stays in the
+  thread.
 
 ### Questions with answers to tap
 
@@ -719,7 +775,7 @@ Any non-2xx is turned into one exception with a `kind` the UI can act on:
 | Status | kind | Retryable |
 |---|---|---|
 | — (no route to host) | `offline` | yes |
-| — (timed out, 20s) | `timeout` | yes |
+| — (timed out: 20 s, or 3 min for `/v1/messages`) | `timeout` | yes |
 | 401 | `unauthorised` | no |
 | 403 | `forbidden` | no |
 | 404 | `notFound` | no |

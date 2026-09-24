@@ -56,6 +56,8 @@ class SeedRepository implements ShiftRepository {
     String? avatarId,
     String? model,
     List<ChatTurn> history = const <ChatTurn>[],
+    Future<void>? cancel,
+    void Function(String soFar)? onText,
   }) async {
     if (replyDelay > Duration.zero) await Future<void>.delayed(replyDelay);
     final String stamp = DateTime.now().microsecondsSinceEpoch.toString();
@@ -105,6 +107,9 @@ class SeedRepository implements ShiftRepository {
 
   @override
   Future<void> deleteThread(String id) async {}
+
+  @override
+  Future<List<VaultItem>> vault() async => List<VaultItem>.of(_vault);
 
   @override
   Future<List<Avatar>> avatars() async => List<Avatar>.of(_avatars);

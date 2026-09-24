@@ -635,6 +635,7 @@ abstract final class Seed {
       height: 1080,
       byHandle: 'marisol',
       byName: 'Marisol Vega',
+      hearts: 1284,
       saved: true,
     ),
     VaultItem(
@@ -652,6 +653,7 @@ abstract final class Seed {
       height: 1600,
       byHandle: 'tomas',
       byName: 'Tomas Lindqvist',
+      hearts: 342,
     ),
     VaultItem(
       id: 'e-night-market',
@@ -669,6 +671,7 @@ abstract final class Seed {
       height: 1920,
       byHandle: 'dee',
       byName: 'Dee Okonkwo',
+      hearts: 97,
     ),
     VaultItem(
       id: 'e-paper-type',
@@ -685,6 +688,7 @@ abstract final class Seed {
       height: 2000,
       byHandle: 'ayesha',
       byName: 'Ayesha Rahman',
+      hearts: 2051,
     ),
     VaultItem(
       id: 'e-kiln',
@@ -702,6 +706,7 @@ abstract final class Seed {
       height: 1200,
       byHandle: 'grant',
       byName: 'Grant Whitlock',
+      hearts: 618,
     ),
     VaultItem(
       id: 'e-ferry',
@@ -718,6 +723,7 @@ abstract final class Seed {
       height: 2400,
       byHandle: 'priya',
       byName: 'Priya Balan',
+      hearts: 45,
       saved: true,
     ),
   ];

@@ -7,6 +7,7 @@ gets.
 """
 import json
 import os
+import re
 import time
 from email.parser import BytesParser
 from email.policy import HTTP
@@ -20,9 +21,20 @@ _next_id = [1]
 UPLOADS = {}
 # Saved chats by id, the way /v1/threads keeps them.
 THREADS = {}
+# What the image and video models made, newest first: /v1/vault.
+VAULT = []
 # How long the stand-in "render" takes. Long enough to watch the gallery
 # poll, short enough to wait for: MOCK_TRAIN_SECONDS=5 for a quicker look.
 TRAIN_SECONDS = float(os.environ.get("MOCK_TRAIN_SECONDS", "20"))
+# A message with "slow" in it waits this long before its answer, like a
+# model writing a long one or making a picture: long enough to see "Still
+# working" and try Stop. MOCK_SLOW_SECONDS=5 for a quicker look.
+SLOW_SECONDS = float(os.environ.get("MOCK_SLOW_SECONDS", "30"))
+# Answers are written out a word at a time (server-sent events) when the
+# app asks for text/event-stream, as docs/API.md describes. MOCK_STREAM=0
+# answers with plain JSON instead, the way a server that does not stream
+# does.
+STREAM = os.environ.get("MOCK_STREAM", "1") != "0"
 BASE = "http://127.0.0.1:8111"
 
 
@@ -92,6 +104,8 @@ MODELS = [
      "bestFor": ["image"]},
 ]
 
+MODELS_BY_ID = {m["id"]: m["name"] for m in MODELS}
+
 
 def answer(body):
     """A reply that proves the model read the whole conversation.
@@ -120,6 +134,9 @@ def answer(body):
         return [{"id": f"m{len(history) + 1}", "author": "shift",
                  "model": model, "modelName": names.get(model, model),
                  "body": f"Here is the polished prompt: {rewrite}"}]
+    made = make(body, model, history)
+    if made is not None:
+        return [made]
     asked = ask(body, history)
     if asked is not None:
         asked.update({
@@ -129,6 +146,12 @@ def answer(body):
             "modelName": names.get(model, model),
         })
         return [asked]
+    # Markdown, the way real models answer, so the thread's rendering of
+    # it can be seen: ask for a "shot list".
+    if "shot list" in (prompt or "").lower():
+        return [{"id": f"m{len(history) + 1}", "author": "shift",
+                 "model": model, "modelName": names.get(model, model),
+                 "body": MARKDOWN_REPLY}]
     replies = [t for t in history if t.get("role") == "assistant"]
     text = (f"I can read all {len(history)} earlier turns of this "
             f"conversation.")
@@ -146,6 +169,64 @@ def answer(body):
         "modelName": names.get(model, model),
         "body": text,
     }]
+
+
+def make(body, model, history):
+    """What an image or video model answers with: the file, in the vault.
+
+    The row is in /v1/vault before the answer goes, as docs/API.md asks,
+    so the app's "Open in Vault" has something to open. There is no real
+    file behind it; the vault draws its seeded art for a row without one.
+    """
+    kind = {"mock-image": "image", "mock-video": "video"}.get(model)
+    if kind is None:
+        return None
+    n = _next_id[0]
+    _next_id[0] += 1
+    prompt = (body.get("prompt") or "").strip()
+    row = {
+        "id": f"v{n}", "title": prompt[:60] or "Untitled", "kind": kind,
+        "mediaType": kind, "prompt": prompt, "model": MODELS_BY_ID[model],
+        "createdAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "credits": 4 if kind == "image" else 14,
+        "aspect": 1.0 if kind == "image" else 0.5625,
+        "published": False,
+        **({"durationSeconds": 20, "width": 1080, "height": 1920}
+           if kind == "video" else {"width": 1024, "height": 1024}),
+    }
+    VAULT.insert(0, row)
+    name = "png" if kind == "image" else "mp4"
+    return {
+        "id": f"m{len(history) + 1}", "author": "shift", "model": model,
+        "modelName": MODELS_BY_ID[model],
+        "eyebrow": f"ShiftAi · {kind.title()}",
+        "body": f"Made it: {prompt}",
+        "attachment": {
+            "fileName": f"mock-{n}.{name}", "kind": kind,
+            "meta": ("1024 × 1024 · 4 CREDITS" if kind == "image"
+                     else "20S · 1080 × 1920 · 14 CREDITS"),
+            "vaultItemId": row["id"],
+        },
+    }
+
+
+MARKDOWN_REPLY = """### Shot list
+
+A **tight** 20 second cut, *handheld*, for [Reels](https://example.com).
+
+1. **Hook:** the ferry horn, 0:00 to 0:02
+2. The crossing
+   - wide from the deck
+   - close on the wake
+3. ~~Drone~~ no drone: it reads as stock
+
+> Keep every shot under three seconds.
+
+```
+ffmpeg -i crossing.mp4 -t 20 -vf scale=1080:1920 reel.mp4
+```
+
+Trim with `ffmpeg` and post by **6 pm**."""
 
 
 FEEL = "What should it feel like?"
@@ -226,6 +307,25 @@ class Handler(BaseHTTPRequestHandler):
         if raw:
             self.wfile.write(raw)
 
+    def _stream(self, reply):
+        """The answer as server-sent events: its words, then the whole."""
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+
+        def event(name, data):
+            self.wfile.write(
+                f"event: {name}\ndata: {json.dumps(data)}\n\n".encode())
+            self.wfile.flush()
+
+        for message in reply:
+            for word in re.findall(r"\S+\s*", message.get("body") or ""):
+                event("text", {"text": word})
+                time.sleep(0.04)
+        event("messages", reply)
+
     def do_OPTIONS(self):
         self._send(204)
 
@@ -252,6 +352,8 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(data)
             return None
+        if path == "/v1/vault":
+            return self._send(200, VAULT)
         if path in EMPTY:
             return self._send(200, EMPTY[path])
         self._send(404, {"message": f"No route {path}."})
@@ -261,7 +363,17 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/v1/messages":
             length = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(length) or b"{}")
-            return self._send(200, answer(body))
+            if "slow" in str(body.get("prompt", "")).lower():
+                time.sleep(SLOW_SECONDS)
+            try:
+                reply = answer(body)
+                if STREAM and "text/event-stream" in self.headers.get(
+                        "Accept", ""):
+                    return self._stream(reply)
+                return self._send(200, reply)
+            except (BrokenPipeError, ConnectionResetError):
+                # Stop in the app: the caller cancelled and went away.
+                print("messages: the caller stopped waiting", flush=True)
         if path == "/v1/polish":
             length = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(length) or b"{}")

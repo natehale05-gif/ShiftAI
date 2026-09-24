@@ -6,6 +6,7 @@ import '../../theme/tokens.dart';
 import '../../theme/type.dart';
 import '../../util/format.dart';
 import '../../widgets/common.dart';
+import 'eco_feed.dart';
 import 'media_player.dart';
 import '../../widgets/alert.dart';
 
@@ -77,7 +78,11 @@ class _VaultSurfaceState extends State<VaultSurface> {
                         ],
                       ),
                     )
-                  : _MasonryGrid(items: shown),
+                  // Other people's work is scrolled through, one post at
+                  // a time; your own is a grid, to find things again.
+                  : state.vaultScope == VaultScope.eco && shown.isNotEmpty
+                      ? EcoFeed(items: shown)
+                      : _MasonryGrid(items: shown),
             ),
           ],
         );
