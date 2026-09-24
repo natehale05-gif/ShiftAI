@@ -88,17 +88,20 @@ class _DesignSurfaceState extends State<DesignSurface> {
                           ),
                           const SizedBox(height: Space.x5),
                           if (shown.isEmpty)
-                            Padding(
-                              padding: const EdgeInsets.only(top: Space.x5),
-                              child: Text(
-                                needle.isEmpty
-                                    ? 'Nothing made yet. Start one above.'
-                                    : 'No design matches “$_query”.',
-                                style: ShiftType.body(
-                                  ShiftColors.of(context).textMuted,
-                                ),
-                              ),
-                            )
+                            needle.isEmpty
+                                ? const EmptyState(
+                                    icon: Icons.draw_rounded,
+                                    title: 'Nothing made yet',
+                                    message: 'Pick Slides, Design, a '
+                                        'codebase or a Brand above, or '
+                                        'describe one in the bar below.',
+                                  )
+                                : EmptyState(
+                                    compact: true,
+                                    icon: Icons.search_off_rounded,
+                                    title: 'No results',
+                                    message: 'No design matches “$_query”.',
+                                  )
                           else
                             Wrap(
                               spacing: Space.x5,
@@ -207,37 +210,7 @@ class _SearchRow extends StatelessWidget {
     return Row(
       children: <Widget>[
         Expanded(
-          // A filled search field, as a list's search bar is drawn, not an
-          // outlined capsule.
-          child: Container(
-            height: 44,
-            padding: const EdgeInsets.symmetric(horizontal: Space.x3),
-            decoration: BoxDecoration(
-              color: c.surfaceRaised,
-              borderRadius: Radii.mdAll,
-            ),
-            child: Row(
-              children: <Widget>[
-                Icon(Icons.search_rounded, size: 19, color: c.textMuted),
-                const SizedBox(width: Space.x2),
-                Expanded(
-                  child: TextField(
-                    onChanged: onQuery,
-                    style: ShiftType.copy(c.text, size: 16),
-                    decoration: InputDecoration(
-                      isDense: true,
-                      filled: false,
-                      border: InputBorder.none,
-                      enabledBorder: InputBorder.none,
-                      focusedBorder: InputBorder.none,
-                      hintText: 'Search designs',
-                      hintStyle: ShiftType.copy(c.textMuted, size: 16),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
+          child: SearchField(hint: 'Search designs', onChanged: onQuery),
         ),
         const SizedBox(width: Space.x3),
         IconButton(

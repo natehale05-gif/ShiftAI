@@ -1,21 +1,23 @@
 #!/usr/bin/env bash
 # Builds the web app for a static host that only serves common web file
-# types (no custom MIME types, no service worker).
+# types (no custom MIME types).
 #
 #   - --no-web-resources-cdn keeps CanvasKit local, so the app makes no
 #     outbound request at all. Fonts are bundled too.
 #   - Debug symbol maps and the skwasm renderer are dropped; the JS build
 #     only ever loads canvaskit.
-#   - The service worker is removed, so a new version is picked up on
-#     reload rather than served from a stale cache.
+#   - Flutter's own service worker is removed: it served a stale cache.
+#     offline_worker.js replaces it. It is network first, so online
+#     nothing changes, and it falls back to the last copy only when the
+#     network fails, which is what lets the installed app open offline.
 #   - AssetManifest.bin is copied to a .wasm name and a small shim in
 #     index.html points the engine at it, because hosts that allow-list
 #     extensions do not serve .bin.
 #   - A build id (the git commit, so it is unique per deploy) is baked
-#     into the page and polled for while the app is open, since without a
-#     service worker nothing else notices a new build has shipped — an
-#     installed PWA that is only ever resumed, never fully reloaded,
-#     would otherwise run whatever it first loaded forever.
+#     into the page and polled for while the app is open, because nothing
+#     else notices a new build has shipped: an installed PWA that is only
+#     ever resumed, never fully reloaded, would otherwise run whatever it
+#     first loaded forever. The offline worker never caches it.
 #
 # Usage: tool/build_web_hosted.sh   (from the project root)
 
@@ -55,6 +57,61 @@ p.write_text(s2)
 PY
 
 cp assets/AssetManifest.bin assets/AssetManifest.bin.wasm
+
+cat > offline_worker.js <<'JS'
+// Network first, for this origin's GETs. Online, every request goes to
+// the network exactly as it would with no worker, and a good answer is
+// kept. Only when the network fails is the kept copy served, so the
+// installed app opens offline on the build it last loaded.
+//
+// build_id.txt is never kept or served from here: it is how the page
+// notices a new build, and a cached one would say nothing ever changed.
+var KEEP = 'shiftai-offline';
+
+self.addEventListener('install', function () { self.skipWaiting(); });
+self.addEventListener('activate', function (event) {
+  event.waitUntil(self.clients.claim());
+});
+
+// The page's list of files it fetched before this worker controlled it.
+self.addEventListener('message', function (event) {
+  var urls = (event.data && event.data.keep) || [];
+  event.waitUntil(caches.open(KEEP).then(function (cache) {
+    return Promise.all(urls.map(function (u) {
+      return cache.match(u).then(function (hit) {
+        return hit || cache.add(u).catch(function () {});
+      });
+    }));
+  }));
+});
+
+self.addEventListener('fetch', function (event) {
+  var req = event.request;
+  if (req.method !== 'GET') return;
+  var url = new URL(req.url);
+  if (url.origin !== self.location.origin) return;
+  if (url.pathname.endsWith('build_id.txt')) return;
+  event.respondWith(
+    fetch(req).then(function (res) {
+      if (res.ok) {
+        var copy = res.clone();
+        caches.open(KEEP).then(function (cache) { cache.put(req, copy); });
+      }
+      return res;
+    }).catch(function () {
+      return caches.match(req, { ignoreSearch: true }).then(function (hit) {
+        if (hit) return hit;
+        if (req.mode === 'navigate') {
+          return caches.match('./', { ignoreSearch: true }).then(function (page) {
+            return page || caches.match('index.html', { ignoreSearch: true });
+          });
+        }
+        return Response.error();
+      });
+    })
+  );
+});
+JS
 
 # Rewritten on every build with a fresh value; the page polls this while
 # open and reloads itself when it no longer matches what it booted with.
@@ -198,7 +255,33 @@ cat > index.html <<'HTML'
     });
   </script>
   <script>
-    // There is no service worker (see the build script), so nothing else
+    // Offline. The worker is network first, so a page online is exactly
+    // what it was without one. On the very first visit the page loads
+    // before the worker controls it, so once the app has drawn, the page
+    // hands the worker the list of files it fetched and the worker keeps
+    // a copy. The next open with no network then comes from that copy.
+    (function () {
+      if (!('serviceWorker' in navigator)) return;
+      navigator.serviceWorker.register('offline_worker.js').catch(function () {});
+      window.addEventListener('flutter-first-frame', function () {
+        setTimeout(function () {
+          var here = location.origin;
+          var urls = performance.getEntriesByType('resource')
+            .map(function (e) { return e.name.split('#')[0]; })
+            .filter(function (u) {
+              return u.indexOf(here) === 0 && u.indexOf('build_id.txt') < 0;
+            });
+          urls.push(location.href.split('#')[0]);
+          navigator.serviceWorker.ready.then(function (reg) {
+            if (reg.active) reg.active.postMessage({ keep: urls });
+          });
+        }, 1500);
+      });
+    })();
+  </script>
+  <script>
+    // The offline worker never caches build_id.txt (see the build script),
+    // and nothing else
     // notices a new build has shipped. An installed PWA that is only ever
     // resumed from the home screen, never fully reloaded, would otherwise
     // keep running whatever it first loaded, forever — reload it whenever

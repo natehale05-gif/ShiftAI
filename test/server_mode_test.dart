@@ -243,6 +243,47 @@ void main() {
       );
     });
 
+    test('offline, your own last-seen copy comes back, and says so',
+        () async {
+      // The session on this device is Rae's, and so is the blob. The
+      // engine cannot be reached: the screens are Rae's last-seen copy,
+      // marked as such, not empty and never seeded.
+      final AppState state = await _server(
+        repo: _DeadRepository(),
+        signedIn: true,
+        prefs: <String, Object>{
+          'shift.app.v1': '{"v":2,"account":"rae@example.com","vault":'
+              '[{"id":"mine-cached","title":"Rae\'s own clip",'
+              '"kind":"video","prompt":"","model":"","createdAt":'
+              '"2026-01-01T00:00:00Z","credits":0,"aspect":1}]}',
+        },
+      );
+
+      expect(state.lastError, isNotNull);
+      expect(state.showingCached, isTrue);
+      expect(state.vault.single.id, 'mine-cached');
+      expect(
+        state.vault.any((VaultItem v) => v.id == Seed.vault.first.id),
+        isFalse,
+      );
+    });
+
+    test('offline, a copy belonging to someone else still gets nothing',
+        () async {
+      final AppState state = await _server(
+        repo: _DeadRepository(),
+        signedIn: true,
+        prefs: <String, Object>{
+          'shift.app.v1': '{"v":2,"account":"someone-else@example.com",'
+              '"vault":[{"id":"leaked","title":"Their private clip",'
+              '"kind":"video","prompt":"","model":"","createdAt":'
+              '"2026-01-01T00:00:00Z","credits":0,"aspect":1}]}',
+        },
+      );
+      expect(state.showingCached, isFalse);
+      expect(state.vault, isEmpty);
+    });
+
     test('signing out empties the screens and the cache', () async {
       final AppState state = await _server(signedIn: true);
       expect(state.vault, isNotEmpty);

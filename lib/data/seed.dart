@@ -44,7 +44,7 @@ abstract final class Seed {
   // Leaderboard ---------------------------------------------------------
 
   static const int weekPool = 53497;
-  static const String payoutLine = 'Top earners cash out Friday';
+  static const String payoutLine = 'Pools pay Friday';
 
   static const List<StandingRow> standings = <StandingRow>[
     StandingRow(

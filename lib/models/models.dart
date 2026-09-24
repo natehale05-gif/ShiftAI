@@ -184,6 +184,7 @@ class StandingRow {
     this.tier,
     this.isYou = false,
     this.avatarUrl,
+    this.movementKnown = true,
   });
 
   final int rank;
@@ -192,6 +193,11 @@ class StandingRow {
 
   /// Places gained (positive) or lost (negative) since the week opened.
   final int movement;
+
+  /// False where the board does not track movement (the Suite's boards do
+  /// not), so a screen reader is not told "no change" about a move nobody
+  /// measured.
+  final bool movementKnown;
 
   /// The payout band this creator is in this week, when they are in one.
   final TrophyTier? tier;
@@ -228,6 +234,46 @@ class StandingRow {
         isYou: json['isYou'] as bool? ?? false,
         avatarUrl: json['avatarUrl'] as String?,
       );
+}
+
+/// The Suite's weekly boards, in the order and with the labels the Suite
+/// uses (Rex's server notes, 23 Sept 2026). [key] is the array under
+/// `data` in `GET /v1/boards`; [field] is the row's number, in cents.
+enum SuiteBoard {
+  compete('compete', 'CompetePay', 'combined_cents'),
+  crowd('crowd', 'Window earnings', 'window_earnings_cents'),
+  creditHold('credit_hold', 'Credits held', 'credits_held_cents'),
+  creditUse('credit_use', 'Credits used', 'credits_used_cents'),
+  clubPools('club_pools', 'Projected club pay', 'projected_clubpay_cents'),
+  connectWeek('connect_week', 'CoachPay this week', 'earned_cents'),
+  projectedWeek(
+    'projected_week',
+    'Projected this week',
+    'projected_total_cents',
+  ),
+  lifetime('lifetime', 'Lifetime earnings', 'earned_cents');
+
+  const SuiteBoard(this.key, this.label, this.field);
+
+  final String key;
+  final String label;
+  final String field;
+}
+
+/// Every Suite board this member can see, rows ranked as the Suite ranks
+/// them. A board with no rows is left out, rather than drawn empty.
+@immutable
+class SuiteBoards {
+  const SuiteBoards(this.rows);
+
+  final Map<SuiteBoard, List<StandingRow>> rows;
+
+  /// The boards with rows, in the Suite's order.
+  List<SuiteBoard> get available => SuiteBoard.values
+      .where((SuiteBoard b) => rows[b]?.isNotEmpty ?? false)
+      .toList(growable: false);
+
+  bool get isEmpty => available.isEmpty;
 }
 
 /// Where a HeyGen avatar is in its lifecycle. Training is not instant, so
@@ -335,6 +381,25 @@ class League {
 
 enum MediaKind { image, video }
 
+/// What the file behind a vault piece really is. [MediaKind] stays image or
+/// video so older rows keep parsing; audio used to arrive as an image.
+enum MediaType {
+  image('Image'),
+  video('Video'),
+  audio('Audio'),
+  document('Document');
+
+  const MediaType(this.label);
+  final String label;
+
+  static MediaType parse(String? value, MediaKind kind) =>
+      MediaType.values.firstWhere(
+        (MediaType t) => t.name == value,
+        orElse: () =>
+            kind == MediaKind.video ? MediaType.video : MediaType.image,
+      );
+}
+
 enum VaultScope {
   mine('My vault'),
   eco('EcoVault');
@@ -361,11 +426,29 @@ class VaultItem {
     this.byHandle,
     this.byName,
     this.saved = false,
-  });
+    MediaType? mediaType,
+    this.mediaUrl,
+    this.thumbnailUrl,
+  }) : _mediaType = mediaType;
 
   final String id;
   final String title;
   final MediaKind kind;
+
+  final MediaType? _mediaType;
+
+  /// The file's real type; from [kind] when the engine does not say.
+  MediaType get mediaType =>
+      _mediaType ??
+      (kind == MediaKind.video ? MediaType.video : MediaType.image);
+
+  /// The full file, on the app's own origin so CanvasKit can draw it. No
+  /// auth header: the name is unguessable. Null for a text-only piece.
+  final String? mediaUrl;
+
+  /// A small WebP, about 480 wide. For a video it is the first frame. Null
+  /// for audio and documents, which fall back to drawn art.
+  final String? thumbnailUrl;
   final String prompt;
   final String model;
   final DateTime createdAt;
@@ -413,6 +496,10 @@ class VaultItem {
         byHandle: byHandle,
         byName: byName,
         saved: saved ?? this.saved,
+        // Carried through, or renaming a piece would lose its picture.
+        mediaType: _mediaType,
+        mediaUrl: mediaUrl,
+        thumbnailUrl: thumbnailUrl,
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -428,32 +515,46 @@ class VaultItem {
         'durationSeconds': durationSeconds,
         'width': width,
         'height': height,
+        'mediaType': mediaType.name,
+        'mediaUrl': mediaUrl,
+        'thumbnailUrl': thumbnailUrl,
         'byHandle': byHandle,
         'byName': byName,
         'saved': saved,
       };
 
-  factory VaultItem.fromJson(Map<String, dynamic> json) => VaultItem(
-        id: json['id'] as String,
-        title: json['title'] as String,
-        kind: MediaKind.values.firstWhere(
-          (MediaKind k) => k.name == json['kind'],
-          orElse: () => MediaKind.image,
-        ),
-        prompt: json['prompt'] as String? ?? '',
-        model: json['model'] as String? ?? '',
-        createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ??
-            DateTime.now(),
-        credits: (json['credits'] as num?)?.toInt() ?? 0,
-        aspect: (json['aspect'] as num?)?.toDouble() ?? 1,
-        published: json['published'] as bool? ?? false,
-        durationSeconds: (json['durationSeconds'] as num?)?.toInt(),
-        width: (json['width'] as num?)?.toInt(),
-        height: (json['height'] as num?)?.toInt(),
-        byHandle: json['byHandle'] as String?,
-        byName: json['byName'] as String?,
-        saved: json['saved'] as bool? ?? false,
-      );
+  factory VaultItem.fromJson(Map<String, dynamic> json) {
+    final MediaKind kind = MediaKind.values.firstWhere(
+      (MediaKind k) => k.name == json['kind'],
+      orElse: () => MediaKind.image,
+    );
+    String? url(String key) {
+      final Object? v = json[key];
+      return v is String && v.isNotEmpty ? v : null;
+    }
+
+    return VaultItem(
+      id: json['id'] as String,
+      title: json['title'] as String,
+      kind: kind,
+      mediaType: MediaType.parse(json['mediaType'] as String?, kind),
+      mediaUrl: url('mediaUrl'),
+      thumbnailUrl: url('thumbnailUrl'),
+      prompt: json['prompt'] as String? ?? '',
+      model: json['model'] as String? ?? '',
+      createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ??
+          DateTime.now(),
+      credits: (json['credits'] as num?)?.toInt() ?? 0,
+      aspect: (json['aspect'] as num?)?.toDouble() ?? 1,
+      published: json['published'] as bool? ?? false,
+      durationSeconds: (json['durationSeconds'] as num?)?.toInt(),
+      width: (json['width'] as num?)?.toInt(),
+      height: (json['height'] as num?)?.toInt(),
+      byHandle: json['byHandle'] as String?,
+      byName: json['byName'] as String?,
+      saved: json['saved'] as bool? ?? false,
+    );
+  }
 }
 
 @immutable

@@ -22,48 +22,51 @@ class TrophiesSurface extends StatelessWidget {
 
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
-        return ListView(
-          padding: const EdgeInsets.fromLTRB(
-            Space.x5,
-            Space.x5,
-            Space.x5,
-            Space.x6,
-          ),
-          children: <Widget>[
-            Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: kContentWidth),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: <Widget>[
-                    ScreenBreadcrumb(
-                      parent: 'Create',
-                      title: 'Trophies',
-                      onBack: () => state.setSurface(Surface.suite),
-                    ),
-                    const SizedBox(height: Space.x5),
-                    const EngineBanner(),
-                    if (state.trophies.isEmpty)
-                      const _NoShelfYet()
-                    else ...<Widget>[
-                      const _PointsCard(),
-                      // One shelf per tier, cheapest first — the order they
-                      // are usually earned in, so the eye starts on what is
-                      // already won and walks up to what is left.
-                      for (final TrophyTier tier in TrophyTier.values)
-                        if (state.trophies.any((Trophy t) => t.tier == tier))
-                          _TierShelf(
-                            tier: tier,
-                            trophies: state.trophies
-                                .where((Trophy t) => t.tier == tier)
-                                .toList(growable: false),
-                          ),
+        return PullToRefresh(
+          child: ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(
+              Space.x5,
+              Space.x5,
+              Space.x5,
+              Space.x6,
+            ),
+            children: <Widget>[
+              Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: kContentWidth),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: <Widget>[
+                      ScreenBreadcrumb(
+                        parent: 'Create',
+                        title: 'Trophies',
+                        onBack: () => state.setSurface(Surface.suite),
+                      ),
+                      const SizedBox(height: Space.x5),
+                      const EngineBanner(),
+                      if (state.trophies.isEmpty)
+                        const _NoShelfYet()
+                      else ...<Widget>[
+                        const _PointsCard(),
+                        // One shelf per tier, cheapest first — the order they
+                        // are usually earned in, so the eye starts on what is
+                        // already won and walks up to what is left.
+                        for (final TrophyTier tier in TrophyTier.values)
+                          if (state.trophies.any((Trophy t) => t.tier == tier))
+                            _TierShelf(
+                              tier: tier,
+                              trophies: state.trophies
+                                  .where((Trophy t) => t.tier == tier)
+                                  .toList(growable: false),
+                            ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         );
       },
     );
@@ -77,29 +80,22 @@ class _NoShelfYet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ShiftColors c = ShiftColors.of(context);
-    final bool failed = AppScope.of(context).lastError != null;
-    return ShiftCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Icon(Icons.emoji_events_outlined, size: 28, color: c.textMuted),
-          const SizedBox(height: Space.x4),
-          Text(
-            failed ? 'The shelf did not load' : 'Nothing on the shelf yet',
-            style: ShiftType.subheading(c.text),
-          ),
-          const SizedBox(height: Space.x2),
-          Text(
-            failed
-                ? 'Trophies live on the engine. Once it answers they are '
-                    'here, earned ones and all.'
-                : 'Make your first piece and the first one is yours.',
-            style: ShiftType.bodySm(c.textMuted),
-          ),
-        ],
-      ),
-    );
+    final AppState state = AppScope.of(context);
+    final bool failed = state.lastError != null;
+    return failed
+        ? EmptyState(
+            icon: Icons.cloud_off_rounded,
+            title: 'The shelf did not load',
+            message: 'Trophies live on the engine. Once it answers they are '
+                'here, earned ones and all.',
+            actionLabel: 'Try again',
+            onAction: state.refreshing ? null : state.refresh,
+          )
+        : const EmptyState(
+            icon: Icons.emoji_events_outlined,
+            title: 'Nothing on the shelf yet',
+            message: 'Make your first piece and the first trophy is yours.',
+          );
   }
 }
 
@@ -461,9 +457,15 @@ class _MedalPainter extends CustomPainter {
 
 /// Everything the tile has to clip: the full requirement, the tier, how
 /// rare it is, and when it was earned.
+///
+/// Laid out as an iPhone sheet: a grabber, Done as a text button at the
+/// top right, and the medal itself as the centrepiece. Done used to be a
+/// full-width pink bar under everything, the loudest thing on the sheet
+/// and the one that says least.
 Future<void> _showTrophy(BuildContext context, Trophy trophy) {
   return showModalBottomSheet<void>(
     context: context,
+    isScrollControlled: true,
     backgroundColor: ShiftColors.of(context).surface,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radii.lg),
@@ -472,74 +474,116 @@ Future<void> _showTrophy(BuildContext context, Trophy trophy) {
       final ShiftColors c = ShiftColors.of(context);
       final Color tint = trophy.tier.colorOn(c);
       final DateTime? earnedOn = trophy.earnedOn;
+
+      Widget fact(String label, String value, {Color? tone}) => Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: Space.x4,
+              vertical: 13,
+            ),
+            child: Row(
+              children: <Widget>[
+                Text(label, style: ShiftType.copy(c.text, size: 15)),
+                const Spacer(),
+                Text(
+                  value,
+                  style: ShiftType.figures(
+                    tone ?? c.textMuted,
+                    size: 15,
+                    weight: 500,
+                  ),
+                ),
+              ],
+            ),
+          );
+
       return SafeArea(
         child: Padding(
-          padding: const EdgeInsets.all(Space.x5),
+          padding: const EdgeInsets.fromLTRB(
+            Space.x5,
+            Space.x2,
+            Space.x5,
+            Space.x5,
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
-              Row(
-                children: <Widget>[
-                  _Medal(trophy: trophy, size: 52),
-                  const SizedBox(width: Space.x4),
-                  Expanded(
-                    child: Text(
-                      trophy.name,
-                      style: ShiftType.subheading(c.text),
-                    ),
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 5,
+                  decoration: BoxDecoration(
+                    color: c.borderStrong.withValues(alpha: 0.5),
+                    borderRadius: Radii.pillAll,
                   ),
-                  Text(
-                    '${trophy.points} pts',
-                    style: ShiftType.figures(tint, size: 15),
-                  ),
-                ],
+                ),
               ),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: Text(
+                    'Done',
+                    style: ShiftType.copy(c.accent, size: 17, weight: 600),
+                  ),
+                ),
+              ),
+              Center(child: _Medal(trophy: trophy, size: 88)),
               const SizedBox(height: Space.x4),
-              Text(trophy.requirement, style: ShiftType.body(c.text)),
-              const SizedBox(height: Space.x4),
+              Semantics(
+                header: true,
+                child: Text(
+                  trophy.name,
+                  textAlign: TextAlign.center,
+                  style: ShiftType.largeTitle(c.text).copyWith(fontSize: 26),
+                ),
+              ),
+              const SizedBox(height: Space.x1),
+              Text(
+                '${trophy.tier.label} · ${trophy.points} pts',
+                textAlign: TextAlign.center,
+                style: ShiftType.copy(tint, size: 15, weight: 600),
+              ),
+              const SizedBox(height: Space.x3),
+              Text(
+                trophy.requirement,
+                textAlign: TextAlign.center,
+                style: ShiftType.copy(c.textMuted, size: 16, lineHeight: 23),
+              ),
+              const SizedBox(height: Space.x5),
               ClipRRect(
                 borderRadius: Radii.pillAll,
                 child: LinearProgressIndicator(
                   value: trophy.progress,
-                  minHeight: 4,
+                  minHeight: 6,
                   backgroundColor: c.surfaceRaised,
                   valueColor: AlwaysStoppedAnimation<Color>(
-                    trophy.earned ? tint : c.borderStrong,
+                    trophy.earned ? tint : c.accent,
                   ),
                 ),
               ),
-              const SizedBox(height: Space.x3),
-              Text(
-                <String>[
-                  trophy.tier.label,
-                  if (trophy.progressLabel.isNotEmpty) trophy.progressLabel,
-                  if (trophy.memberPercent > 0)
-                    '${Fmt.grouped(trophy.memberPercent)}% of members',
-                  if (earnedOn != null) 'Earned ${Fmt.date(earnedOn)}',
-                ].join(' \u00b7 '),
-                style: ShiftType.bodySm(c.textMuted),
-              ),
               const SizedBox(height: Space.x5),
-              SizedBox(
-                width: double.infinity,
-                // Set here rather than inherited: the app's button theme
-                // is uppercase mono, which was right for "CLOSE" and turns
-                // a sentence-case "Done" into tiny spaced-out letters.
-                child: FilledButton(
-                  style: FilledButton.styleFrom(
-                    minimumSize: const Size.fromHeight(50),
-                    shape: const RoundedRectangleBorder(
-                      borderRadius: Radii.mdAll,
+              Container(
+                clipBehavior: Clip.antiAlias,
+                decoration: BoxDecoration(
+                  color: c.surfaceRaised,
+                  borderRadius: Radii.lgAll,
+                ),
+                child: Column(
+                  children: <Widget>[
+                    if (trophy.progressLabel.isNotEmpty)
+                      fact('Progress', trophy.progressLabel),
+                    if (trophy.memberPercent > 0)
+                      fact(
+                        'Members who have it',
+                        '${Fmt.grouped(trophy.memberPercent)}%',
+                      ),
+                    fact(
+                      'Earned',
+                      earnedOn == null ? 'Not yet' : Fmt.date(earnedOn),
+                      tone: earnedOn == null ? null : tint,
                     ),
-                    textStyle: ShiftType.copy(
-                      c.onAccent,
-                      size: 17,
-                      weight: 600,
-                    ),
-                  ),
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('Done'),
+                  ],
                 ),
               ),
             ],

@@ -29,3 +29,7 @@
 # way, and a stripped plugin only shows up as a widget that never
 # updates in a release build.
 -keep class es.antonborri.home_widget.** { *; }
+
+# video_player (vault playback) is io.flutter.plugins.videoplayer, so the
+# blanket io.flutter.plugins rule at the top already keeps it. The player
+# underneath, androidx.media3 (ExoPlayer), ships its own consumer rules.

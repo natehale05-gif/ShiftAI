@@ -10,6 +10,7 @@ import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
 import '../util/system_bars.dart';
 import 'shell.dart';
+import 'shortcuts.dart';
 
 class ShiftApp extends StatefulWidget {
   const ShiftApp({required this.state, super.key});
@@ -32,6 +33,10 @@ class _ShiftAppState extends State<ShiftApp> with WidgetsBindingObserver {
     _syncBrowserChrome();
     watchBrowserInsets();
   }
+
+  /// For the keyboard shortcuts, which sit above the navigator and close
+  /// whatever it has on top.
+  final GlobalKey<NavigatorState> _navigator = GlobalKey<NavigatorState>();
 
   /// The theme the system bars were last painted for.
   late ShiftThemeId _barsTheme;
@@ -77,6 +82,7 @@ class _ShiftAppState extends State<ShiftApp> with WidgetsBindingObserver {
           final ShiftColors c = ShiftColors.forTheme(theme);
           return MaterialApp(
             title: 'ShiftAi',
+            navigatorKey: _navigator,
             debugShowCheckedModeBanner: false,
             theme: ShiftTheme.build(theme),
             // The native builds' own status and navigation bars, set from
@@ -93,7 +99,11 @@ class _ShiftAppState extends State<ShiftApp> with WidgetsBindingObserver {
                 data: _withBottomInset(MediaQuery.of(context), inset),
                 child: AnnotatedRegion<SystemUiOverlayStyle>(
                   value: _barsFor(c),
-                  child: child ?? const SizedBox.shrink(),
+                  child: ShiftShortcuts(
+                    state: widget.state,
+                    navigator: _navigator,
+                    child: child ?? const SizedBox.shrink(),
+                  ),
                 ),
               ),
             ),

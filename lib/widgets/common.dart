@@ -10,6 +10,7 @@ import '../state/app_state.dart';
 import '../theme/tokens.dart';
 import '../theme/type.dart';
 import '../util/file_pick.dart';
+import '../util/haptics.dart';
 
 /// The lockup's artwork, inked in whichever theme is showing.
 ///
@@ -280,7 +281,10 @@ class SegmentedPills<T> extends StatelessWidget {
                   excludeSemantics: true,
                   child: GestureDetector(
                     behavior: HitTestBehavior.opaque,
-                    onTap: () => onChanged(option),
+                    onTap: () {
+                      if (option != selected) Haptics.selection();
+                      onChanged(option);
+                    },
                     child: Padding(
                       padding: const EdgeInsets.symmetric(
                         horizontal: Space.x4,
@@ -328,8 +332,19 @@ class MediaThumbnail extends StatelessWidget {
     this.video = false,
     this.durationSeconds,
     this.selected = false,
+    this.thumbnailUrl,
+    this.mediaType = MediaType.image,
     super.key,
   });
+
+  /// The engine's small preview, when it has one. Without it, or while it
+  /// loads, or if it fails, the tile is the seeded art, so a slow network
+  /// never shows an empty box.
+  final String? thumbnailUrl;
+
+  /// Audio and documents have no picture of their own; they get a symbol
+  /// on the art saying which they are.
+  final MediaType mediaType;
 
   /// What the art is drawn from — the piece's id, so it looks the same in
   /// the grid and in its detail panel.
@@ -359,7 +374,11 @@ class MediaThumbnail extends StatelessWidget {
         child: Stack(
           fit: StackFit.expand,
           children: <Widget>[
-            PosterArt(seed: seed),
+            MediaArt(seed: seed, thumbnailUrl: thumbnailUrl),
+            if (thumbnailUrl == null &&
+                (mediaType == MediaType.audio ||
+                    mediaType == MediaType.document))
+              Center(child: _KindMark(mediaType)),
             if (video)
               Positioned(
                 right: Space.x2,
@@ -396,8 +415,78 @@ class MediaThumbnail extends StatelessWidget {
   }
 }
 
-/// Art for a piece with no thumbnail — which is every piece, until the
-/// engine sends previews.
+/// A piece's picture: the engine's image when there is one, faded in over
+/// its seeded art, which is also what shows while it loads or if it fails.
+class MediaArt extends StatelessWidget {
+  const MediaArt({
+    required this.seed,
+    this.thumbnailUrl,
+    this.fit = BoxFit.cover,
+    super.key,
+  });
+
+  final String seed;
+  final String? thumbnailUrl;
+  final BoxFit fit;
+
+  @override
+  Widget build(BuildContext context) {
+    final String? url = thumbnailUrl;
+    if (url == null) return PosterArt(seed: seed);
+    return Stack(
+      fit: StackFit.expand,
+      children: <Widget>[
+        PosterArt(seed: seed),
+        Image.network(
+          url,
+          fit: fit,
+          gaplessPlayback: true,
+          filterQuality: FilterQuality.medium,
+          frameBuilder: (BuildContext context, Widget child, int? frame,
+                  bool synchronous) =>
+              synchronous
+                  ? child
+                  : AnimatedOpacity(
+                      opacity: frame == null ? 0 : 1,
+                      duration: const Duration(milliseconds: 220),
+                      child: child,
+                    ),
+          errorBuilder: (BuildContext context, Object _, StackTrace? __) =>
+              const SizedBox.shrink(),
+        ),
+      ],
+    );
+  }
+}
+
+/// The symbol on an audio or document tile, which has no picture.
+class _KindMark extends StatelessWidget {
+  const _KindMark(this.type);
+
+  final MediaType type;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 52,
+      height: 52,
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.35),
+        shape: BoxShape.circle,
+      ),
+      child: Icon(
+        type == MediaType.audio
+            ? Icons.graphic_eq_rounded
+            : Icons.description_outlined,
+        size: 26,
+        color: Colors.white,
+      ),
+    );
+  }
+}
+
+/// Art for a piece with no thumbnail: audio, documents, and anything the
+/// engine has not sent a preview for.
 ///
 /// It was an empty dark box, and a masonry grid of those
 /// is a wall of identical rectangles that makes the vault look empty when
@@ -540,7 +629,13 @@ class EngineBanner extends StatelessWidget {
           Icon(Icons.cloud_off_rounded, size: 20, color: c.warning),
           const SizedBox(width: Space.x3),
           Expanded(
-            child: Text(error.message, style: ShiftType.bodySm(c.text)),
+            child: Text(
+              state.showingCached
+                  ? '${error.message} Showing what was last loaded on this '
+                      'device.'
+                  : error.message,
+              style: ShiftType.bodySm(c.text),
+            ),
           ),
           if (error.retryable) ...<Widget>[
             const SizedBox(width: Space.x3),
@@ -599,6 +694,7 @@ class HeartButton extends StatelessWidget {
   Future<void> _toggle(BuildContext context, AppState state) async {
     final bool wasOn = item.saved;
     final ScaffoldMessengerState bar = ScaffoldMessenger.of(context);
+    Haptics.light();
     final bool took = await state.toggleSaved(item.id);
     if (!took) {
       bar.showSnackBar(
@@ -704,6 +800,7 @@ class _PillComposerState extends State<PillComposer> {
   }
 
   void _send() {
+    if (_controller.text.trim().isNotEmpty) Haptics.light();
     final String text = _controller.text.trim();
     if (text.isEmpty && _attachments.isEmpty) return;
     final String carried = _attachments.isEmpty
@@ -1316,6 +1413,190 @@ class GroupedList extends StatelessWidget {
             ],
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Pull down to reload from the engine, as any list on an iPhone does.
+///
+/// The spinner is the platform's own (RefreshIndicator.adaptive): the
+/// iOS activity wheel on an iPhone, Material's on Android and the web. A
+/// reload that fails keeps what is on screen, which AppState.refresh
+/// already does, and says why rather than dropping silently back into
+/// place. The scroll view inside needs AlwaysScrollableScrollPhysics, or a
+/// list shorter than the screen cannot be pulled at all.
+class PullToRefresh extends StatelessWidget {
+  const PullToRefresh({required this.child, super.key});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final ShiftColors c = ShiftColors.of(context);
+    return RefreshIndicator.adaptive(
+      color: c.accent,
+      backgroundColor: c.surface,
+      onRefresh: () async {
+        final AppState state = AppScope.read(context);
+        final ScaffoldMessengerState bar = ScaffoldMessenger.of(context);
+        await state.refresh();
+        final ShiftApiException? error = state.lastError;
+        if (error != null) {
+          bar.showSnackBar(SnackBar(content: Text(error.message)));
+        }
+      },
+      child: child,
+    );
+  }
+}
+
+/// What a screen says when it has nothing to show: a symbol, a title, a
+/// line on what goes here, and the one thing to do next.
+///
+/// These used to be a sentence of grey text, which is most of what a brand
+/// new account sees on its first day. [compact] is for an empty filter or
+/// search inside a screen that otherwise has content.
+class EmptyState extends StatelessWidget {
+  const EmptyState({
+    required this.icon,
+    required this.title,
+    required this.message,
+    this.actionLabel,
+    this.onAction,
+    this.compact = false,
+    super.key,
+  });
+
+  final IconData icon;
+  final String title;
+  final String message;
+  final String? actionLabel;
+  final VoidCallback? onAction;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final ShiftColors c = ShiftColors.of(context);
+    final double disc = compact ? 52 : 72;
+    return Padding(
+      padding: EdgeInsets.symmetric(
+        vertical: compact ? Space.x5 : Space.x7,
+        horizontal: Space.x4,
+      ),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 340),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Container(
+                width: disc,
+                height: disc,
+                decoration: BoxDecoration(
+                  color: c.accentSoft,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, size: disc * 0.46, color: c.accent),
+              ),
+              SizedBox(height: compact ? Space.x3 : Space.x4),
+              Semantics(
+                header: true,
+                child: Text(
+                  title,
+                  textAlign: TextAlign.center,
+                  style: compact
+                      ? ShiftType.copy(c.text, size: 17, weight: 600)
+                      : ShiftType.sectionTitle(c.text),
+                ),
+              ),
+              const SizedBox(height: Space.x2),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: ShiftType.bodySm(c.textMuted),
+              ),
+              if (actionLabel != null && onAction != null) ...<Widget>[
+                const SizedBox(height: Space.x5),
+                FilledButton(onPressed: onAction, child: Text(actionLabel!)),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A filled search field, as a list's search bar is drawn: a magnifier,
+/// the hint, and a clear button once something is typed.
+class SearchField extends StatefulWidget {
+  const SearchField({required this.hint, required this.onChanged, super.key});
+
+  final String hint;
+  final ValueChanged<String> onChanged;
+
+  @override
+  State<SearchField> createState() => _SearchFieldState();
+}
+
+class _SearchFieldState extends State<SearchField> {
+  final TextEditingController _text = TextEditingController();
+
+  @override
+  void dispose() {
+    _text.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ShiftColors c = ShiftColors.of(context);
+    return Container(
+      height: 44,
+      padding: const EdgeInsets.only(left: Space.x3),
+      decoration: BoxDecoration(
+        color: c.surfaceRaised,
+        borderRadius: Radii.mdAll,
+      ),
+      child: Row(
+        children: <Widget>[
+          Icon(Icons.search_rounded, size: 19, color: c.textMuted),
+          const SizedBox(width: Space.x2),
+          Expanded(
+            child: TextField(
+              controller: _text,
+              onChanged: (String v) {
+                setState(() {});
+                widget.onChanged(v);
+              },
+              textInputAction: TextInputAction.search,
+              style: ShiftType.copy(c.text, size: 16),
+              decoration: InputDecoration(
+                isDense: true,
+                filled: false,
+                border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                hintText: widget.hint,
+                hintStyle: ShiftType.copy(c.textMuted, size: 16),
+              ),
+            ),
+          ),
+          if (_text.text.isNotEmpty)
+            IconButton(
+              tooltip: 'Clear search',
+              onPressed: () {
+                _text.clear();
+                setState(() {});
+                widget.onChanged('');
+              },
+              icon: Icon(Icons.cancel_rounded, size: 18, color: c.textMuted),
+              style: IconButton.styleFrom(minimumSize: const Size(44, 44)),
+            )
+          else
+            const SizedBox(width: Space.x3),
+        ],
       ),
     );
   }

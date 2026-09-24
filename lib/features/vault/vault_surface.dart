@@ -6,15 +6,25 @@ import '../../theme/tokens.dart';
 import '../../theme/type.dart';
 import '../../util/format.dart';
 import '../../widgets/common.dart';
+import 'media_player.dart';
 
 /// Media only, with a two way scope toggle: your own generations, or the
 /// published work in EcoVault. Picking a tile opens the detail panel.
-class VaultSurface extends StatelessWidget {
+class VaultSurface extends StatefulWidget {
   const VaultSurface({super.key});
+
+  @override
+  State<VaultSurface> createState() => _VaultSurfaceState();
+}
+
+class _VaultSurfaceState extends State<VaultSurface> {
+  String _query = '';
 
   @override
   Widget build(BuildContext context) {
     final AppState state = AppScope.of(context);
+    final List<VaultItem> shown = vaultMatches(state.visibleVault, _query);
+    final bool searching = _query.trim().isNotEmpty;
 
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
@@ -32,7 +42,42 @@ class VaultSurface extends StatelessWidget {
               padding: EdgeInsets.fromLTRB(Space.x6, 0, Space.x6, 0),
               child: EngineBanner(),
             ),
-            Expanded(child: _MasonryGrid(items: state.visibleVault)),
+            // Design had search and the vault, which holds far more, did not.
+            // Only shown once there is something to search.
+            if (state.visibleVault.isNotEmpty || searching)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  Space.x6,
+                  0,
+                  Space.x6,
+                  Space.x3,
+                ),
+                child: SearchField(
+                  hint: state.vaultScope == VaultScope.mine
+                      ? 'Search your vault'
+                      : 'Search EcoVault',
+                  onChanged: (String v) => setState(() => _query = v),
+                ),
+              ),
+            Expanded(
+              child: searching && shown.isEmpty
+                  ? PullToRefresh(
+                      child: ListView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        children: <Widget>[
+                          EmptyState(
+                            compact: true,
+                            icon: Icons.search_off_rounded,
+                            title: 'No results',
+                            message: 'Nothing in '
+                                '${state.vaultScope.label} matches '
+                                '“${_query.trim()}”.',
+                          ),
+                        ],
+                      ),
+                    )
+                  : _MasonryGrid(items: shown),
+            ),
           ],
         );
 
@@ -138,6 +183,29 @@ class _ScopeBar extends StatelessWidget {
   }
 }
 
+/// The pieces a vault search keeps: every word typed has to appear in the
+/// title, the prompt, the creator's name or handle, or the model, in any
+/// case and any order. "dusk ferry" finds "Ferry wake at dusk".
+List<VaultItem> vaultMatches(List<VaultItem> items, String query) {
+  final List<String> words = query
+      .toLowerCase()
+      .split(RegExp(r'\s+'))
+      .where((String w) => w.isNotEmpty)
+      .toList(growable: false);
+  if (words.isEmpty) return items;
+  return items.where((VaultItem v) {
+    final String haystack = <String?>[
+      v.title,
+      v.prompt,
+      v.byName,
+      v.byHandle,
+      v.model,
+      v.mediaType.name,
+    ].whereType<String>().join(' ').toLowerCase();
+    return words.every(haystack.contains);
+  }).toList(growable: false);
+}
+
 /// A masonry that needs no package: items are dealt into whichever column
 /// is shortest, so tiles keep their own aspect.
 class _MasonryGrid extends StatelessWidget {
@@ -150,21 +218,37 @@ class _MasonryGrid extends StatelessWidget {
     final AppState state = AppScope.of(context);
 
     if (items.isEmpty) {
-      final ShiftColors c = ShiftColors.of(context);
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(Space.x6),
-          child: Text(
-            state.lastError != null
-                ? 'Your vault is on the engine, and it did not answer. '
-                    'Nothing here is missing — it just has not arrived.'
-                : state.vaultScope == VaultScope.mine
-                    ? 'Nothing in your vault yet. Anything you make lands '
-                        'here, and so does anything you heart in EcoVault.'
-                    : 'Nothing published to EcoVault yet.',
-            textAlign: TextAlign.center,
-            style: ShiftType.body(c.textMuted),
-          ),
+      // Scrollable even when empty, so it can still be pulled to reload.
+      return PullToRefresh(
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          children: <Widget>[
+            if (state.lastError != null)
+              EmptyState(
+                icon: Icons.cloud_off_rounded,
+                title: 'Your vault did not load',
+                message: 'It is on the engine, and the engine did not '
+                    'answer. Nothing here is missing; it has not arrived.',
+                actionLabel: 'Try again',
+                onAction: state.refreshing ? null : state.refresh,
+              )
+            else if (state.vaultScope == VaultScope.mine)
+              EmptyState(
+                icon: Icons.collections_outlined,
+                title: 'Nothing in your vault yet',
+                message: 'Anything you make lands here, and so does '
+                    'anything you heart in EcoVault.',
+                actionLabel: 'Browse EcoVault',
+                onAction: () => state.setVaultScope(VaultScope.eco),
+              )
+            else
+              const EmptyState(
+                icon: Icons.public_rounded,
+                title: 'Nothing in EcoVault yet',
+                message: 'When people publish, their work shows up here '
+                    'for you to heart.',
+              ),
+          ],
         ),
       );
     }
@@ -198,38 +282,42 @@ class _MasonryGrid extends StatelessWidget {
         }
 
         return Scrollbar(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(
-              Space.x6,
-              Space.x3,
-              Space.x6,
-              Space.x6,
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                for (int i = 0; i < columns; i++) ...<Widget>[
-                  if (i > 0) const SizedBox(width: Space.x4),
-                  SizedBox(
-                    width: columnWidth,
-                    child: Column(
-                      children: buckets[i]
-                          .map(
-                            (VaultItem item) => Padding(
-                              padding: const EdgeInsets.only(bottom: Space.x5),
-                              child: _VaultTile(
-                                item: item,
-                                height: columnWidth / item.aspect,
-                                selected: state.selectedVaultId == item.id,
-                                onTap: () => state.selectVaultItem(item.id),
+          child: PullToRefresh(
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(
+                Space.x6,
+                Space.x3,
+                Space.x6,
+                Space.x6,
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  for (int i = 0; i < columns; i++) ...<Widget>[
+                    if (i > 0) const SizedBox(width: Space.x4),
+                    SizedBox(
+                      width: columnWidth,
+                      child: Column(
+                        children: buckets[i]
+                            .map(
+                              (VaultItem item) => Padding(
+                                padding:
+                                    const EdgeInsets.only(bottom: Space.x5),
+                                child: _VaultTile(
+                                  item: item,
+                                  height: columnWidth / item.aspect,
+                                  selected: state.selectedVaultId == item.id,
+                                  onTap: () => state.selectVaultItem(item.id),
+                                ),
                               ),
-                            ),
-                          )
-                          .toList(),
+                            )
+                            .toList(),
+                      ),
                     ),
-                  ),
+                  ],
                 ],
-              ],
+              ),
             ),
           ),
         );
@@ -266,7 +354,7 @@ class _VaultTile extends StatelessWidget {
     final ShiftColors c = ShiftColors.of(context);
     final bool video = item.kind == MediaKind.video;
     final double artHeight = height.clamp(150, 420);
-    final String kind = video ? 'Video' : 'Image';
+    final String kind = item.mediaType.label;
     // Someone else's piece says whose it is, so it is never mistaken for
     // your own further down the page.
     final String detail = item.mine
@@ -277,7 +365,7 @@ class _VaultTile extends StatelessWidget {
     return Semantics(
       button: true,
       selected: selected,
-      label: '${item.title}, ${item.kind.name}',
+      label: '${item.title}, ${item.mediaType.label}',
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
@@ -294,6 +382,8 @@ class _VaultTile extends StatelessWidget {
                     video: video,
                     durationSeconds: item.durationSeconds,
                     selected: selected,
+                    thumbnailUrl: item.thumbnailUrl,
+                    mediaType: item.mediaType,
                   ),
                   // The heart sits on the corner of the art rather than
                   // behind a tap into the detail: saving while browsing is
@@ -466,43 +556,87 @@ class _DetailPanel extends StatelessWidget {
     final ShiftColors c = ShiftColors.of(context);
     final bool video = item.kind == MediaKind.video;
 
-    return Container(
-      color: c.surface,
+    void rerun() {
+      // Re-run is the prompt, not a copy of the result: it goes back into
+      // the Suite bar so it can be changed before it is sent again.
+      state.reusePrompt(item.prompt);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            video
+                ? 'The clip\u2019s prompt is back in the bar.'
+                : 'That prompt is back in the bar.',
+          ),
+        ),
+      );
+    }
+
+    // One prominent action, the rest in a list below the facts, as an
+    // iPhone's detail screens do. It was four equal buttons in a grid,
+    // Delete among them in an outline of red.
+    final bool canPublish = item.mine && !item.published;
+
+    return ColoredBox(
+      color: c.bg,
       child: SafeArea(
         child: ListView(
-          padding: const EdgeInsets.all(Space.x5),
+          padding: const EdgeInsets.fromLTRB(
+            Space.x5,
+            Space.x2,
+            Space.x5,
+            Space.x6,
+          ),
           children: <Widget>[
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                if (showBackArrow)
-                  IconButton(
-                    tooltip: 'Back to the vault',
-                    onPressed: onClose,
-                    icon: Icon(Icons.arrow_back_rounded, color: c.text),
-                  ),
-                Expanded(
-                  child: Text(
-                    item.title,
-                    style: ShiftType.subheading(c.text),
-                  ),
-                ),
-                if (!item.mine) HeartButton(item: item),
-                if (!showBackArrow)
-                  IconButton(
-                    tooltip: 'Close details',
-                    onPressed: onClose,
-                    icon: Icon(Icons.close_rounded, color: c.textMuted),
-                  ),
-              ],
+            SizedBox(
+              height: 44,
+              child: Row(
+                children: <Widget>[
+                  if (showBackArrow)
+                    Transform.translate(
+                      offset: const Offset(-10, 0),
+                      child: TextButton.icon(
+                        onPressed: onClose,
+                        icon: Icon(
+                          Icons.chevron_left_rounded,
+                          size: 28,
+                          color: c.accent,
+                        ),
+                        label: Text(
+                          'Vault',
+                          style:
+                              ShiftType.copy(c.accent, size: 17, weight: 500),
+                        ),
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.only(right: Space.x3),
+                        ),
+                      ),
+                    ),
+                  const Spacer(),
+                  if (!item.mine) HeartButton(item: item),
+                  if (!showBackArrow)
+                    IconButton(
+                      tooltip: 'Close details',
+                      onPressed: onClose,
+                      icon: Icon(Icons.close_rounded, color: c.textMuted),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: Space.x2),
+            Semantics(
+              header: true,
+              child: Text(
+                item.title,
+                style: ShiftType.largeTitle(c.text).copyWith(fontSize: 28),
+              ),
             ),
             if (!item.mine) ...<Widget>[
-              const SizedBox(height: Space.x1),
+              const SizedBox(height: 2),
               Text(
                 item.saved
                     ? 'By ${item.byName} · saved to your vault'
                     : 'By ${item.byName}',
-                style: ShiftType.bodySm(c.textMuted),
+                style: ShiftType.copy(c.textMuted, size: 15),
               ),
             ],
             const SizedBox(height: Space.x4),
@@ -519,117 +653,161 @@ class _DetailPanel extends StatelessWidget {
                   // on the thing you tapped rather than on a blank box.
                   child: ClipRRect(
                     borderRadius: Radii.lgAll,
-                    child: Stack(
-                      fit: StackFit.expand,
-                      children: <Widget>[
-                        PosterArt(seed: item.id),
-                        if (video) const Center(child: PlayDisc(size: 56)),
-                      ],
-                    ),
+                    child: VaultMedia(item: item),
                   ),
                 ),
               ),
             ),
             const SizedBox(height: Space.x5),
+            SizedBox(
+              height: 50,
+              child: FilledButton.icon(
+                onPressed: canPublish ? () => _publish(context) : rerun,
+                icon: Icon(
+                  canPublish ? Icons.public_rounded : Icons.replay_rounded,
+                  size: 20,
+                ),
+                label: Text(canPublish ? 'Publish to EcoVault' : 'Re-run'),
+              ),
+            ),
+            const SizedBox(height: Space.x6),
             const Eyebrow('Prompt'),
             const SizedBox(height: Space.x2),
-            Text(item.prompt, style: ShiftType.bodySm(c.text)),
-            const SizedBox(height: Space.x5),
-            Divider(color: c.border),
-            const SizedBox(height: Space.x3),
-            _MetaRow(label: 'Model', value: item.model),
-            _MetaRow(label: 'Created', value: Fmt.dateTime(item.createdAt)),
-            _MetaRow(label: 'Charge', value: '${item.credits} credits'),
-            if (video)
-              _MetaRow(
-                label: 'Length',
-                value: Fmt.seconds(item.durationSeconds),
+            Container(
+              padding: const EdgeInsets.all(Space.x4),
+              decoration: BoxDecoration(
+                color: c.surface,
+                borderRadius: Radii.lgAll,
               ),
-            _MetaRow(
-              label: 'Where',
-              value: !item.mine
-                  ? 'EcoVault · ${item.byName}'
-                  : item.published
-                      ? 'Published to EcoVault'
-                      : 'Your vault',
+              child: SelectableText(
+                item.prompt,
+                style: ShiftType.copy(c.text, size: 15, lineHeight: 22),
+              ),
+            ),
+            const SizedBox(height: Space.x5),
+            const Eyebrow('Info'),
+            const SizedBox(height: Space.x2),
+            GroupedList(
+              children: <Widget>[
+                _MetaRow(label: 'Model', value: item.model),
+                _MetaRow(
+                  label: 'Created',
+                  value: Fmt.dateTime(item.createdAt),
+                ),
+                _MetaRow(
+                  label: 'Charge',
+                  value: item.credits == 1
+                      ? '1 credit'
+                      : '${item.credits} credits',
+                ),
+                if (video)
+                  _MetaRow(
+                    label: 'Length',
+                    value: Fmt.seconds(item.durationSeconds),
+                  ),
+                _MetaRow(
+                  label: 'Where',
+                  value: !item.mine
+                      ? 'EcoVault'
+                      : item.published
+                          ? 'Published to EcoVault'
+                          : 'Your vault',
+                ),
+              ],
             ),
             const SizedBox(height: Space.x5),
             // Renaming, publishing and deleting are things you do to your
             // own work. Saving someone else's piece does not hand you any
-            // of them — what it gives you is the heart and the prompt.
-            if (item.mine) ...<Widget>[
-              Row(
-                children: <Widget>[
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => _rename(context),
-                      child: const Text('Rename'),
-                    ),
-                  ),
-                  const SizedBox(width: Space.x3),
-                  Expanded(
-                    child: FilledButton(
-                      onPressed:
-                          item.published ? null : () => _publish(context),
-                      child: Text(item.published ? 'Published' : 'Publish'),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: Space.x3),
-            ],
-            Row(
+            // of them; what it gives you is the heart and the prompt.
+            GroupedList(
               children: <Widget>[
-                Expanded(
-                  child: OutlinedButton(
-                    // Re-run is the prompt, not a copy of the result: it
-                    // goes back into the Suite bar so it can be changed
-                    // before it is sent again.
-                    onPressed: () {
-                      state.reusePrompt(item.prompt);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            video
-                                ? 'The clip\u2019s prompt is back in the bar.'
-                                : 'That prompt is back in the bar.',
-                          ),
-                        ),
-                      );
-                    },
-                    child: const Text('Re-run'),
+                if (canPublish)
+                  _ActionRow(
+                    icon: Icons.replay_rounded,
+                    label: 'Re-run',
+                    onTap: rerun,
                   ),
-                ),
-                const SizedBox(width: Space.x3),
-                Expanded(
-                  child: item.mine
-                      ? OutlinedButton(
-                          onPressed: () => _delete(context),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: c.danger,
-                            side: BorderSide(color: c.danger),
-                          ),
-                          child: const Text('Delete'),
-                        )
-                      : OutlinedButton(
-                          onPressed: () => state.toggleSaved(item.id),
-                          // The heart above already says which state it
-                          // is in, so the button only needs the verb.
-                          child: Text(item.saved ? 'Remove' : 'Save'),
-                        ),
-                ),
+                if (item.mine)
+                  _ActionRow(
+                    icon: Icons.edit_outlined,
+                    label: 'Rename',
+                    onTap: () => _rename(context),
+                  )
+                else
+                  _ActionRow(
+                    icon: item.saved
+                        ? Icons.heart_broken_outlined
+                        : Icons.favorite_border_rounded,
+                    label: item.saved
+                        ? 'Remove from your vault'
+                        : 'Save to your vault',
+                    onTap: () => state.toggleSaved(item.id),
+                  ),
+                if (item.mine)
+                  _ActionRow(
+                    icon: Icons.delete_outline_rounded,
+                    label: 'Delete',
+                    danger: true,
+                    onTap: () => _delete(context),
+                  ),
               ],
             ),
-            const SizedBox(height: Space.x4),
-            Text(
-              video
-                  ? 'Re-run puts this clip\u2019s prompt back in the Suite bar, '
-                      'where it can be changed before it is sent again.'
-                  : 'Re-run puts this prompt back in the Suite bar, where it '
-                      'can be changed before it is sent again.',
-              style: ShiftType.caption(c.textMuted),
+            const SizedBox(height: Space.x2),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: Space.x4),
+              child: Text(
+                video
+                    ? 'Re-run puts this clip\u2019s prompt back in the Suite '
+                        'bar, where it can be changed before it is sent again.'
+                    : 'Re-run puts this prompt back in the Suite bar, where '
+                        'it can be changed before it is sent again.',
+                style: ShiftType.caption(c.textMuted),
+              ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// A row in the detail's action list: a symbol and a verb in the accent,
+/// or in red for the one that cannot be undone.
+class _ActionRow extends StatelessWidget {
+  const _ActionRow({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.danger = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final bool danger;
+
+  @override
+  Widget build(BuildContext context) {
+    final ShiftColors c = ShiftColors.of(context);
+    final Color tone = danger ? c.danger : c.accent;
+    return InkWell(
+      onTap: onTap,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 50),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: Space.x4),
+          child: Row(
+            children: <Widget>[
+              Icon(icon, size: 20, color: tone),
+              const SizedBox(width: Space.x3),
+              Expanded(
+                child: Text(
+                  label,
+                  style: ShiftType.copy(tone, size: 16, weight: 500),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -642,20 +820,26 @@ class _MetaRow extends StatelessWidget {
   final String label;
   final String value;
 
+  /// A label on the left and its value on the right, as an Info list is.
   @override
   Widget build(BuildContext context) {
     final ShiftColors c = ShiftColors.of(context);
     return Padding(
-      padding: const EdgeInsets.only(bottom: Space.x2),
+      padding: const EdgeInsets.symmetric(
+        horizontal: Space.x4,
+        vertical: 13,
+      ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          SizedBox(
-            width: 76,
-            child: Text(label, style: ShiftType.bodySm(c.textMuted)),
-          ),
+          Text(label, style: ShiftType.copy(c.text, size: 15)),
+          const SizedBox(width: Space.x4),
           Expanded(
-            child: Text(value, style: ShiftType.bodyStrong(c.text)),
+            child: Text(
+              value,
+              textAlign: TextAlign.right,
+              style: ShiftType.copy(c.textMuted, size: 15),
+            ),
           ),
         ],
       ),

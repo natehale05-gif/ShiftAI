@@ -7,6 +7,7 @@ import '../../state/app_state.dart';
 import '../../theme/tokens.dart';
 import '../../theme/type.dart';
 import '../../widgets/common.dart';
+import '../../util/haptics.dart';
 
 /// Two tabs: the runs sitting against a repository, and the jobs running in
 /// a folder. Both are lists of one line each — nothing is dressed up.
@@ -20,39 +21,42 @@ class AgentsSurface extends StatelessWidget {
     return Column(
       children: <Widget>[
         Expanded(
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(
-              Space.x5,
-              Space.x5,
-              Space.x5,
-              Space.x5,
-            ),
-            children: <Widget>[
-              Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: kContentWidth),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: <Widget>[
-                      ScreenTabs(
-                        labels: const <String>['Agents', 'Jobs'],
-                        selected: state.showingJobs ? 1 : 0,
-                        onChanged: (int i) => state.showJobs(i == 1),
-                        scopeLabel: state.showingJobs
-                            ? state.jobScope
-                            : state.agentScope,
-                        onScopeTap: () => _showScopePicker(context, state),
-                      ),
-                      const SizedBox(height: Space.x5),
-                      if (state.showingJobs)
-                        const _JobsTab()
-                      else
-                        const _AgentsTab(),
-                    ],
+          child: PullToRefresh(
+            child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(
+                Space.x5,
+                Space.x5,
+                Space.x5,
+                Space.x5,
+              ),
+              children: <Widget>[
+                Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: kContentWidth),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: <Widget>[
+                        ScreenTabs(
+                          labels: const <String>['Agents', 'Jobs'],
+                          selected: state.showingJobs ? 1 : 0,
+                          onChanged: (int i) => state.showJobs(i == 1),
+                          scopeLabel: state.showingJobs
+                              ? state.jobScope
+                              : state.agentScope,
+                          onScopeTap: () => _showScopePicker(context, state),
+                        ),
+                        const SizedBox(height: Space.x5),
+                        if (state.showingJobs)
+                          const _JobsTab()
+                        else
+                          const _AgentsTab(),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
         PillComposer(
@@ -179,9 +183,10 @@ class _AgentsTabState extends State<_AgentsTab> {
                   label: f.label,
                   color: colorOf(f),
                   selected: _filter == f,
-                  onTap: () => setState(
-                    () => _filter = _filter == f ? _Filter.all : f,
-                  ),
+                  onTap: () {
+                    Haptics.selection();
+                    setState(() => _filter = _filter == f ? _Filter.all : f);
+                  },
                 ),
               ),
             ],
@@ -189,19 +194,34 @@ class _AgentsTabState extends State<_AgentsTab> {
         ),
         const SizedBox(height: Space.x5),
         if (runs.isEmpty)
-          Padding(
-            padding: const EdgeInsets.only(top: Space.x4),
-            child: Text(
-              switch (_filter) {
-                _Filter.all => 'Nothing running on ${state.agentScope} yet '
-                    '— give an agent a task below.',
-                _Filter.working => 'Nothing is working right now.',
-                _Filter.needYou => 'Nothing needs you right now.',
-                _Filter.inReview => 'Nothing is waiting on review.',
-              },
-              style: ShiftType.body(c.textMuted),
-            ),
-          )
+          switch (_filter) {
+            _Filter.all => EmptyState(
+                icon: Icons.bolt_rounded,
+                title: 'No agents running',
+                message: 'Give an agent a task in the bar below. It shows '
+                    'up here on ${state.agentScope}, with its checks and '
+                    'its changes.',
+              ),
+            _Filter.working => const EmptyState(
+                compact: true,
+                icon: Icons.hourglass_empty_rounded,
+                title: 'Nothing working',
+                message: 'Runs in progress show up here.',
+              ),
+            _Filter.needYou => const EmptyState(
+                compact: true,
+                icon: Icons.check_circle_outline_rounded,
+                title: 'Nothing needs you',
+                message: 'A run that fails or waits on an answer lands '
+                    'here.',
+              ),
+            _Filter.inReview => const EmptyState(
+                compact: true,
+                icon: Icons.rate_review_outlined,
+                title: 'Nothing in review',
+                message: 'Finished changes waiting on a look show up here.',
+              ),
+          }
         else
           GroupedList(
             dividerInset: _rowInset,
@@ -368,12 +388,11 @@ class _JobsTab extends StatelessWidget {
         ),
         const SizedBox(height: Space.x3),
         if (state.visibleJobs.isEmpty)
-          Padding(
-            padding: const EdgeInsets.only(top: Space.x4),
-            child: Text(
-              'No jobs in ${state.jobScope} yet — start one below.',
-              style: ShiftType.body(c.textMuted),
-            ),
+          EmptyState(
+            icon: Icons.work_outline_rounded,
+            title: 'No jobs yet',
+            message: 'Start one in the bar below and it runs over '
+                '${state.jobScope}.',
           ),
         if (state.visibleJobs.isNotEmpty)
           GroupedList(

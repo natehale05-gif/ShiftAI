@@ -124,7 +124,7 @@ void main() {
 
     await tester.tap(find.text('Working'));
     await tester.pumpAndSettle();
-    expect(find.text('Nothing is working right now.'), findsOneWidget);
+    expect(find.text('Nothing working'), findsOneWidget);
 
     await tester.tap(find.text('Working'));
     await tester.pumpAndSettle();
@@ -533,6 +533,89 @@ void main() {
 
     await state.deleteNote(made.id);
     expect(state.notes.length, before);
+  });
+
+  testWidgets('a note saves as you type, with no Save button',
+      (WidgetTester tester) async {
+    final AppState state = await _freshState();
+    await tester.pumpWidget(ShiftApp(state: state));
+    await tester.pump();
+    await _dismissRingsSheet(tester);
+    state.setSurface(Surface.notes);
+    await tester.pumpAndSettle();
+
+    final Note first = state.notes.first;
+    await tester.tap(find.text(first.title));
+    await tester.pumpAndSettle();
+    expect(find.text('Save'), findsNothing);
+
+    final Finder body = find.byType(TextField).last;
+    await tester.enterText(body, 'Rewritten on the train');
+    // Nothing is written mid-sentence; a pause writes it.
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(state.notes.first.body, first.body);
+    await tester.pump(const Duration(milliseconds: 800));
+    expect(state.notes.first.body, 'Rewritten on the train');
+
+    // Leaving writes anything typed since the last pause.
+    await tester.enterText(body, 'Rewritten again');
+    await tester.tap(find.text('Notes').first);
+    await tester.pumpAndSettle();
+    expect(state.notes.first.body, 'Rewritten again');
+  });
+
+  testWidgets('a new note left blank does not stay behind',
+      (WidgetTester tester) async {
+    final AppState state = await _freshState();
+    await tester.pumpWidget(ShiftApp(state: state));
+    await tester.pump();
+    await _dismissRingsSheet(tester);
+    state.setSurface(Surface.notes);
+    await tester.pumpAndSettle();
+    final int before = state.notes.length;
+
+    await tester.tap(find.byTooltip('New note'));
+    await tester.pumpAndSettle();
+    expect(state.notes.length, before + 1);
+    await tester.tap(find.text('Notes').first);
+    await tester.pumpAndSettle();
+    expect(state.notes.length, before);
+  });
+
+  testWidgets('pulling a list down reloads it from the engine',
+      (WidgetTester tester) async {
+    final AppState state = await _freshState();
+    await tester.pumpWidget(ShiftApp(state: state));
+    await tester.pump();
+    await _dismissRingsSheet(tester);
+
+    for (final Surface surface in <Surface>[
+      Surface.earnings,
+      Surface.trophies,
+      Surface.vault,
+      Surface.notes,
+      Surface.agents,
+    ]) {
+      state.setSurface(surface);
+      await tester.pumpAndSettle();
+      bool reloaded = false;
+      void watch() => reloaded = reloaded || state.refreshing;
+      state.addListener(watch);
+      // The list itself, not a search field's own sideways Scrollable.
+      await tester.fling(
+        find
+            .byWidgetPredicate(
+              (Widget w) =>
+                  w is Scrollable && w.axisDirection == AxisDirection.down,
+            )
+            .first,
+        const Offset(0, 400),
+        1200,
+      );
+      await tester.pumpAndSettle();
+      state.removeListener(watch);
+      expect(reloaded, isTrue, reason: surface.name);
+    }
   });
 
   test('a design duplicates next to itself and deletes cleanly', () async {
