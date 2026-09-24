@@ -117,6 +117,9 @@ model wrote it; that is what lets them read each other as one model.
 One model answers each message: the one picked by hand, or with none
 picked, the one suited to it ("Best fit", `lib/util/model_router.dart`:
 a video to a video model, words to a general one, follow-ups staying put).
+A chat model never answers a request for an image, video or audio, even
+if picked by hand; with no model connected that makes one, nothing is
+sent and the thread says so.
 
 Not wired yet: `ANY /v1/studio/<path>`, which relays to the Suite's own
 `/api/studio/<path>` (chat, image, video, voice, music, deck and the
@@ -161,6 +164,6 @@ exploratory, branch.
 flutter analyze && flutter test
 ```
 
-291 tests. They have caught every regression listed above at least once,
+295 tests. They have caught every regression listed above at least once,
 including several of mine. If one fails, read it before changing it —
 twice now the test was right and my expectation was wrong.
