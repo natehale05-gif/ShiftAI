@@ -130,7 +130,17 @@ def answer(body):
         wrote = names.get(last.get("model"), "an earlier answer")
         quoted = (last.get("body") or "")[:80]
         text += f" Carrying on from the last reply ({wrote}): \"{quoted}\""
-    text += f" You asked: \"{body.get('prompt', '')}\""
+    asked = body.get("prompt", "")
+    # The app's every-model round: the second and later models are sent a
+    # carry-on instruction after the person's message. Quote the message.
+    if asked.startswith("Carry on as the same assistant"):
+        users = [t for t in history if t.get("role") == "user"]
+        text += (" I'm adding to the answer above, to: "
+                 f"\"{(users[-1].get('body') if users else '')}\"")
+        return [{"id": f"m{len(history) + 1}", "author": "shift",
+                 "model": model, "modelName": names.get(model, model),
+                 "body": text}]
+    text += f" You asked: \"{asked}\""
     return [{
         "id": f"m{len(history) + 1}",
         "author": "shift",

@@ -29,6 +29,11 @@ class _Engine extends SeedRepository {
   final List<({String prompt, String? model, List<ChatTurn> history})> sent =
       <({String prompt, String? model, List<ChatTurn> history})>[];
 
+  /// The model that refuses, for the round's failure test.
+  String? failFor;
+
+  List<ChatModel> models = _models;
+
   @override
   Future<ShiftSnapshot> load() async {
     final ShiftSnapshot s = await super.load();
@@ -47,7 +52,7 @@ class _Engine extends SeedRepository {
       payoutLine: s.payoutLine,
       avatars: s.avatars,
       league: s.league,
-      models: _models,
+      models: models,
     );
   }
 
@@ -60,6 +65,9 @@ class _Engine extends SeedRepository {
     List<ChatTurn> history = const <ChatTurn>[],
   }) async {
     sent.add((prompt: prompt, model: model, history: history));
+    if (model != null && model == failFor) {
+      throw const ShiftApiException(ShiftApiErrorKind.server, 'Down.');
+    }
     final String id = model ?? 'claude';
     return <ChatMessage>[
       ChatMessage(
@@ -152,6 +160,9 @@ void main() {
 
   test('Auto sends no model, and a failure notice is never history', () async {
     final (AppState state, _Engine engine) = await _signedIn();
+    // Auto is a pick now; with nothing picked, every model answers.
+    state.setChatModel(null);
+    expect(state.answeringWithEvery, isFalse);
     state.sendMessage('Hello');
     await _settle();
     expect(engine.sent.single.model, isNull);
@@ -266,10 +277,12 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    expect(find.text('Auto'), findsOneWidget);
-    await tester.tap(find.text('Auto'));
+    // Every model, until one is picked.
+    expect(find.text('Every model'), findsOneWidget);
+    await tester.tap(find.text('Every model'));
     await tester.pumpAndSettle();
     expect(find.text('Who answers'), findsOneWidget);
+    expect(find.text('Auto'), findsOneWidget);
     await tester.tap(find.text('Other model'));
     await tester.pumpAndSettle();
     expect(state.chatModel?.id, 'other');
@@ -279,6 +292,104 @@ void main() {
     // The label over the reply, and the picker naming the next answerer.
     expect(find.text('Other model'), findsNWidgets(2));
     expect(find.text('Answer 1 from other'), findsOneWidget);
+  });
+
+  group('every model answers', () {
+    test(
+        'with nothing picked, each connected AI answers the message in turn, '
+        'the second reading the first as its own', () async {
+      final (AppState state, _Engine engine) = await _signedIn();
+      expect(state.answeringWithEvery, isTrue);
+      expect(state.answeringLabel, 'Every model');
+
+      state.sendMessage('Write a caption');
+      await _settle();
+      await _settle();
+
+      // One call per model, in the order the server lists them.
+      expect(engine.sent.map((s) => s.model), <String?>['claude', 'other']);
+      // The first gets the message itself and what came before it.
+      expect(engine.sent[0].prompt, 'Write a caption');
+      expect(engine.sent[0].history, isEmpty);
+      // The second gets the message and the first answer as the
+      // assistant's own, then the ask to carry on from it.
+      expect(engine.sent[1].prompt, AppState.everyModelFollowUp);
+      expect(engine.sent[1].history.map((ChatTurn t) => t.role),
+          <String>['user', 'assistant']);
+      expect(engine.sent[1].history.first.body, 'Write a caption');
+      expect(engine.sent[1].history.last.body,
+          'Answer 1 from claude\n- first point');
+
+      // Both answers are in the thread, labelled, and the follow-up is not.
+      expect(
+        state.messages.map((ChatMessage m) => m.modelName ?? m.author.name),
+        <String>['you', 'Claude', 'Other model'],
+      );
+      expect(
+          state.messages
+              .any((ChatMessage m) => m.body == AppState.everyModelFollowUp),
+          isFalse);
+      expect(state.thinking, isFalse);
+
+      // The next message's history has both answers.
+      state.sendMessage('Shorter');
+      await _settle();
+      await _settle();
+      expect(engine.sent[2].history.map((ChatTurn t) => t.model),
+          <String?>[null, 'claude', 'other']);
+    });
+
+    test('picking one model, or Auto, turns it off; Every model back on',
+        () async {
+      final (AppState state, _Engine engine) = await _signedIn();
+      state.setChatModel('other');
+      expect(state.answeringWithEvery, isFalse);
+      state.sendMessage('Hi');
+      await _settle();
+      expect(engine.sent.single.model, 'other');
+
+      state.setAnswerWithEvery();
+      expect(state.answeringWithEvery, isTrue);
+      await state.flush();
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      final (AppState again, _) = await _signedIn(
+          <String, Object>{StoreKeys.app: prefs.getString(StoreKeys.app)!});
+      expect(again.answeringWithEvery, isTrue);
+    });
+
+    test('one model failing does not stop the others', () async {
+      final (AppState state, _Engine engine) = await _signedIn();
+      engine.failFor = 'claude';
+      state.sendMessage('Hi');
+      await _settle();
+      await _settle();
+      expect(engine.sent.map((s) => s.model), <String?>['claude', 'other']);
+      expect(state.messages[1].failure?.sentence, 'Claude did not answer.');
+      expect(state.messages[2].modelName, 'Other model');
+      // The failure is not something the next model reads.
+      expect(
+          engine.sent[1].history.map((ChatTurn t) => t.role), <String>['user']);
+    });
+
+    test('a new message ends the round before it', () async {
+      final (AppState state, _Engine engine) = await _signedIn();
+      state.sendMessage('First');
+      state.clearThread();
+      await _settle();
+      await _settle();
+      expect(engine.sent, hasLength(1));
+      expect(state.messages, isEmpty);
+    });
+
+    test('with one model connected there is no round', () async {
+      final (AppState state, _Engine engine) = await _signedIn();
+      engine.models = <ChatModel>[_models.first];
+      await state.refresh();
+      expect(state.answeringWithEvery, isFalse);
+      state.sendMessage('Hi');
+      await _settle();
+      expect(engine.sent, hasLength(1));
+    });
   });
 }
 

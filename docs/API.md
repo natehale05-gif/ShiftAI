@@ -539,6 +539,30 @@ keeps private threads out of its own storage; honouring this server-side is
 the other half of that promise, and the claim is made to the person in the
 composer's hint text.
 
+
+#### Every model answers
+
+With more than one model listed, the app's default is **Every model**:
+each message is answered by every model in `/v1/models`, in that order,
+one `POST /v1/messages` each, and each reads the answers before its own.
+
+- The first call is the message as usual: `prompt` is what the person
+  typed, `model` the first model, `history` what came before.
+- Each call after it has `model` set to the next model, `history` ending
+  with the person's message (`user`) and every answer so far this round
+  (`assistant`, whichever model wrote it), and `prompt` set to a fixed
+  instruction to carry on as the same assistant: keep what the answer so
+  far got right, correct it, add what it missed, not repeat it. The
+  person never sees that instruction; only the answers are shown, each
+  labelled with its model.
+- In later messages the history carries every answer as consecutive
+  `assistant` turns. If a provider needs strict user/assistant
+  alternation, join consecutive assistant turns into one before sending.
+- One model failing shows "<name> did not answer." and the round goes
+  on with the next.
+- **The app can only offer the models this route lists.** With one, or
+  none (404), there is no round and no picker: the server answers alone.
+  People can still pick one model, or Auto, in the picker.
 ### `POST /v1/polish`
 
 The composer's sparkle, "Polish my prompt". Body `{ "prompt": "make a

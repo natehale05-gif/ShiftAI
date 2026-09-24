@@ -411,10 +411,14 @@ class AppState extends ChangeNotifier {
   /// The AIs the server has connected, in the order it lists them.
   List<ChatModel> get chatModels => _snap.models;
 
+  /// What was picked: a model's id, [_auto], [_every], or nothing yet.
   String? _chatModelId;
 
-  /// Who answers the next message: the one picked, if the server still has
-  /// it, or null for the server's own choice.
+  static const String _every = '*every';
+  static const String _auto = '*auto';
+
+  /// Who answers the next message when one AI does: the one picked, if the
+  /// server still has it, or null for the server's own choice.
   ChatModel? get chatModel {
     for (final ChatModel m in chatModels) {
       if (m.id == _chatModelId) return m;
@@ -422,13 +426,45 @@ class AppState extends ChangeNotifier {
     return null;
   }
 
+  /// Whether every connected AI answers each message, in turn.
+  ///
+  /// The default whenever the server has connected more than one, which is
+  /// what the Suite is for: before, a message went to one AI (the server's
+  /// pick, or the one chosen), and the others never said anything unless
+  /// someone switched to them by hand. Picking one AI, or Auto, turns it
+  /// off; picking "Every model" turns it back on.
+  bool get answeringWithEvery =>
+      chatModels.length > 1 && chatModel == null && _chatModelId != _auto;
+
+  /// "Every model", "Auto", or the picked model's name.
+  String get answeringLabel =>
+      answeringWithEvery ? 'Every model' : (chatModel?.name ?? 'Auto');
+
   /// Picks which AI answers from now on; null hands it back to the server.
   /// The conversation is unchanged: the next model reads all of it.
   void setChatModel(String? id) {
-    if (_chatModelId == id) return;
-    _chatModelId = id;
+    final String next = id ?? _auto;
+    if (_chatModelId == next) return;
+    _chatModelId = next;
     _changed();
   }
+
+  /// Every connected AI answers each message, each reading the others.
+  void setAnswerWithEvery() {
+    if (_chatModelId == _every) return;
+    _chatModelId = _every;
+    _changed();
+  }
+
+  /// What the second and later AIs in a round are asked, after the
+  /// person's own message and the answers before theirs. Written so each
+  /// carries on as the same assistant rather than starting over or
+  /// repeating the one before; the person never sees it.
+  static const String everyModelFollowUp =
+      'Carry on as the same assistant and answer the request above '
+      'yourself. Build on the answer so far: keep what it got right, '
+      'correct anything it got wrong, add what it missed, and do not '
+      'repeat it. If there is nothing to add, say so in one line.';
 
   /// The conversation so far, as the next model should read it.
   ///
@@ -440,23 +476,23 @@ class AppState extends ChangeNotifier {
   /// and stay out.
   List<ChatTurn> get chatHistory => <ChatTurn>[
         for (final ChatMessage m in messages)
-          if (m.failure == null)
-            ChatTurn(
-              role: m.author == MessageAuthor.you ? 'user' : 'assistant',
-              body: <String>[
-                if (m.body.isNotEmpty) m.body,
-                ...m.bullets.map((String b) => '- $b'),
-                // The answers it offered, so the next model knows what
-                // "the second one" means.
-                ...m.choices.map((ChatChoice c) => c.description == null
-                    ? '- ${c.label}'
-                    : '- ${c.label}: ${c.description}'),
-                if (m.attachment != null)
-                  '[Attached: ${m.attachment!.fileName}]',
-              ].join('\n'),
-              model: m.model,
-            ),
+          if (m.failure == null) _turnOf(m),
       ];
+
+  static ChatTurn _turnOf(ChatMessage m) => ChatTurn(
+        role: m.author == MessageAuthor.you ? 'user' : 'assistant',
+        body: <String>[
+          if (m.body.isNotEmpty) m.body,
+          ...m.bullets.map((String b) => '- $b'),
+          // The answers it offered, so the next model knows what
+          // "the second one" means.
+          ...m.choices.map((ChatChoice c) => c.description == null
+              ? '- ${c.label}'
+              : '- ${c.label}: ${c.description}'),
+          if (m.attachment != null) '[Attached: ${m.attachment!.fileName}]',
+        ].join('\n'),
+        model: m.model,
+      );
 
   /// The connector catalogue the engine knows about.
   List<Connector> get connectors => _snap.connectors;
@@ -1176,6 +1212,11 @@ class AppState extends ChangeNotifier {
     // before this prompt, and the prompt travels on its own.
     final List<ChatTurn> history = chatHistory;
     final String? model = chatModel?.id;
+    // The panel for this message: every connected AI, or none when one
+    // answers alone.
+    final List<ChatModel> panel = answeringWithEvery
+        ? List<ChatModel>.of(chatModels)
+        : const <ChatModel>[];
     messages = <ChatMessage>[
       ...messages,
       ChatMessage(id: 'you-$stamp', author: MessageAuthor.you, body: body),
@@ -1183,50 +1224,120 @@ class AppState extends ChangeNotifier {
     thinking = true;
     _changed();
 
+    // A newer message, or a cleared thread, ends this one's round: its
+    // late answers are not appended to a conversation that moved on.
+    final int round = ++_round;
+    bool current() => round == _round;
+
     // The answer comes from the engine. Private chat is passed through so
     // a server can be told not to retain it, on top of this client never
     // writing it down.
     _reply?.ignore();
     _reply = () async {
-      try {
-        final List<ChatMessage> answer = await _repo.send(
-          body,
-          private: privateChat,
-          avatarId: activeAvatarId,
-          model: model,
-          history: history,
-        );
-        messages = <ChatMessage>[...messages, ...answer];
-        lastError = null;
-        // Coming back with something made is the ring, whether or not it
-        // ever lands in the vault — a private ask still counts.
-        if (answer.any((ChatMessage m) => m.attachment != null)) {
-          _closeRing(RingKind.create);
-        }
-      } on ShiftApiException catch (error) {
-        lastError = error;
-        messages = <ChatMessage>[
-          ...messages,
-          ChatMessage(
-            id: 'error-$stamp',
-            author: MessageAuthor.shift,
-            body: error.message,
-            failure: FailureInfo(
-              sentence: 'That did not reach the server.',
-              reassurance: error.retryable
-                  ? 'Nothing was charged. The next try may well work.'
-                  : 'Nothing was charged.',
-              details: error.status == null
-                  ? error.message
-                  : '${error.status} · ${error.message}',
-            ),
-          ),
+      if (panel.isEmpty) {
+        await _answer(stamp, body, model: model, history: history);
+      } else {
+        // Every AI in turn. The first answers the message; each after it
+        // is given the message and every answer so far as the assistant's
+        // own, and carries on from them as the same assistant.
+        final List<ChatTurn> sofar = <ChatTurn>[
+          ...history,
+          ChatTurn(role: 'user', body: body),
         ];
+        for (int i = 0; i < panel.length && current(); i++) {
+          final ChatModel m = panel[i];
+          final List<ChatMessage> got = await _answer(
+            '$stamp-${m.id}',
+            i == 0 ? body : everyModelFollowUp,
+            model: m.id,
+            history: i == 0 ? history : List<ChatTurn>.of(sofar),
+            as: m,
+            stillCurrent: current,
+          );
+          sofar.addAll(
+              got.where((ChatMessage a) => a.failure == null).map(_turnOf));
+        }
       }
+      if (!current()) return;
       thinking = false;
       _changed();
     }();
     return true;
+  }
+
+  int _round = 0;
+
+  /// One engine call for [sendMessage]: appends what comes back, or a
+  /// failure notice, and returns what was appended. [as] labels a reply
+  /// the engine did not label, so a panel's answers can always be told
+  /// apart.
+  Future<List<ChatMessage>> _answer(
+    String stamp,
+    String prompt, {
+    required String? model,
+    required List<ChatTurn> history,
+    ChatModel? as,
+    bool Function()? stillCurrent,
+  }) async {
+    try {
+      final List<ChatMessage> answer = (await _repo.send(
+        prompt,
+        private: privateChat,
+        avatarId: activeAvatarId,
+        model: model,
+        history: history,
+      ))
+          .map((ChatMessage a) => as == null || a.model != null
+              ? a
+              : ChatMessage(
+                  id: a.id,
+                  author: a.author,
+                  body: a.body,
+                  eyebrow: a.eyebrow,
+                  bullets: a.bullets,
+                  attachment: a.attachment,
+                  failure: a.failure,
+                  model: as.id,
+                  modelName: as.name,
+                  choices: a.choices,
+                  multiSelect: a.multiSelect,
+                ))
+          .toList();
+      if (!(stillCurrent?.call() ?? true)) return const <ChatMessage>[];
+      messages = <ChatMessage>[...messages, ...answer];
+      lastError = null;
+      // Coming back with something made is the ring, whether or not it
+      // ever lands in the vault — a private ask still counts.
+      if (answer.any((ChatMessage m) => m.attachment != null)) {
+        _closeRing(RingKind.create);
+      }
+      _changed();
+      return answer;
+    } on ShiftApiException catch (error) {
+      if (!(stillCurrent?.call() ?? true)) return const <ChatMessage>[];
+      lastError = error;
+      final ChatMessage notice = ChatMessage(
+        id: 'error-$stamp',
+        author: MessageAuthor.shift,
+        body: error.message,
+        model: as?.id,
+        modelName: as?.name,
+        failure: FailureInfo(
+          sentence: as == null
+              ? 'That did not reach the server.'
+              : '${as.name} did not answer.',
+          reassurance: error.retryable
+              ? 'Nothing was charged. The next try may well work.'
+              : 'Nothing was charged.',
+          details: error.status == null
+              ? error.message
+              : '${error.status} · ${error.message}',
+        ),
+      );
+      messages = <ChatMessage>[...messages, notice];
+      _changed();
+      return <ChatMessage>[notice];
+    }
   }
 
   /// Rewrites what is in the composer into a fuller brief.
@@ -1247,6 +1358,7 @@ class AppState extends ChangeNotifier {
   }
 
   void clearThread() {
+    _round++;
     _reply?.ignore();
     thinking = false;
     messages = <ChatMessage>[];
