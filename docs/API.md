@@ -559,7 +559,7 @@ conversation can move between them. Each one has to read everything said
 so far, the others' replies included, and carry on from it **as though
 they were one model**.
 
-`GET /v1/models` lists who can answer, in the order the picker shows them:
+`GET /v1/models` lists who can answer, in the order Retry offers them:
 
 ```json
 [{ "id": "claude-opus-5-5", "name": "Claude Opus 5.5",
@@ -567,9 +567,10 @@ they were one model**.
  { "id": "gpt-x", "name": "…", "provider": "…" }]
 ```
 
-Optional: without it (404 or an error) the app shows no picker and sends
-no `model`. With more than one, the composer shows "Answering: <name>";
-`Auto` sends no `model` and the server picks, usually the `default` one.
+Optional: without it (404 or an error) the app sends no `model` and the
+server picks. There is no picker over the composer: with models listed,
+the app picks one per message (Best fit, below), and Retry offers the
+others that could answer that question.
 
 `POST /v1/messages` gains two fields:
 
@@ -626,8 +627,8 @@ composer's hint text.
 
 #### Best fit: one model per message, the right one
 
-One model answers each message. With nothing picked by hand, the app
-chooses it (**Best fit**) and sends its id as `model`:
+One model answers each message. The app chooses it (**Best fit**) and
+sends its id as `model`:
 
 - A message asking for a video, an image or audio goes to a model whose
   `bestFor` includes `video`, `image` or `audio`; code, research and
@@ -638,13 +639,13 @@ chooses it (**Best fit**) and sends its id as `model`:
   otherwise goes to the `default` one.
 - **A chat model never answers a request for an image, a video or
   audio.** Those go only to a model whose `bestFor` names them, even
-  over a chat model picked by hand. With none connected, the app sends
+  on a Retry that names a chat model. With none connected, the app sends
   nothing and says "No image model is connected yet. Nothing was sent,
   and nothing was charged." So list image, video and audio models with
   `bestFor` (or names that say what they are), or those requests go
   unanswered.
-- People can still pick one model by hand, and it then answers
-  everything it can make.
+- Retry on a reply can ask another model to try again, from the ones
+  that could answer that question.
 - With no models listed at all the server chooses who answers words,
   but the app does not send it a request for an image, a video or audio:
   it cannot tell which of the server's models make them, and left to
