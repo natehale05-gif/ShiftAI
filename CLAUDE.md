@@ -124,11 +124,13 @@ media fields, the Suite's boards at `/v1/boards`, and several AIs in one
 conversation (`/v1/models`, and `model` + `history` on `/v1/messages`).
 Every earlier reply goes back as the assistant's own turn, whichever
 model wrote it; that is what lets them read each other as one model.
-One model answers each message: the one picked by hand, or with none
-picked, the one suited to it ("Best fit", `lib/util/model_router.dart`:
-a video to a video model, words to a general one, follow-ups staying put).
-A chat model never answers a request for an image, video or audio, even
-if picked by hand; with no model connected that makes one, nothing is
+One model answers each message: the one suited to it ("Best fit",
+`lib/util/model_router.dart`: a video to a video model, words to a
+general one, follow-ups staying put). There is no picker over the
+composer (Nate had it taken out), and a pick saved by an older build is
+not restored; Retry can still try again with another model. A chat
+model never answers a request for an image, video or audio; with no
+model connected that makes one, nothing is
 sent and the thread says so. That includes a server that lists no models
 at all: the preview's chat model answered "generate an image of Miami"
 with "I can't generate images" before this.

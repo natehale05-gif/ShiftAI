@@ -200,23 +200,25 @@ void main() {
     );
   });
 
-  test('the pick survives a restart, and a model the server dropped is Auto',
-      () async {
+  test(
+      'a model picked by an older build is not restored: with no picker '
+      'left, it would have answered everything for good', () async {
     final (AppState state, _) = await _signedIn();
-    state.setChatModel('other');
     await state.flush();
     final SharedPreferences prefs = await SharedPreferences.getInstance();
-    final String blob = prefs.getString(StoreKeys.app)!;
+    final Map<String, dynamic> blob =
+        jsonDecode(prefs.getString(StoreKeys.app)!) as Map<String, dynamic>
+          ..['chatModel'] = 'other';
 
     final (AppState again, _) =
-        await _signedIn(<String, Object>{StoreKeys.app: blob});
-    expect(again.chatModel?.id, 'other');
+        await _signedIn(<String, Object>{StoreKeys.app: jsonEncode(blob)});
+    expect(again.chatModel, isNull);
+    expect(again.answeringLabel, 'Best fit');
 
-    final Map<String, dynamic> gone = jsonDecode(blob) as Map<String, dynamic>
-      ..['chatModel'] = 'retired';
-    final (AppState later, _) =
-        await _signedIn(<String, Object>{StoreKeys.app: jsonEncode(gone)});
-    expect(later.chatModel, isNull);
+    // And a pick is no longer written down at all.
+    again.setChatModel('other');
+    await again.flush();
+    expect(prefs.getString(StoreKeys.app), isNot(contains('chatModel')));
   });
 
   test(
@@ -278,8 +280,8 @@ void main() {
   });
 
   testWidgets(
-      'replies are labelled by who wrote them, and the composer '
-      'says who answers next', (WidgetTester tester) async {
+      'replies are labelled by who wrote them, and there is no picker '
+      'over the composer', (WidgetTester tester) async {
     tester.view.physicalSize = const Size(412 * 3, 1600 * 3);
     tester.view.devicePixelRatio = 3;
     addTearDown(tester.view.reset);
@@ -292,20 +294,17 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    // Best fit, until one is picked.
-    expect(find.text('Best fit'), findsOneWidget);
-    await tester.tap(find.text('Best fit'));
-    await tester.pumpAndSettle();
-    expect(find.text('Who answers'), findsOneWidget);
-    await tester.tap(find.text('Other model'));
-    await tester.pumpAndSettle();
-    expect(state.chatModel?.id, 'other');
+    // Two models connected, and still no "Answering: Best fit" line: Best
+    // fit picks for every message.
+    expect(state.chatModels, hasLength(2));
+    expect(find.textContaining('Answering'), findsNothing);
+    expect(find.text('Best fit'), findsNothing);
 
     state.sendMessage('Hi');
     await tester.pumpAndSettle();
-    // The label over the reply, and the picker naming the next answerer.
-    expect(find.text('Other model'), findsNWidgets(2));
-    expect(find.text('Answer 1 from other'), findsOneWidget);
+    // The label over the reply says which one wrote it.
+    expect(find.text('Claude'), findsOneWidget);
+    expect(find.text('Answer 1 from claude'), findsOneWidget);
   });
 
   group('Best fit: one model per message, the right one', () {

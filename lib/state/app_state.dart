@@ -46,7 +46,10 @@ class AppState extends ChangeNotifier {
     // already picked a theme has a stored theme and keeps exactly what it
     // chose until it turns this on.
     followSystem = blob['themeAuto'] as bool? ?? blob['theme'] == null;
-    _chatModelId = blob['chatModel'] as String?;
+    // A model picked by hand used to be kept here. The picker is gone
+    // (every message goes to Best fit), so a pick an older build saved is
+    // not restored: with nothing left to change it, it would have sent
+    // everything to that one model for good.
     // Stored as the disabled set rather than the enabled one, so a feature
     // added by a later version is on by default instead of silently
     // missing for everyone who already has a blob.
@@ -1967,7 +1970,6 @@ class AppState extends ChangeNotifier {
       'v': _blobVersion,
       'theme': themeId.name,
       'themeAuto': followSystem,
-      if (_chatModelId != null) 'chatModel': _chatModelId,
       'disabledFeatures':
           _disabled.map((ShiftFeature f) => f.name).toList(growable: false),
       'surface': surface.name,
