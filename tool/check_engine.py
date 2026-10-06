@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Checks a server against what the ShiftAi app reads (docs/API.md).
 
-    python3 tool/check_engine.py BASE_URL --email ... --password ... [--spend]
+    python3 tool/check_engine.py BASE_URL --email ... --password ... [--spend] [--image]
 
 Signs in, calls every route the app uses, and prints one line per check:
 
@@ -14,7 +14,10 @@ Signs in, calls every route the app uses, and prints one line per check:
 Read-only by default. --spend also sends two messages, polishes a
 prompt, uploads a 1 px image, and saves then deletes one test chat: real
 credits on a real server. It never calls DELETE /v1/me, which would
-delete the account it signed in with.
+delete the account it signed in with. --image generates one image (through
+the first model with bestFor ["image"]) and checks the app could show it:
+an attachment on the answer, a vault row with mediaUrl, and a file that
+loads with no auth header.
 
 Standard library only. Exit code 1 when anything differs.
 """
@@ -390,11 +393,89 @@ def check_messages(engine, spend):
         f"{str(msgs[-1].get('body'))[:60]!r}")
 
 
+def check_image(engine, enabled):
+    """One image, the way the app asks for it, and whether the app can show
+    it: the answer names a vault row, the row (or the answer) has the file,
+    and the file loads."""
+    if not enabled:
+        say("skipped", "image generation", "makes an image; run with --image")
+        return
+    _, body, _, _ = engine.call("GET", "/v1/models")
+    models = rows(body) or []
+    able = [m for m in models if "image" in (m.get("bestFor") or [])]
+    if not able:
+        say("differs", "image generation",
+            "no model in /v1/models has bestFor [\"image\"], so the app "
+            "never sends an image request")
+        return
+    model = able[0]["id"]
+    status, msgs, _, error = ask(engine, {
+        "prompt": "Generate an image of a pink flower", "model": model,
+        "private": True, "history": []})
+    if error or status != 200 or not msgs:
+        say("differs", f"image generation ({model})", error or f"{status}")
+        return
+    made = next((m.get("attachment") for m in msgs
+                 if isinstance(m.get("attachment"), dict)), None)
+    if not made:
+        say("differs", f"image generation ({model})",
+            "the answer has no attachment, so the chat shows only text: "
+            + repr(str(msgs[-1].get("body"))[:60]))
+        return
+    say("ok", f"image generation ({model})",
+        f"attachment {made.get('fileName')}")
+    url = made.get("url") or made.get("mediaUrl")
+    row_id = made.get("vaultItemId")
+    if not url and row_id:
+        _, body, _, _ = engine.call("GET", "/v1/vault")
+        row = next((r for r in rows(body) or [] if r.get("id") == row_id),
+                   None)
+        if row is None:
+            say("differs", "made image in /v1/vault",
+                f"no row {row_id!r}: 'Open in Vault' finds nothing and the "
+                "chat has no picture to show")
+            return
+        url = row.get("mediaUrl") or row.get("thumbnailUrl")
+        if not url:
+            say("differs", "made image in /v1/vault",
+                f"row {row_id!r} has no mediaUrl or thumbnailUrl, so the "
+                "chat shows a file name and no picture")
+            return
+        say("ok", "made image in /v1/vault", url)
+    if not url:
+        say("differs", "made image", "no url on the answer and no vaultItemId")
+        return
+    req = urllib.request.Request(url, method="GET")
+    try:
+        with urllib.request.urlopen(req, timeout=engine.timeout) as res:
+            kind = res.headers.get("Content-Type", "")
+            cors = res.headers.get("Access-Control-Allow-Origin")
+            res.read(64)
+            if not kind.startswith("image/"):
+                say("differs", "made image file",
+                    f"{url} answers {kind or 'no content type'}, not an image")
+                return
+            say("ok", "made image file", f"{kind}, no auth header needed")
+            if not cors:
+                say("note", "made image file",
+                    "no Access-Control-Allow-Origin: fine where the app is "
+                    "served from the same origin, but the web app on any "
+                    "other origin cannot draw it")
+    except urllib.error.HTTPError as e:
+        say("differs", "made image file",
+            f"{e.code} without a token: the app loads it with no "
+            "Authorization header")
+    except Exception as e:  # noqa: BLE001 - report anything else plainly
+        say("differs", "made image file", f"{url}: {e}")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("base", help="e.g. https://app.shiftai.club/app-preview/api")
     ap.add_argument("--email", required=True)
     ap.add_argument("--password", required=True)
+    ap.add_argument("--image", action="store_true",
+                    help="also generate one image and check the app can show it")
     ap.add_argument("--spend", action="store_true",
                     help="also send messages, polish, upload, save a chat")
     ap.add_argument("--timeout", type=float, default=20,
@@ -417,6 +498,7 @@ def main():
     check_threads(engine, args.spend)
     check_polish(engine, args.spend)
     check_messages(engine, args.spend)
+    check_image(engine, args.image)
     say("skipped", "DELETE /v1/me", "it would delete this account")
 
     differs = RESULTS.count("differs")
