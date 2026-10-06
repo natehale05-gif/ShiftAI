@@ -478,6 +478,13 @@ picks the conversation up later can be given them too. Before this the
 app sent only the names, as text in the prompt, and no model ever saw a
 file. A file with `private: true` is not kept after the answer.
 
+**A made file, shown in the thread.** The chat draws a made image (or a
+video's first frame) above its card. It takes the picture from
+`attachment.url` / `attachment.thumbnailUrl` when the answer has them,
+and otherwise from the vault row's `mediaUrl` / `thumbnailUrl`. Either
+has to load with no auth header. With neither, the card shows only the
+file name.
+
 **A made file.** `attachment.vaultItemId` names a row that is already in
 `GET /v1/vault` when the answer goes. The app re-reads `/v1/vault` when an
 answer names a row it does not have yet, so "Open in Vault" finds it.

@@ -181,6 +181,35 @@ def answer(body):
     }]
 
 
+def picture_png(size=256):
+    """A made "picture": a pink bloom on a dark ground, as a real PNG.
+
+    Enough to see the chat draw what was made, with no image library.
+    """
+    import struct
+    import zlib
+    rows = []
+    mid = size / 2
+    for y in range(size):
+        row = bytearray(b"\x00")
+        for x in range(size):
+            d = ((x - mid) ** 2 + (y - mid) ** 2) ** 0.5 / mid
+            if d < 0.55:
+                k = 1 - d / 0.55
+                row += bytes((255, int(60 + 120 * k), int(150 + 60 * k)))
+            else:
+                row += bytes((20, 12, int(30 + 30 * y / size)))
+        rows.append(bytes(row))
+
+    def chunk(kind, data):
+        return (struct.pack(">I", len(data)) + kind + data +
+                struct.pack(">I", zlib.crc32(kind + data) & 0xffffffff))
+    header = struct.pack(">IIBBBBB", size, size, 8, 2, 0, 0, 0)
+    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", header) +
+            chunk(b"IDAT", zlib.compress(b"".join(rows))) +
+            chunk(b"IEND", b""))
+
+
 def make(body, model, history):
     """What an image or video model answers with: the file, in the vault.
 
@@ -204,6 +233,13 @@ def make(body, model, history):
         **({"durationSeconds": 20, "width": 1080, "height": 1920}
            if kind == "video" else {"width": 1024, "height": 1024}),
     }
+    # The file itself, served from this mock like an upload, so the chat
+    # and the vault have a real picture to draw. A video gets a still.
+    UPLOADS[f"made-{n}"] = (picture_png(), "image/png")
+    still = f"{BASE}/v1/mock/media/made-{n}"
+    row["thumbnailUrl"] = still
+    if kind == "image":
+        row["mediaUrl"] = still
     VAULT.insert(0, row)
     name = "png" if kind == "image" else "mp4"
     return {
