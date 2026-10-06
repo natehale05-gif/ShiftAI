@@ -17,6 +17,41 @@ class HttpRepository implements ShiftRepository {
 
   final ApiClient _api;
 
+  /// A link the engine gave relative to itself ("/media/flower.png"),
+  /// made whole against the engine's address. Drawn as it came, it was
+  /// looked for on whatever host served the app (GitHub Pages, or nowhere
+  /// at all in the phone app) and the picture never loaded.
+  String? _whole(String? link) {
+    if (link == null || link.isEmpty) return link;
+    final Uri? uri = Uri.tryParse(link);
+    if (uri == null || uri.hasScheme) return link;
+    final String base =
+        _api.baseUrl.endsWith('/') ? _api.baseUrl : '${_api.baseUrl}/';
+    return Uri.parse(base).resolveUri(uri).toString();
+  }
+
+  VaultItem _piece(Map<String, dynamic> json) {
+    String? link(String key) {
+      final Object? v = json[key];
+      return v is String ? _whole(v) : null;
+    }
+
+    return VaultItem.fromJson(<String, dynamic>{
+      ...json,
+      'mediaUrl': link('mediaUrl'),
+      'thumbnailUrl': link('thumbnailUrl'),
+    });
+  }
+
+  ChatMessage _message(Map<String, dynamic> json) {
+    final MessageAttachment? made =
+        MessageAttachment.tryParse(json['attachment']);
+    return ChatMessage.fromJson(<String, dynamic>{
+      ...json,
+      if (made != null) 'attachment': made.withLinks(_whole).toJson(),
+    });
+  }
+
   // Paths -----------------------------------------------------------------
   static const String _me = '/v1/me';
   static const String _standings = '/v1/standings';
@@ -131,11 +166,9 @@ class HttpRepository implements ShiftRepository {
           .toList(growable: false),
       trophies: Decode.trophies(parts[2]),
       ecoVault: Decode.rows(parts[10], 'ecovault')
-          .map(VaultItem.fromJson)
+          .map(_piece)
           .toList(growable: false),
-      vault: Decode.rows(parts[3], 'vault')
-          .map(VaultItem.fromJson)
-          .toList(growable: false),
+      vault: Decode.rows(parts[3], 'vault').map(_piece).toList(growable: false),
       notes: Decode.rows(parts[4], 'notes')
           .map(Note.fromJson)
           .toList(growable: false),
@@ -224,9 +257,7 @@ class HttpRepository implements ShiftRepository {
         ),
       ];
     }
-    return Decode.rows(body, 'messages')
-        .map(ChatMessage.fromJson)
-        .toList(growable: false);
+    return Decode.rows(body, 'messages').map(_message).toList(growable: false);
   }
 
   @override
@@ -373,7 +404,7 @@ class HttpRepository implements ShiftRepository {
   @override
   Future<List<VaultItem>> vault() async =>
       Decode.rows(await _api.get(_vault), 'vault')
-          .map(VaultItem.fromJson)
+          .map(_piece)
           .toList(growable: false);
 
   @override
@@ -421,24 +452,23 @@ class HttpRepository implements ShiftRepository {
   }
 
   @override
-  Future<VaultItem> saveVaultItem(String id) async => VaultItem.fromJson(
+  Future<VaultItem> saveVaultItem(String id) async => _piece(
         await _api.post('$_eco/$id/save') as Map<String, dynamic>,
       );
 
   @override
-  Future<VaultItem> unsaveVaultItem(String id) async => VaultItem.fromJson(
+  Future<VaultItem> unsaveVaultItem(String id) async => _piece(
         await _api.delete('$_eco/$id/save') as Map<String, dynamic>,
       );
 
   @override
-  Future<VaultItem> renameVaultItem(String id, String title) async =>
-      VaultItem.fromJson(
+  Future<VaultItem> renameVaultItem(String id, String title) async => _piece(
         await _api.patch('$_vault/$id', body: <String, dynamic>{'title': title})
             as Map<String, dynamic>,
       );
 
   @override
-  Future<VaultItem> publishVaultItem(String id) async => VaultItem.fromJson(
+  Future<VaultItem> publishVaultItem(String id) async => _piece(
         await _api.post('$_vault/$id/publish') as Map<String, dynamic>,
       );
 

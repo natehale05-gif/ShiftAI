@@ -1275,22 +1275,68 @@ class MessageAttachment {
 
   static MessageAttachment? tryParse(Object? raw) {
     if (raw is! Map<String, dynamic>) return null;
-    final Object? name = raw['fileName'];
-    if (name is! String) return null;
-    String? link(String key) {
-      final Object? v = raw[key];
-      return v is String && v.isNotEmpty ? v : null;
+    String? text(List<String> keys) {
+      for (final String key in keys) {
+        final Object? v = raw[key];
+        if (v is String && v.trim().isNotEmpty) return v.trim();
+      }
+      return null;
     }
 
+    // `url` is the contract. The others are what image APIs and
+    // storage SDKs call it; an engine passing one on as it came had its
+    // picture dropped, and the chat showed a file name with nothing to
+    // look at.
+    final String? url = text(const <String>[
+      'url',
+      'mediaUrl',
+      'imageUrl',
+      'image_url',
+      'fileUrl',
+      'file_url',
+      'downloadUrl',
+      'download_url',
+      'src',
+      'href',
+    ]);
+    final String? name = text(const <String>['fileName', 'filename', 'name']) ??
+        (url == null ? null : _nameIn(url));
+    if (name == null) return null;
     return MessageAttachment(
       fileName: name,
       meta: raw['meta'] as String? ?? '',
       kind: raw['kind'] == 'video' ? MediaKind.video : MediaKind.image,
-      vaultItemId: raw['vaultItemId'] as String? ?? '',
-      url: link('url') ?? link('mediaUrl'),
-      thumbnailUrl: link('thumbnailUrl'),
+      vaultItemId: text(const <String>['vaultItemId', 'vaultId']) ?? '',
+      url: url,
+      thumbnailUrl: text(const <String>[
+        'thumbnailUrl',
+        'thumbnail_url',
+        'thumbUrl',
+        'previewUrl',
+      ]),
     );
   }
+
+  /// The last part of a link's path, as a file name: "flower.png".
+  static String? _nameIn(String url) {
+    if (url.startsWith('data:')) return 'image';
+    final List<String> parts = Uri.tryParse(url)?.pathSegments ?? <String>[];
+    final String last =
+        parts.where((String p) => p.isNotEmpty).lastOrNull ?? '';
+    return last.isEmpty ? null : last;
+  }
+
+  /// The same file with [url] and [thumbnailUrl] made whole by [resolve]:
+  /// an engine answering "/media/flower.png" means its own host.
+  MessageAttachment withLinks(String? Function(String? link) resolve) =>
+      MessageAttachment(
+        fileName: fileName,
+        meta: meta,
+        kind: kind,
+        vaultItemId: vaultItemId,
+        url: resolve(url),
+        thumbnailUrl: resolve(thumbnailUrl),
+      );
 }
 
 /// The shape of the plan-check failure. A 503 here is
