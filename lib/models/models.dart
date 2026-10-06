@@ -840,20 +840,31 @@ class ChatModel {
     final String name = (json['name'] as String?)?.trim().isNotEmpty ?? false
         ? json['name'] as String
         : id;
-    final Object? raw =
+    // `bestFor` is the contract. A single word is read as a list of one.
+    final Object? given =
         json['bestFor'] ?? json['best_for'] ?? json['capabilities'];
-    final Set<TaskKind> said = raw is List
-        ? raw
+    final List<Object?>? raw = switch (given) {
+      final List<Object?> list => list,
+      final String one when one.trim().isNotEmpty => <Object?>[one],
+      _ => null,
+    };
+    final Set<TaskKind> said = raw == null
+        ? <TaskKind>{}
+        : raw
             .map((Object? k) => TaskKind.parse(k is String ? k : null))
             .whereType<TaskKind>()
-            .toSet()
-        : <TaskKind>{};
+            .toSet();
     return ChatModel(
       id: id,
       name: name,
       provider: json['provider'] as String? ?? '',
       isDefault: json['default'] == true,
-      bestFor: raw is List ? said : TaskKind.guessFor('$id $name'),
+      // An empty list is a general model, as said. A list of words none of
+      // which this build knows ("chat", "generation") is not a reason to
+      // ignore a name that says "Image": the name is read instead.
+      bestFor: raw != null && (raw.isEmpty || said.isNotEmpty)
+          ? said
+          : TaskKind.guessFor('$id $name'),
     );
   }
 }
@@ -872,13 +883,22 @@ enum TaskKind {
     for (final TaskKind t in values) {
       if (t.name == k) return t;
     }
-    return switch (k) {
-      'images' || 'picture' || 'art' => image,
+    final TaskKind? word = switch (k) {
+      'images' || 'picture' || 'art' || 'img' || 't2i' => image,
       'music' || 'voice' || 'sound' || 'speech' => audio,
       'search' || 'web' => research,
       'text' || 'copy' => writing,
       _ => null,
     };
+    if (word != null) return word;
+    // "text-to-image", "image_generation", "video-gen": what the model
+    // makes, in the words a provider's catalogue uses.
+    if (k.contains('image') || k.contains('picture')) return image;
+    if (k.contains('video')) return video;
+    if (k.contains('audio') || k.contains('music') || k.contains('speech')) {
+      return audio;
+    }
+    return null;
   }
 
   /// A model's specialities from its id and name, for a server that does
