@@ -70,10 +70,11 @@ cat > offline_worker.js <<'JS'
 // one request that stalled, never failing and never finishing, left the
 // page on its loading screen for good.
 //
-// The cache is named after the build, so a cached main.dart.js can never
-// be served beside a newer page: a new deploy ships a new worker (this
-// file changes with the build id), which clears the old build's cache as
-// it takes over. build_id.txt is never cached; it is how the page
+// The cache is named after the build: a new deploy ships a new worker
+// (this file changes with the build id), which clears the old build's
+// cache as it takes over. Until it does, the old worker can hand a fresh
+// page the old main.dart.js, so the page reloads once when a new worker
+// takes over (controllerchange, in index.html). build_id.txt is never cached; it is how the page
 // notices a new build.
 //
 // Only this build's own files are cached, by name (FILES, written in when
@@ -85,6 +86,14 @@ cat > offline_worker.js <<'JS'
 // never finished, and since a cache match ignores the Authorization
 // header, the next account signed in on that browser would have been
 // handed this one's.
+//
+// Every fetch here revalidates with the server (cache: 'no-cache'). The
+// file names are the same in every build (main.dart.js, flutter_bootstrap.js)
+// and GitHub Pages lets a browser reuse them for 10 minutes, so a new
+// build's cache, filled through the browser's own cache straight after a
+// deploy, was filled with the old main.dart.js and kept it until the next
+// deploy: the app "did not update". A revalidation that finds the file
+// unchanged costs a 304.
 var BUILD = '__BUILD_ID__';
 var FILES = new Set(__FILES__);
 var KEEP = 'shiftai-' + BUILD;
@@ -111,7 +120,9 @@ self.addEventListener('message', function (event) {
   event.waitUntil(caches.open(KEEP).then(function (cache) {
     return Promise.all(urls.map(function (u) {
       return cache.match(u, { ignoreSearch: true }).then(function (hit) {
-        return hit || cache.add(u).catch(function () {});
+        return hit || fresh(u).then(function (res) {
+          keep(cache, u, res);
+        }).catch(function () {});
       });
     }));
   }));
@@ -127,6 +138,15 @@ function ours(u) {
   return url.pathname.slice(scope.pathname.length);
 }
 
+// [u] from the server, never the browser's cache of an older build. A
+// request is copied with only its cache mode changed, so a navigation
+// keeps its own redirect handling.
+function fresh(u) {
+  return typeof u === 'string'
+    ? fetch(u, { cache: 'no-cache', credentials: 'same-origin' })
+    : fetch(new Request(u, { cache: 'no-cache' }));
+}
+
 function keep(cache, req, res) {
   if (res && res.ok) cache.put(req, res.clone());
   return res;
@@ -136,7 +156,7 @@ function keep(cache, req, res) {
 function fromBuild(req) {
   return caches.open(KEEP).then(function (cache) {
     return cache.match(req, { ignoreSearch: true }).then(function (hit) {
-      return hit || fetch(req).then(function (res) {
+      return hit || fresh(req).then(function (res) {
         return keep(cache, req, res);
       });
     });
@@ -148,7 +168,7 @@ function fromBuild(req) {
 // still opens when it does not.
 function page(req) {
   return caches.open(KEEP).then(function (cache) {
-    var network = fetch(req).then(function (res) { return keep(cache, req, res); });
+    var network = fresh(req).then(function (res) { return keep(cache, req, res); });
     var cached = cache.match(req, { ignoreSearch: true }).then(function (hit) {
       return hit || cache.match('./', { ignoreSearch: true });
     }).then(function (hit) {
@@ -333,6 +353,20 @@ cat > index.html <<'HTML'
     // a copy. The next open with no network then comes from that copy.
     (function () {
       if (!('serviceWorker' in navigator)) return;
+      // A new build's worker taking over from the last build's: this page
+      // may have come fresh from the network while the old worker handed
+      // it the old build's main.dart.js from its cache. That is how a
+      // deploy reached the page (whose build id then matched, so the poll
+      // below never fired) but not the app. Opened once more under the new
+      // worker, page and code are the same build. Not on a first visit,
+      // when there was no worker before.
+      var hadWorker = !!navigator.serviceWorker.controller;
+      var reloaded = false;
+      navigator.serviceWorker.addEventListener('controllerchange', function () {
+        if (!hadWorker || reloaded) return;
+        reloaded = true;
+        window.location.reload();
+      });
       navigator.serviceWorker.register('offline_worker.js').catch(function () {});
       window.addEventListener('flutter-first-frame', function () {
         setTimeout(function () {

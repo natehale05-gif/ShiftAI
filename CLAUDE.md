@@ -83,7 +83,13 @@ first with no limit, and a stalled request meant a loading screen for
 good. It caches only the build's own files, listed by name at build time:
 the preview serves the API from the same origin, and a worker that cached
 every GET answered `/v1/vault`, `/v1/avatars` and `/v1/me` from their
-first copy until the next deploy, whoever was signed in. `AppState.load` gives the engine 3 s and then opens on the
+first copy until the next deploy, whoever was signed in. Every fetch the
+worker makes revalidates (`cache: 'no-cache'`): `main.dart.js` has the
+same name in every build and Pages lets a browser reuse it for 10
+minutes, so a new build's cache was filled with the old one. And the page
+reloads once when a new build's worker takes over from an old one, since
+the old worker can hand a fresh page the old `main.dart.js` (6 Oct: "the
+app seems to not be updating"). `AppState.load` gives the engine 3 s and then opens on the
 account's last-seen copy while the rest lands.
 
 **Bundle ids are `club.shiftai.app` on both platforms** and cannot change
@@ -210,6 +216,6 @@ exploratory, branch.
 flutter analyze && flutter test
 ```
 
-379 tests. They have caught every regression listed above at least once,
+381 tests. They have caught every regression listed above at least once,
 including several of mine. If one fails, read it before changing it —
 twice now the test was right and my expectation was wrong.
