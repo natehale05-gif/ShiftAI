@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../theme/tokens.dart';
 import '../theme/type.dart';
+import 'made_preview.dart';
 
 /// A reply as the model wrote it: Markdown, drawn in the app's own type.
 ///
@@ -10,7 +11,8 @@ import '../theme/type.dart';
 /// the source as it was, so a reply read "**Hook:** ..." and "### Shot
 /// list", asterisks and hashes included. This draws the part of Markdown
 /// replies use: headings, lists (nested by indent), quotes, rules, code
-/// blocks, and bold, italic, `code`, ~~struck~~ and [links](url) inline.
+/// blocks, pictures (`![alt](url)`, or a link to an image on a line of its
+/// own), and bold, italic, `code`, ~~struck~~ and [links](url) inline.
 /// Anything else is shown as the text it is. Copy still hands over the
 /// source, as Claude's does.
 ///
@@ -118,6 +120,8 @@ class MarkdownText extends StatelessWidget {
         return Divider(height: Space.x3, color: c.border);
       case MdCode(:final String code):
         return _CodeBlock(code: code);
+      case MdImage(:final String url, :final String alt):
+        return _Picture(url: url, alt: alt);
     }
   }
 
@@ -264,6 +268,19 @@ sealed class MdBlock {
   static final RegExp _quote = RegExp(r'^\s{0,3}>\s?(.*)$');
   static final RegExp _fence = RegExp(r'^\s{0,3}(```|~~~)');
 
+  /// `![alt](url "title")` alone on its line.
+  static final RegExp _image = RegExp(
+    r'^\s*!\[([^\]\n]*)\]\(\s*<?([^)\s>]+)>?(?:\s+"[^"]*")?\s*\)\s*$',
+  );
+
+  /// A bare link to a picture alone on its line: how an engine that knows
+  /// nothing of Markdown hands one over.
+  static final RegExp _imageLink = RegExp(
+    r'^\s*<?((?:https?://\S+?\.(?:png|jpe?g|webp|gif|avif)(?:\?\S*)?)'
+    r'|data:image/[a-z+.-]+;base64,\S+)>?\s*$',
+    caseSensitive: false,
+  );
+
   static List<MdBlock> parse(String source) {
     final List<MdBlock> out = <MdBlock>[];
     final List<String> lines = source.replaceAll('\r\n', '\n').split('\n');
@@ -301,6 +318,17 @@ sealed class MdBlock {
       if (line.trim().isEmpty) {
         endParagraph();
         endQuote();
+        continue;
+      }
+      // A picture the answer links to is drawn, not shown as its source.
+      final RegExpMatch? picture =
+          _image.firstMatch(line) ?? _imageLink.firstMatch(line);
+      if (picture != null) {
+        endParagraph();
+        endQuote();
+        out.add(picture.groupCount == 2
+            ? MdImage(picture.group(2)!, picture.group(1)!)
+            : MdImage(picture.group(1)!, ''));
         continue;
       }
       final RegExpMatch? q = _quote.firstMatch(line);
@@ -386,4 +414,53 @@ class MdRule extends MdBlock {
 class MdCode extends MdBlock {
   const MdCode(this.code);
   final String code;
+}
+
+/// A picture in the reply: [url] to draw, [alt] to say what it is.
+class MdImage extends MdBlock {
+  const MdImage(this.url, this.alt);
+  final String url;
+  final String alt;
+}
+
+/// A picture from the reply's words, at its own shape up to a comfortable
+/// size. One that does not load says so, with what it was meant to be.
+class _Picture extends StatelessWidget {
+  const _Picture({required this.url, required this.alt});
+
+  final String url;
+  final String alt;
+
+  @override
+  Widget build(BuildContext context) {
+    final ShiftColors c = ShiftColors.of(context);
+    return Semantics(
+      image: true,
+      label: alt.isEmpty ? 'Image' : alt,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 520, maxHeight: 520),
+        child: ClipRRect(
+          borderRadius: Radii.lgAll,
+          child: networkPicture(
+            url,
+            fit: BoxFit.contain,
+            errorBuilder: (BuildContext context, Object error, StackTrace? _) =>
+                Container(
+              padding: const EdgeInsets.all(Space.x3),
+              decoration: BoxDecoration(
+                color: c.surface,
+                borderRadius: Radii.lgAll,
+                border: Border.all(color: c.border),
+              ),
+              child: Text(
+                '${alt.isEmpty ? 'The picture' : alt} did not load '
+                '(${MadePreview.reasonOf(error, url)}).',
+                style: ShiftType.caption(c.textMuted),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
