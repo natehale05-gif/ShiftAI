@@ -110,6 +110,9 @@ class SeedRepository implements ShiftRepository {
   Future<void> deleteThread(String id) async {}
 
   @override
+  Future<List<ChatModel>> listModels({bool fresh = false}) async => (await load()).models;
+
+  @override
   Future<List<VaultItem>> vault() async => List<VaultItem>.of(_vault);
 
   @override

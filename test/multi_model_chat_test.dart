@@ -439,7 +439,10 @@ void main() {
 
     test('video and audio are held to the same rule', () async {
       final (AppState state, _Engine engine) = await _signedIn();
+      // One at a time: each re-reads the model list before it is turned
+      // away, and a newer message ends the one before it, as with any ask.
       state.sendMessage('Make a video of Miami');
+      await _settle();
       state.sendMessage('Compose a jingle for the ad');
       await _settle();
       expect(engine.sent, isEmpty);

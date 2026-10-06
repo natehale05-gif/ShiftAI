@@ -11,11 +11,16 @@ import '../../util/haptics.dart';
 import '../../util/model_router.dart';
 import '../../util/picked_file.dart';
 import '../../widgets/common.dart';
+import '../../widgets/made_preview.dart';
 import '../../widgets/markdown_text.dart';
 import '../../widgets/spinner.dart';
 import '../vault/eco_feed.dart' show sharePiece;
 import 'failure_card.dart';
 import '../../widgets/alert.dart';
+
+// The chat's picture, where the tests and other screens have always found
+// it.
+export '../../widgets/made_preview.dart' show MadePreview;
 
 /// Create: one question, one composer. The thread only appears once you
 /// have asked for something.
@@ -821,15 +826,14 @@ class ArtifactCard extends StatelessWidget {
     // answer, or from its vault row once that is read in. It used to be a
     // file name beside an icon, so "generate an image of a pink flower"
     // came back looking like nothing had been made.
-    final VaultItem? row = state.vault
-        .where((VaultItem v) => v.id == attachment.vaultItemId)
-        .firstOrNull;
-    final String? picture = video
-        ? attachment.thumbnailUrl ?? row?.thumbnailUrl
-        : attachment.url ??
-            row?.mediaUrl ??
-            attachment.thumbnailUrl ??
-            row?.thumbnailUrl;
+    // Every link it has, best first: the full picture, then the
+    // thumbnail the vault itself draws, so one that will not load is not
+    // the end of it.
+    final VaultItem? row = state.vaultRowOf(attachment);
+    final List<String> pictures = <String>{
+      if (!video) ...<String?>[attachment.url, row?.mediaUrl].nonNulls,
+      ...<String?>[attachment.thumbnailUrl, row?.thumbnailUrl].nonNulls,
+    }.toList();
 
     final Widget thumb = Container(
       width: 44,
@@ -916,13 +920,67 @@ class ArtifactCard extends StatelessWidget {
       ),
     );
 
-    if (picture == null) return card;
+    if (pictures.isEmpty) {
+      final String? id = replyId;
+      if (id == null) return card;
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          card,
+          if (state.lookingInVault(id))
+            Padding(
+              padding: const EdgeInsets.only(top: Space.x2),
+              child: Row(
+                children: <Widget>[
+                  ShiftSpinner(size: 14, color: c.textMuted),
+                  const SizedBox(width: Space.x2),
+                  Expanded(
+                    child: Text(
+                      'Getting the picture from your vault…',
+                      style: ShiftType.caption(c.textMuted),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else if (state.notInVault(id))
+            // Said, with what was looked for, so a screenshot shows which
+            // half is missing: the link on the answer or the vault row.
+            Padding(
+              padding: const EdgeInsets.only(top: Space.x2),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(
+                    'No picture came with this answer, and it is not in '
+                    'your vault yet.',
+                    style: ShiftType.caption(c.textMuted),
+                  ),
+                  Text(
+                    attachment.vaultItemId.isEmpty
+                        ? 'The answer named no vault item.'
+                        : 'Looked for vault item "${attachment.vaultItemId}" '
+                            'among ${state.vault.length}.',
+                    style: ShiftType.caption(c.textMuted),
+                  ),
+                  _MessageAction(
+                    icon: Icons.refresh_rounded,
+                    label: 'Look again',
+                    color: c.textMuted,
+                    onPressed: state.refreshVault,
+                  ),
+                ],
+              ),
+            ),
+        ],
+      );
+    }
     final bool editingThis = replyId != null && state.editingId == replyId;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         MadePreview(
-          url: picture,
+          urls: pictures,
           aspect: row?.aspect ?? 1,
           video: video,
           label: attachment.fileName,
@@ -1008,9 +1066,8 @@ class _EditingChip extends StatelessWidget {
                       height: 28,
                       child: url == null
                           ? Icon(Icons.image_outlined, size: 18, color: c.sky)
-                          : Image.network(
+                          : networkPicture(
                               url,
-                              fit: BoxFit.cover,
                               errorBuilder: (BuildContext context, Object _,
                                       StackTrace? __) =>
                                   Icon(
@@ -1044,85 +1101,6 @@ class _EditingChip extends StatelessWidget {
                     padding: EdgeInsets.zero,
                   ),
                 ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// A made picture (or a video's first frame) shown in the thread at its own
-/// shape, up to a comfortable size. Tapping it opens it in the vault.
-///
-/// A picture that will not load says so, rather than showing drawn art in
-/// its place that could pass for what was made.
-class MadePreview extends StatelessWidget {
-  const MadePreview({
-    required this.url,
-    required this.aspect,
-    required this.video,
-    required this.label,
-    this.onTap,
-    super.key,
-  });
-
-  final String url;
-  final double aspect;
-  final bool video;
-  final String label;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final ShiftColors c = ShiftColors.of(context);
-    return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 520, maxHeight: 520),
-      child: AspectRatio(
-        aspectRatio: aspect.clamp(0.5, 2.0),
-        child: Semantics(
-          image: true,
-          button: onTap != null,
-          label: video ? 'Video: $label' : 'Image: $label',
-          child: GestureDetector(
-            onTap: onTap,
-            child: ClipRRect(
-              borderRadius: Radii.lgAll,
-              child: ColoredBox(
-                color: c.surface,
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: <Widget>[
-                    Image.network(
-                      url,
-                      fit: BoxFit.cover,
-                      gaplessPlayback: true,
-                      filterQuality: FilterQuality.medium,
-                      loadingBuilder: (BuildContext context, Widget child,
-                              ImageChunkEvent? progress) =>
-                          progress == null
-                              ? child
-                              : Center(
-                                  child: ShiftSpinner(color: c.textMuted),
-                                ),
-                      errorBuilder:
-                          (BuildContext context, Object _, StackTrace? __) =>
-                              Center(
-                        child: Padding(
-                          padding: const EdgeInsets.all(Space.x4),
-                          child: Text(
-                            'The picture did not load. It is saved in your '
-                            'vault.',
-                            textAlign: TextAlign.center,
-                            style: ShiftType.bodySm(c.textMuted),
-                          ),
-                        ),
-                      ),
-                    ),
-                    if (video) const Center(child: PlayDisc(size: 56)),
-                  ],
-                ),
               ),
             ),
           ),

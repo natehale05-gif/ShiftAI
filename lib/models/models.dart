@@ -840,20 +840,31 @@ class ChatModel {
     final String name = (json['name'] as String?)?.trim().isNotEmpty ?? false
         ? json['name'] as String
         : id;
-    final Object? raw =
+    // `bestFor` is the contract. A single word is read as a list of one.
+    final Object? given =
         json['bestFor'] ?? json['best_for'] ?? json['capabilities'];
-    final Set<TaskKind> said = raw is List
-        ? raw
+    final List<Object?>? raw = switch (given) {
+      final List<Object?> list => list,
+      final String one when one.trim().isNotEmpty => <Object?>[one],
+      _ => null,
+    };
+    final Set<TaskKind> said = raw == null
+        ? <TaskKind>{}
+        : raw
             .map((Object? k) => TaskKind.parse(k is String ? k : null))
             .whereType<TaskKind>()
-            .toSet()
-        : <TaskKind>{};
+            .toSet();
     return ChatModel(
       id: id,
       name: name,
       provider: json['provider'] as String? ?? '',
       isDefault: json['default'] == true,
-      bestFor: raw is List ? said : TaskKind.guessFor('$id $name'),
+      // An empty list is a general model, as said. A list of words none of
+      // which this build knows ("chat", "generation") is not a reason to
+      // ignore a name that says "Image": the name is read instead.
+      bestFor: raw != null && (raw.isEmpty || said.isNotEmpty)
+          ? said
+          : TaskKind.guessFor('$id $name'),
     );
   }
 }
@@ -872,13 +883,22 @@ enum TaskKind {
     for (final TaskKind t in values) {
       if (t.name == k) return t;
     }
-    return switch (k) {
-      'images' || 'picture' || 'art' => image,
+    final TaskKind? word = switch (k) {
+      'images' || 'picture' || 'art' || 'img' || 't2i' => image,
       'music' || 'voice' || 'sound' || 'speech' => audio,
       'search' || 'web' => research,
       'text' || 'copy' => writing,
       _ => null,
     };
+    if (word != null) return word;
+    // "text-to-image", "image_generation", "video-gen": what the model
+    // makes, in the words a provider's catalogue uses.
+    if (k.contains('image') || k.contains('picture')) return image;
+    if (k.contains('video')) return video;
+    if (k.contains('audio') || k.contains('music') || k.contains('speech')) {
+      return audio;
+    }
+    return null;
   }
 
   /// A model's specialities from its id and name, for a server that does
@@ -1275,22 +1295,68 @@ class MessageAttachment {
 
   static MessageAttachment? tryParse(Object? raw) {
     if (raw is! Map<String, dynamic>) return null;
-    final Object? name = raw['fileName'];
-    if (name is! String) return null;
-    String? link(String key) {
-      final Object? v = raw[key];
-      return v is String && v.isNotEmpty ? v : null;
+    String? text(List<String> keys) {
+      for (final String key in keys) {
+        final Object? v = raw[key];
+        if (v is String && v.trim().isNotEmpty) return v.trim();
+      }
+      return null;
     }
 
+    // `url` is the contract. The others are what image APIs and
+    // storage SDKs call it; an engine passing one on as it came had its
+    // picture dropped, and the chat showed a file name with nothing to
+    // look at.
+    final String? url = text(const <String>[
+      'url',
+      'mediaUrl',
+      'imageUrl',
+      'image_url',
+      'fileUrl',
+      'file_url',
+      'downloadUrl',
+      'download_url',
+      'src',
+      'href',
+    ]);
+    final String? name = text(const <String>['fileName', 'filename', 'name']) ??
+        (url == null ? null : _nameIn(url));
+    if (name == null) return null;
     return MessageAttachment(
       fileName: name,
       meta: raw['meta'] as String? ?? '',
       kind: raw['kind'] == 'video' ? MediaKind.video : MediaKind.image,
-      vaultItemId: raw['vaultItemId'] as String? ?? '',
-      url: link('url') ?? link('mediaUrl'),
-      thumbnailUrl: link('thumbnailUrl'),
+      vaultItemId: text(const <String>['vaultItemId', 'vaultId']) ?? '',
+      url: url,
+      thumbnailUrl: text(const <String>[
+        'thumbnailUrl',
+        'thumbnail_url',
+        'thumbUrl',
+        'previewUrl',
+      ]),
     );
   }
+
+  /// The last part of a link's path, as a file name: "flower.png".
+  static String? _nameIn(String url) {
+    if (url.startsWith('data:')) return 'image';
+    final List<String> parts = Uri.tryParse(url)?.pathSegments ?? <String>[];
+    final String last =
+        parts.where((String p) => p.isNotEmpty).lastOrNull ?? '';
+    return last.isEmpty ? null : last;
+  }
+
+  /// The same file with [url] and [thumbnailUrl] made whole by [resolve]:
+  /// an engine answering "/media/flower.png" means its own host.
+  MessageAttachment withLinks(String? Function(String? link) resolve) =>
+      MessageAttachment(
+        fileName: fileName,
+        meta: meta,
+        kind: kind,
+        vaultItemId: vaultItemId,
+        url: resolve(url),
+        thumbnailUrl: resolve(thumbnailUrl),
+      );
 }
 
 /// The shape of the plan-check failure. A 503 here is

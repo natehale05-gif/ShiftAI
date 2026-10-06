@@ -176,6 +176,9 @@ class AppState extends ChangeNotifier {
   /// Puts what the engine answered on screen, over whatever was there.
   void _applySnapshot(ShiftSnapshot snap) {
     _snap = snap;
+    // A list read on its own stands until a load brings one: a load whose
+    // /v1/models failed reads as no models, which is not news.
+    if (snap.models.isNotEmpty) _models = null;
     standings = List<StandingRow>.of(_snap.standings);
     ecoVault = List<VaultItem>.of(_snap.ecoVault);
     trophies = List<Trophy>.of(_snap.trophies);
@@ -589,7 +592,24 @@ class AppState extends ChangeNotifier {
   SuiteBoards? get boards => _snap.boards;
 
   /// The AIs the server has connected, in the order it lists them.
-  List<ChatModel> get chatModels => _snap.models;
+  List<ChatModel> get chatModels => _models ?? _snap.models;
+
+  /// The list as last read on its own ([refreshModels]), over the load's.
+  List<ChatModel>? _models;
+
+  /// Reads the model list again, on its own. Null when it was read;
+  /// otherwise why it was not.
+  Future<ShiftApiException?> refreshModels() async {
+    final int signOuts = _signOuts;
+    try {
+      final List<ChatModel> next = await _repo.listModels(fresh: true);
+      if (signOuts == _signOuts) _models = next;
+      return null;
+    } on ShiftApiException catch (error) {
+      debugPrint('models: not read — ${error.message}');
+      return error;
+    }
+  }
 
   /// The model picked by hand, or null for Best fit. Anything else stored
   /// here by an older build ("*every", "*auto") matches no model and so
@@ -707,12 +727,12 @@ class AppState extends ChangeNotifier {
   /// the link to it. Null for a reply that made nothing.
   SentFile? madeFileOf(ChatMessage m) {
     final MessageAttachment? a = m.attachment;
-    if (a == null || a.vaultItemId.isEmpty) return null;
-    final VaultItem? row =
-        vault.where((VaultItem v) => v.id == a.vaultItemId).firstOrNull;
+    if (a == null) return null;
+    final VaultItem? row = vaultRowOf(a);
+    if (row == null && a.vaultItemId.isEmpty && a.url == null) return null;
     final bool video = a.kind == MediaKind.video;
     return SentFile.made(
-      vaultItemId: a.vaultItemId,
+      vaultItemId: row?.id ?? a.vaultItemId,
       name: a.fileName,
       mimeType: video ? 'video/mp4' : 'image/png',
       url: a.url ?? row?.mediaUrl ?? a.thumbnailUrl ?? row?.thumbnailUrl,
@@ -1438,6 +1458,9 @@ class AppState extends ChangeNotifier {
     _signOuts++;
     _dropReply();
     editingId = null;
+    _models = null;
+    _lookingFor.clear();
+    _notFound.clear();
     await _auth.signOut();
     signedIn = false;
     selectedVaultId = null;
@@ -1582,6 +1605,8 @@ class AppState extends ChangeNotifier {
       stamp: stamp,
       history: history,
       route: route,
+      reroute: () =>
+          target != null ? _editRoute(target) : routeFor(body, reply: reply),
       question: 'you-$stamp',
       toUpload: files,
     );
@@ -1626,6 +1651,14 @@ class AppState extends ChangeNotifier {
       stamp: DateTime.now().microsecondsSinceEpoch.toString(),
       history: history,
       route: route,
+      reroute: () => ModelRouter.route(
+        chatModels,
+        question.body,
+        picked: using ??
+            chatModels.where((ChatModel m) => m.id == answeredBy).firstOrNull ??
+            chatModel,
+        lastModelId: answeredBy,
+      ),
       question: question.id,
     );
     return true;
@@ -1716,6 +1749,7 @@ class AppState extends ChangeNotifier {
     required String stamp,
     required List<ChatTurn> history,
     required ModelRoute route,
+    ModelRoute Function()? reroute,
     String? question,
     List<PickedFile> toUpload = const <PickedFile>[],
   }) {
@@ -1729,25 +1763,37 @@ class AppState extends ChangeNotifier {
     // one: nothing is sent. A chat model would only have written about
     // the picture it cannot draw, and charged for it.
     final TaskKind? missing = route.missing;
-    if (missing != null) {
-      _dropUploading();
-      messages = <ChatMessage>[
-        ...messages,
-        ChatMessage(
-          id: 'unmet-$stamp',
-          author: MessageAuthor.shift,
-          body: '',
-          failure: FailureInfo(
-            sentence: 'No ${_madeName(missing)} model is connected yet.',
-            reassurance: 'Nothing was sent, and nothing was charged.',
-            details: 'The Suite only hands ${_madeName(missing)} requests to '
-                'a model that makes ${_madeName(missing)}, never to a chat '
-                'model. Once one is connected, ask again.',
-            offersAccount: false,
-          ),
-        ),
-      ];
+    if (missing != null && reroute != null) {
+      // The list on screen may be the wrong one to turn this away on: the
+      // app opens before the load lands (3 s), and a /v1/models that
+      // failed reads as no models. "generate an image of a pink flower"
+      // was refused that way while the server had SHIFT Image connected.
+      // The list is read again first, and only that one is believed.
+      final int asked = _round;
+      thinking = true;
       _changed();
+      unawaited(() async {
+        final ShiftApiException? unread = await refreshModels();
+        if (asked != _round) return;
+        final ModelRoute again = reroute();
+        if (again.missing == null) {
+          _ask(
+            prompt,
+            stamp: stamp,
+            history: history,
+            route: again,
+            question: question,
+            toUpload: toUpload,
+          );
+          return;
+        }
+        thinking = false;
+        _refuse(again.missing!, stamp: stamp, unread: unread);
+      }());
+      return;
+    }
+    if (missing != null) {
+      _refuse(missing, stamp: stamp);
       return;
     }
     final ChatModel? answerer = route.model;
@@ -1883,6 +1929,47 @@ class AppState extends ChangeNotifier {
 
   int _round = 0;
 
+  /// Nothing was sent: nothing connected makes [missing]. Says which
+  /// models the server listed, or why the list could not be read, so a
+  /// screenshot shows which it was.
+  void _refuse(TaskKind missing,
+      {required String stamp, ShiftApiException? unread}) {
+    _dropUploading();
+    final String kind = _madeName(missing);
+    final String listed = chatModels.isEmpty
+        ? 'The server lists no models at all.'
+        : 'The server lists ${chatModels.map((ChatModel m) => m.name).join(', ')}, '
+            'and none of them says it makes $kind.';
+    messages = <ChatMessage>[
+      ...messages,
+      ChatMessage(
+        id: 'unmet-$stamp',
+        author: MessageAuthor.shift,
+        body: '',
+        failure: unread != null
+            ? FailureInfo(
+                sentence: 'The list of models did not load.',
+                reassurance: 'Nothing was sent, and nothing was charged. '
+                    'Ask again in a moment.',
+                details: 'Without it the Suite cannot tell which model makes '
+                    '$kind, and it never hands $kind requests to a chat '
+                    'model. ${unread.status == null ? '' : '${unread.status} · '}'
+                    '${unread.message}',
+                offersAccount: false,
+              )
+            : FailureInfo(
+                sentence: 'No $kind model is connected yet.',
+                reassurance: 'Nothing was sent, and nothing was charged.',
+                details: 'The Suite only hands $kind requests to a model that '
+                    'makes $kind, never to a chat model. $listed Once one is '
+                    'connected, ask again.',
+                offersAccount: false,
+              ),
+      ),
+    ];
+    _changed();
+  }
+
   static String _madeName(TaskKind kind) => switch (kind) {
         TaskKind.image => 'image',
         TaskKind.video => 'video',
@@ -1950,9 +2037,7 @@ class AppState extends ChangeNotifier {
       // The file it made is in the vault on the server, not the one on
       // screen, which was read before it existed: "Open in Vault" opened
       // a vault without it until the next refresh.
-      if (answer.any((ChatMessage m) => _notInVault(m.attachment))) {
-        unawaited(refreshVault());
-      }
+      unawaited(_findInVault(answer));
       _changed();
       return answer;
     } on ShiftApiException catch (error) {
@@ -1982,10 +2067,98 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  bool _notInVault(MessageAttachment? file) =>
-      file != null &&
-      file.vaultItemId.isNotEmpty &&
-      !vault.any((VaultItem v) => v.id == file.vaultItemId);
+  /// The vault row a made file is in: by its id, or, when the answer and
+  /// the vault name it differently, by its file name in the row's link or
+  /// title. Null until the row has been read in.
+  VaultItem? vaultRowOf(MessageAttachment file) {
+    if (file.vaultItemId.isNotEmpty) {
+      final VaultItem? byId =
+          vault.where((VaultItem v) => v.id == file.vaultItemId).firstOrNull;
+      if (byId != null) return byId;
+    }
+    final String name = file.fileName.trim().toLowerCase();
+    final int dot = name.lastIndexOf('.');
+    final String stem = dot > 0 ? name.substring(0, dot) : name;
+    // "image.png" names half the vault; only a name with something
+    // particular in it is matched.
+    if (stem.length < 8) return null;
+    bool names(String? link) {
+      if (link == null) return false;
+      final String l = link.toLowerCase();
+      return l.contains(name) || (dot > 0 && l.contains('$stem.'));
+    }
+
+    return vault.where((VaultItem v) {
+      final String title = v.title.trim().toLowerCase();
+      return title == name ||
+          title == stem ||
+          v.id.toLowerCase() == stem ||
+          names(v.mediaUrl) ||
+          names(v.thumbnailUrl);
+    }).firstOrNull;
+  }
+
+  /// How long the vault is re-read for a made file that is not in it yet,
+  /// between reads. The engine can save the row a moment after it answers.
+  /// Shortened by tests.
+  @visibleForTesting
+  static List<Duration> vaultWaits = const <Duration>[
+    Duration(seconds: 3),
+    Duration(seconds: 6),
+    Duration(seconds: 12),
+    Duration(seconds: 24),
+  ];
+
+  final Set<String> _lookingFor = <String>{};
+  final Set<String> _notFound = <String>{};
+
+  /// The reply's made file is being looked for in the vault.
+  bool lookingInVault(String replyId) => _lookingFor.contains(replyId);
+
+  /// The vault was read [vaultWaits] times over and the reply's file was
+  /// in none of them.
+  bool notInVault(String replyId) => _notFound.contains(replyId);
+
+  /// The file it made is in the vault on the server, not the one on
+  /// screen, which was read before it existed: "Open in Vault" opened a
+  /// vault without it, and the chat had no picture to draw. The vault was
+  /// read once, straight after the answer; an engine that saved the row a
+  /// moment later left the chat with a file name and nothing to look at.
+  /// It is read again, further apart, until the row is there.
+  Future<void> _findInVault(List<ChatMessage> answer) async {
+    final List<ChatMessage> missing = answer
+        .where((ChatMessage m) =>
+            m.attachment != null && vaultRowOf(m.attachment!) == null)
+        .toList();
+    if (missing.isEmpty) return;
+    final int signOuts = _signOuts;
+    // A private ask is kept nowhere, the vault included: one read, in
+    // case the engine keeps it anyway, and no waiting for a row.
+    final List<Duration> waits =
+        privateChat ? const <Duration>[] : vaultWaits;
+    for (final ChatMessage m in missing) {
+      _lookingFor.add(m.id);
+      _notFound.remove(m.id);
+    }
+    for (int i = 0; i <= waits.length && missing.isNotEmpty; i++) {
+      if (i > 0) await Future<void>.delayed(waits[i - 1]);
+      if (signOuts != _signOuts) return;
+      await refreshVault();
+      if (signOuts != _signOuts) return;
+      missing.removeWhere((ChatMessage m) {
+        final bool found = vaultRowOf(m.attachment!) != null;
+        if (found) _lookingFor.remove(m.id);
+        return found;
+      });
+    }
+    for (final ChatMessage m in missing) {
+      _lookingFor.remove(m.id);
+      _notFound.add(m.id);
+      debugPrint('vault: ${m.attachment!.fileName} '
+          '(id "${m.attachment!.vaultItemId}") not in ${vault.length} rows');
+    }
+    _changed();
+  }
 
   /// Re-reads the vault on its own. A failure leaves what is on screen:
   /// the file is still in the thread, and the next refresh brings it.
