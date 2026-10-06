@@ -443,6 +443,9 @@ class MediaArt extends StatelessWidget {
           fit: fit,
           gaplessPlayback: true,
           filterQuality: FilterQuality.medium,
+          // A file on another host with no CORS header is shown as an
+          // <img> on the web instead of not at all.
+          webHtmlElementStrategy: WebHtmlElementStrategy.fallback,
           frameBuilder: (BuildContext context, Widget child, int? frame,
                   bool synchronous) =>
               synchronous

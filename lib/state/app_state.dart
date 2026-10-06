@@ -707,12 +707,12 @@ class AppState extends ChangeNotifier {
   /// the link to it. Null for a reply that made nothing.
   SentFile? madeFileOf(ChatMessage m) {
     final MessageAttachment? a = m.attachment;
-    if (a == null || a.vaultItemId.isEmpty) return null;
-    final VaultItem? row =
-        vault.where((VaultItem v) => v.id == a.vaultItemId).firstOrNull;
+    if (a == null) return null;
+    final VaultItem? row = vaultRowOf(a);
+    if (row == null && a.vaultItemId.isEmpty && a.url == null) return null;
     final bool video = a.kind == MediaKind.video;
     return SentFile.made(
-      vaultItemId: a.vaultItemId,
+      vaultItemId: row?.id ?? a.vaultItemId,
       name: a.fileName,
       mimeType: video ? 'video/mp4' : 'image/png',
       url: a.url ?? row?.mediaUrl ?? a.thumbnailUrl ?? row?.thumbnailUrl,
@@ -1438,6 +1438,8 @@ class AppState extends ChangeNotifier {
     _signOuts++;
     _dropReply();
     editingId = null;
+    _lookingFor.clear();
+    _notFound.clear();
     await _auth.signOut();
     signedIn = false;
     selectedVaultId = null;
@@ -1950,9 +1952,7 @@ class AppState extends ChangeNotifier {
       // The file it made is in the vault on the server, not the one on
       // screen, which was read before it existed: "Open in Vault" opened
       // a vault without it until the next refresh.
-      if (answer.any((ChatMessage m) => _notInVault(m.attachment))) {
-        unawaited(refreshVault());
-      }
+      unawaited(_findInVault(answer));
       _changed();
       return answer;
     } on ShiftApiException catch (error) {
@@ -1982,10 +1982,98 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  bool _notInVault(MessageAttachment? file) =>
-      file != null &&
-      file.vaultItemId.isNotEmpty &&
-      !vault.any((VaultItem v) => v.id == file.vaultItemId);
+  /// The vault row a made file is in: by its id, or, when the answer and
+  /// the vault name it differently, by its file name in the row's link or
+  /// title. Null until the row has been read in.
+  VaultItem? vaultRowOf(MessageAttachment file) {
+    if (file.vaultItemId.isNotEmpty) {
+      final VaultItem? byId =
+          vault.where((VaultItem v) => v.id == file.vaultItemId).firstOrNull;
+      if (byId != null) return byId;
+    }
+    final String name = file.fileName.trim().toLowerCase();
+    final int dot = name.lastIndexOf('.');
+    final String stem = dot > 0 ? name.substring(0, dot) : name;
+    // "image.png" names half the vault; only a name with something
+    // particular in it is matched.
+    if (stem.length < 8) return null;
+    bool names(String? link) {
+      if (link == null) return false;
+      final String l = link.toLowerCase();
+      return l.contains(name) || (dot > 0 && l.contains('$stem.'));
+    }
+
+    return vault.where((VaultItem v) {
+      final String title = v.title.trim().toLowerCase();
+      return title == name ||
+          title == stem ||
+          v.id.toLowerCase() == stem ||
+          names(v.mediaUrl) ||
+          names(v.thumbnailUrl);
+    }).firstOrNull;
+  }
+
+  /// How long the vault is re-read for a made file that is not in it yet,
+  /// between reads. The engine can save the row a moment after it answers.
+  /// Shortened by tests.
+  @visibleForTesting
+  static List<Duration> vaultWaits = const <Duration>[
+    Duration(seconds: 3),
+    Duration(seconds: 6),
+    Duration(seconds: 12),
+    Duration(seconds: 24),
+  ];
+
+  final Set<String> _lookingFor = <String>{};
+  final Set<String> _notFound = <String>{};
+
+  /// The reply's made file is being looked for in the vault.
+  bool lookingInVault(String replyId) => _lookingFor.contains(replyId);
+
+  /// The vault was read [vaultWaits] times over and the reply's file was
+  /// in none of them.
+  bool notInVault(String replyId) => _notFound.contains(replyId);
+
+  /// The file it made is in the vault on the server, not the one on
+  /// screen, which was read before it existed: "Open in Vault" opened a
+  /// vault without it, and the chat had no picture to draw. The vault was
+  /// read once, straight after the answer; an engine that saved the row a
+  /// moment later left the chat with a file name and nothing to look at.
+  /// It is read again, further apart, until the row is there.
+  Future<void> _findInVault(List<ChatMessage> answer) async {
+    final List<ChatMessage> missing = answer
+        .where((ChatMessage m) =>
+            m.attachment != null && vaultRowOf(m.attachment!) == null)
+        .toList();
+    if (missing.isEmpty) return;
+    final int signOuts = _signOuts;
+    // A private ask is kept nowhere, the vault included: one read, in
+    // case the engine keeps it anyway, and no waiting for a row.
+    final List<Duration> waits =
+        privateChat ? const <Duration>[] : vaultWaits;
+    for (final ChatMessage m in missing) {
+      _lookingFor.add(m.id);
+      _notFound.remove(m.id);
+    }
+    for (int i = 0; i <= waits.length && missing.isNotEmpty; i++) {
+      if (i > 0) await Future<void>.delayed(waits[i - 1]);
+      if (signOuts != _signOuts) return;
+      await refreshVault();
+      if (signOuts != _signOuts) return;
+      missing.removeWhere((ChatMessage m) {
+        final bool found = vaultRowOf(m.attachment!) != null;
+        if (found) _lookingFor.remove(m.id);
+        return found;
+      });
+    }
+    for (final ChatMessage m in missing) {
+      _lookingFor.remove(m.id);
+      _notFound.add(m.id);
+      debugPrint('vault: ${m.attachment!.fileName} '
+          '(id "${m.attachment!.vaultItemId}") not in ${vault.length} rows');
+    }
+    _changed();
+  }
 
   /// Re-reads the vault on its own. A failure leaves what is on screen:
   /// the file is still in the thread, and the next refresh brings it.
