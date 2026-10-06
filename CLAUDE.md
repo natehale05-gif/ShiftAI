@@ -145,7 +145,16 @@ changing username, and deleting the account.
 `python3 tool/mock_engine.py` serves that whole contract with everything
 empty, on 127.0.0.1:8111. Point the app at it to see exactly what a brand
 new account sees. It is also the fastest way to check a real server: any
-screen that differs is a place the shapes diverge.
+screen that differs is a place the shapes diverge. "mock:late",
+"mock:lost", "mock:broken", "mock:relative", "mock:renamed",
+"mock:markdown" or "mock:nocors" in an image prompt replays one of the
+ways a real engine has handed back a picture the chat could not show.
+
+A made picture in the chat tries every link it has (the answer's `url`,
+the vault row's `mediaUrl`, then the thumbnails the vault itself draws)
+and re-reads the vault for up to 45 s for a row saved after the answer.
+When it still has nothing, it says what it looked for. That line is the
+first thing to ask for in a screenshot.
 
 Avatars run on `/v1/avatars` (list, create with `consent: true`, make
 personal, delete), and Rex's preview still answers that route empty. The
@@ -191,6 +200,6 @@ exploratory, branch.
 flutter analyze && flutter test
 ```
 
-365 tests. They have caught every regression listed above at least once,
+374 tests. They have caught every regression listed above at least once,
 including several of mine. If one fails, read it before changing it —
 twice now the test was right and my expectation was wrong.

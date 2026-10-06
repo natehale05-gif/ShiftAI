@@ -8,6 +8,7 @@ gets.
 import json
 import os
 import re
+import threading
 import time
 from email.parser import BytesParser
 from email.policy import HTTP
@@ -252,9 +253,8 @@ def make(body, model, history):
     row["thumbnailUrl"] = still
     if kind == "image":
         row["mediaUrl"] = still
-    VAULT.insert(0, row)
     name = "png" if kind == "image" else "mp4"
-    return {
+    answer = {
         "id": f"m{len(history) + 1}", "author": "shift", "model": model,
         "modelName": MODELS_BY_ID[model],
         "eyebrow": f"ShiftAi · {kind.title()}",
@@ -267,6 +267,55 @@ def make(body, model, history):
             "vaultItemId": row["id"],
         },
     }
+    misbehave(made_case(prompt), n, row, answer)
+    return answer
+
+
+# The ways a real engine has handed back a made picture that the chat
+# could not show. Put "mock:<case>" in the prompt ("generate an image of a
+# flower mock:late"), or set MOCK_MADE=<case> for every one:
+#
+#   late      the vault row is saved 8 s after the answer, which has no link
+#   lost      the vault row is never saved, and the answer has no link
+#   broken    the full-size links 404; only the thumbnail loads
+#   relative  every link is relative to the engine ("/v1/mock/media/...")
+#   renamed   the answer's vaultItemId is a job id; the row is found by name
+#   markdown  no attachment: the picture is a Markdown image in the words
+#   nocors    the full-size file is sent with no Access-Control-Allow-Origin
+MADE_CASES = ("late", "lost", "broken", "relative", "renamed", "markdown", "nocors")
+
+
+def made_case(prompt):
+    named = next((c for c in MADE_CASES if f"mock:{c}" in prompt), None)
+    return named or os.environ.get("MOCK_MADE", "")
+
+
+def misbehave(case, n, row, answer):
+    still = row["thumbnailUrl"]
+    if case == "late":
+        threading.Timer(8, lambda: VAULT.insert(0, row)).start()
+        return
+    if case == "lost":
+        return
+    if case == "broken":
+        row["mediaUrl"] = f"{BASE}/v1/mock/media/gone-{n}"
+        answer["attachment"]["url"] = row["mediaUrl"]
+    elif case == "relative":
+        local = f"/v1/mock/media/made-{n}"
+        row["mediaUrl"] = row["thumbnailUrl"] = local
+        answer["attachment"]["url"] = local
+    elif case == "renamed":
+        name = f"image-{n:08x}.png"
+        UPLOADS[name] = UPLOADS[f"made-{n}"]
+        row["mediaUrl"] = row["thumbnailUrl"] = f"{BASE}/v1/mock/media/{name}"
+        answer["attachment"].update(fileName=name, vaultItemId=f"job-{n}")
+    elif case == "markdown":
+        del answer["attachment"]
+        answer["body"] += f"\n\n![{row['title']}]({still})"
+    elif case == "nocors":
+        UPLOADS[f"nocors-{n}"] = UPLOADS[f"made-{n}"]
+        answer["attachment"]["url"] = f"{BASE}/v1/mock/media/nocors-{n}"
+    VAULT.insert(0, row)
 
 
 MARKDOWN_REPLY = """### Shot list
@@ -406,7 +455,8 @@ class Handler(BaseHTTPRequestHandler):
             data, kind = stored
             self.send_response(200)
             self.send_header("Content-Type", kind)
-            self.send_header("Access-Control-Allow-Origin", "*")
+            if not path.rsplit("/", 1)[-1].startswith("nocors-"):
+                self.send_header("Access-Control-Allow-Origin", "*")
             self.send_header("Content-Length", str(len(data)))
             self.end_headers()
             self.wfile.write(data)
