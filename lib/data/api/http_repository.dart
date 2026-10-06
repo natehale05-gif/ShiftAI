@@ -93,13 +93,28 @@ class HttpRepository implements ShiftRepository {
   /// engine without the route answers with whichever model it chooses.
   Future<List<ChatModel>> _chatModels() async {
     try {
-      return Decode.rows(await _api.get(_models), 'models')
-          .map(ChatModel.fromJson)
-          .toList(growable: false);
+      return await listModels();
     } on ShiftApiException {
       return const <ChatModel>[];
     }
   }
+
+  @override
+  Future<List<ChatModel>> listModels({bool fresh = false}) async =>
+      Decode.rows(
+        await _api.get(
+          _models,
+          // A browser holds a second GET for a URL until the first one
+          // answers: the re-read before an image request waited behind the
+          // load's own, slow, /v1/models. Its own URL goes straight out.
+          query: fresh
+              ? <String, String>{
+                  'fresh': '${DateTime.now().millisecondsSinceEpoch}'
+                }
+              : null,
+        ),
+        'models',
+      ).map(ChatModel.fromJson).toList(growable: false);
 
   /// Saved chats, when the engine keeps them. Optional like the boards:
   /// any refusal (a 404 above all) means the device's copy is the one.

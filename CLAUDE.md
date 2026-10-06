@@ -149,6 +149,16 @@ screen that differs is a place the shapes diverge. "mock:late",
 "mock:lost", "mock:broken", "mock:relative", "mock:renamed",
 "mock:markdown" or "mock:nocors" in an image prompt replays one of the
 ways a real engine has handed back a picture the chat could not show.
+`MOCK_MODELS_LATE=20` makes its first `/v1/models` take 20 s, so the app
+opens before it knows which models there are.
+
+An image, video or audio request is never turned away on the model list
+on screen: that list is empty until the load lands (the app opens at
+3 s), and a failed `/v1/models` reads as no models. "generate an image of
+a pink flower" was refused that way on 6 Oct with SHIFT Image connected.
+The list is read again first, under its own URL (a browser holds a second
+GET for a URL behind the first), and the refusal names the models the
+server listed, or why the list did not load.
 
 A made picture in the chat tries every link it has (the answer's `url`,
 the vault row's `mediaUrl`, then the thumbnails the vault itself draws)
@@ -200,6 +210,6 @@ exploratory, branch.
 flutter analyze && flutter test
 ```
 
-374 tests. They have caught every regression listed above at least once,
+379 tests. They have caught every regression listed above at least once,
 including several of mine. If one fails, read it before changing it —
 twice now the test was right and my expectation was wrong.

@@ -36,6 +36,10 @@ SLOW_SECONDS = float(os.environ.get("MOCK_SLOW_SECONDS", "30"))
 # answers with plain JSON instead, the way a server that does not stream
 # does.
 STREAM = os.environ.get("MOCK_STREAM", "1") != "0"
+# MOCK_MODELS_LATE=6: the first GET /v1/models takes that many seconds, so
+# the app opens before it knows which models there are.
+MODELS_LATE = float(os.environ.get("MOCK_MODELS_LATE", "0"))
+_models_late_done = []
 BASE = "http://127.0.0.1:8111"
 
 
@@ -463,6 +467,11 @@ class Handler(BaseHTTPRequestHandler):
             return None
         if path == "/v1/vault":
             return self._send(200, VAULT)
+        if path == "/v1/models" and MODELS_LATE and not _models_late_done:
+            # The first read only: the load runs past the app's first
+            # screen and it opens with no models, as it did on 6 Oct.
+            _models_late_done.append(True)
+            time.sleep(MODELS_LATE)
         if path in EMPTY:
             return self._send(200, EMPTY[path])
         self._send(404, {"message": f"No route {path}."})

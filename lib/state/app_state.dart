@@ -176,6 +176,9 @@ class AppState extends ChangeNotifier {
   /// Puts what the engine answered on screen, over whatever was there.
   void _applySnapshot(ShiftSnapshot snap) {
     _snap = snap;
+    // A list read on its own stands until a load brings one: a load whose
+    // /v1/models failed reads as no models, which is not news.
+    if (snap.models.isNotEmpty) _models = null;
     standings = List<StandingRow>.of(_snap.standings);
     ecoVault = List<VaultItem>.of(_snap.ecoVault);
     trophies = List<Trophy>.of(_snap.trophies);
@@ -589,7 +592,24 @@ class AppState extends ChangeNotifier {
   SuiteBoards? get boards => _snap.boards;
 
   /// The AIs the server has connected, in the order it lists them.
-  List<ChatModel> get chatModels => _snap.models;
+  List<ChatModel> get chatModels => _models ?? _snap.models;
+
+  /// The list as last read on its own ([refreshModels]), over the load's.
+  List<ChatModel>? _models;
+
+  /// Reads the model list again, on its own. Null when it was read;
+  /// otherwise why it was not.
+  Future<ShiftApiException?> refreshModels() async {
+    final int signOuts = _signOuts;
+    try {
+      final List<ChatModel> next = await _repo.listModels(fresh: true);
+      if (signOuts == _signOuts) _models = next;
+      return null;
+    } on ShiftApiException catch (error) {
+      debugPrint('models: not read — ${error.message}');
+      return error;
+    }
+  }
 
   /// The model picked by hand, or null for Best fit. Anything else stored
   /// here by an older build ("*every", "*auto") matches no model and so
@@ -1438,6 +1458,7 @@ class AppState extends ChangeNotifier {
     _signOuts++;
     _dropReply();
     editingId = null;
+    _models = null;
     _lookingFor.clear();
     _notFound.clear();
     await _auth.signOut();
@@ -1584,6 +1605,8 @@ class AppState extends ChangeNotifier {
       stamp: stamp,
       history: history,
       route: route,
+      reroute: () =>
+          target != null ? _editRoute(target) : routeFor(body, reply: reply),
       question: 'you-$stamp',
       toUpload: files,
     );
@@ -1628,6 +1651,14 @@ class AppState extends ChangeNotifier {
       stamp: DateTime.now().microsecondsSinceEpoch.toString(),
       history: history,
       route: route,
+      reroute: () => ModelRouter.route(
+        chatModels,
+        question.body,
+        picked: using ??
+            chatModels.where((ChatModel m) => m.id == answeredBy).firstOrNull ??
+            chatModel,
+        lastModelId: answeredBy,
+      ),
       question: question.id,
     );
     return true;
@@ -1718,6 +1749,7 @@ class AppState extends ChangeNotifier {
     required String stamp,
     required List<ChatTurn> history,
     required ModelRoute route,
+    ModelRoute Function()? reroute,
     String? question,
     List<PickedFile> toUpload = const <PickedFile>[],
   }) {
@@ -1731,25 +1763,37 @@ class AppState extends ChangeNotifier {
     // one: nothing is sent. A chat model would only have written about
     // the picture it cannot draw, and charged for it.
     final TaskKind? missing = route.missing;
-    if (missing != null) {
-      _dropUploading();
-      messages = <ChatMessage>[
-        ...messages,
-        ChatMessage(
-          id: 'unmet-$stamp',
-          author: MessageAuthor.shift,
-          body: '',
-          failure: FailureInfo(
-            sentence: 'No ${_madeName(missing)} model is connected yet.',
-            reassurance: 'Nothing was sent, and nothing was charged.',
-            details: 'The Suite only hands ${_madeName(missing)} requests to '
-                'a model that makes ${_madeName(missing)}, never to a chat '
-                'model. Once one is connected, ask again.',
-            offersAccount: false,
-          ),
-        ),
-      ];
+    if (missing != null && reroute != null) {
+      // The list on screen may be the wrong one to turn this away on: the
+      // app opens before the load lands (3 s), and a /v1/models that
+      // failed reads as no models. "generate an image of a pink flower"
+      // was refused that way while the server had SHIFT Image connected.
+      // The list is read again first, and only that one is believed.
+      final int asked = _round;
+      thinking = true;
       _changed();
+      unawaited(() async {
+        final ShiftApiException? unread = await refreshModels();
+        if (asked != _round) return;
+        final ModelRoute again = reroute();
+        if (again.missing == null) {
+          _ask(
+            prompt,
+            stamp: stamp,
+            history: history,
+            route: again,
+            question: question,
+            toUpload: toUpload,
+          );
+          return;
+        }
+        thinking = false;
+        _refuse(again.missing!, stamp: stamp, unread: unread);
+      }());
+      return;
+    }
+    if (missing != null) {
+      _refuse(missing, stamp: stamp);
       return;
     }
     final ChatModel? answerer = route.model;
@@ -1884,6 +1928,47 @@ class AppState extends ChangeNotifier {
   }
 
   int _round = 0;
+
+  /// Nothing was sent: nothing connected makes [missing]. Says which
+  /// models the server listed, or why the list could not be read, so a
+  /// screenshot shows which it was.
+  void _refuse(TaskKind missing,
+      {required String stamp, ShiftApiException? unread}) {
+    _dropUploading();
+    final String kind = _madeName(missing);
+    final String listed = chatModels.isEmpty
+        ? 'The server lists no models at all.'
+        : 'The server lists ${chatModels.map((ChatModel m) => m.name).join(', ')}, '
+            'and none of them says it makes $kind.';
+    messages = <ChatMessage>[
+      ...messages,
+      ChatMessage(
+        id: 'unmet-$stamp',
+        author: MessageAuthor.shift,
+        body: '',
+        failure: unread != null
+            ? FailureInfo(
+                sentence: 'The list of models did not load.',
+                reassurance: 'Nothing was sent, and nothing was charged. '
+                    'Ask again in a moment.',
+                details: 'Without it the Suite cannot tell which model makes '
+                    '$kind, and it never hands $kind requests to a chat '
+                    'model. ${unread.status == null ? '' : '${unread.status} · '}'
+                    '${unread.message}',
+                offersAccount: false,
+              )
+            : FailureInfo(
+                sentence: 'No $kind model is connected yet.',
+                reassurance: 'Nothing was sent, and nothing was charged.',
+                details: 'The Suite only hands $kind requests to a model that '
+                    'makes $kind, never to a chat model. $listed Once one is '
+                    'connected, ask again.',
+                offersAccount: false,
+              ),
+      ),
+    ];
+    _changed();
+  }
 
   static String _madeName(TaskKind kind) => switch (kind) {
         TaskKind.image => 'image',

@@ -170,6 +170,12 @@ abstract interface class ShiftRepository {
   /// cohort.
   Future<League?> shareLocation({required double lat, required double lng});
 
+  // Models ---------------------------------------------------------------
+  /// The AIs the server has connected (`GET /v1/models`), on their own:
+  /// re-read before an image, video or audio request is turned away for
+  /// want of a model that makes one. Throws when the list cannot be read.
+  Future<List<ChatModel>> listModels({bool fresh = false});
+
   // Vault ----------------------------------------------------------------
   /// This creator's vault, on its own: re-read when an answer brings back
   /// a file the vault on screen does not have yet.
