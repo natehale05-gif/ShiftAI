@@ -490,6 +490,7 @@ class AppState extends ChangeNotifier {
         threads.where((ChatThread t) => t.id == id).firstOrNull;
     if (thread == null) return;
     _dropReply();
+    editingId = null;
     privateChat = false;
     messages = List<ChatMessage>.of(thread.messages);
     currentThreadId = thread.id;
@@ -676,12 +677,12 @@ class AppState extends ChangeNotifier {
   /// and stay out.
   List<ChatTurn> get chatHistory => _historyOf(messages);
 
-  static List<ChatTurn> _historyOf(List<ChatMessage> thread) => <ChatTurn>[
+  List<ChatTurn> _historyOf(List<ChatMessage> thread) => <ChatTurn>[
         for (final ChatMessage m in thread)
           if (m.failure == null) _turnOf(m),
       ];
 
-  static ChatTurn _turnOf(ChatMessage m) => ChatTurn(
+  ChatTurn _turnOf(ChatMessage m) => ChatTurn(
         role: m.author == MessageAuthor.you ? 'user' : 'assistant',
         body: <String>[
           if (m.body.isNotEmpty) m.body,
@@ -694,8 +695,93 @@ class AppState extends ChangeNotifier {
           if (m.attachment != null) '[Attached: ${m.attachment!.fileName}]',
         ].join('\n'),
         model: m.model,
-        files: m.files.where((SentFile f) => !f.uploading).toList(),
+        files: <SentFile>[
+          ...m.files.where((SentFile f) => !f.uploading),
+          // A picture a model made goes back with its turn, so the next
+          // model sees it rather than only its file name, and can edit it.
+          if (madeFileOf(m) case final SentFile made) made,
+        ],
       );
+
+  /// The file a reply made, as something to send back: its vault row and
+  /// the link to it. Null for a reply that made nothing.
+  SentFile? madeFileOf(ChatMessage m) {
+    final MessageAttachment? a = m.attachment;
+    if (a == null || a.vaultItemId.isEmpty) return null;
+    final VaultItem? row =
+        vault.where((VaultItem v) => v.id == a.vaultItemId).firstOrNull;
+    final bool video = a.kind == MediaKind.video;
+    return SentFile.made(
+      vaultItemId: a.vaultItemId,
+      name: a.fileName,
+      mimeType: video ? 'video/mp4' : 'image/png',
+      url: a.url ?? row?.mediaUrl ?? a.thumbnailUrl ?? row?.thumbnailUrl,
+    );
+  }
+
+  /// The made picture the next message edits, chosen with Edit under it.
+  /// Null when nothing is picked; a follow-up that reads like an edit
+  /// ("make the petals purple") still edits the newest one.
+  String? editingId;
+
+  /// The reply [editingId] names, while it is still in the thread.
+  ChatMessage? get editing => editingId == null
+      ? null
+      : messages.where((ChatMessage m) => m.id == editingId).firstOrNull;
+
+  /// Edit under a made picture: the next message changes that picture.
+  void editMade(String replyId) {
+    editingId = replyId;
+    _changed();
+  }
+
+  void stopEditing() {
+    if (editingId == null) return;
+    editingId = null;
+    _changed();
+  }
+
+  /// The made picture [prompt] is about to edit: the one picked with Edit,
+  /// or, when the newest answer made a picture and [prompt] reads like a
+  /// change to it, that one. Null for anything else.
+  ChatMessage? _editTarget(String prompt) {
+    final ChatMessage? picked = editing;
+    if (picked != null) return picked;
+    final ChatMessage? last = messages
+        .where((ChatMessage m) =>
+            m.author != MessageAuthor.you && m.failure == null)
+        .lastOrNull;
+    if (last == null ||
+        last.attachment == null ||
+        last.attachment!.kind != MediaKind.image ||
+        last.attachment!.vaultItemId.isEmpty) {
+      return null;
+    }
+    return ModelRouter.looksLikeEdit(prompt) ? last : null;
+  }
+
+  /// Who edits a picture: the model that made it, or another that makes
+  /// images. A chat model does not.
+  ModelRoute _editRoute(ChatMessage target) {
+    final String? madeBy = target.model;
+    final List<ChatModel> able = chatModels
+        .where((ChatModel m) => m.bestFor.contains(TaskKind.image))
+        .toList();
+    final ChatModel? maker =
+        able.where((ChatModel m) => m.id == madeBy).firstOrNull;
+    if (maker != null) return ModelRoute(maker);
+    if (able.isNotEmpty) return ModelRoute(able.first);
+    // A server that lists no models: the one that made it still knows
+    // its own id.
+    if (chatModels.isEmpty && madeBy != null) {
+      return ModelRoute(ChatModel(
+        id: madeBy,
+        name: target.modelName ?? madeBy,
+        bestFor: const <TaskKind>{TaskKind.image},
+      ));
+    }
+    return const ModelRoute(null, missing: TaskKind.image);
+  }
 
   /// The connector catalogue the engine knows about.
   List<Connector> get connectors => _snap.connectors;
@@ -1351,6 +1437,7 @@ class AppState extends ChangeNotifier {
   Future<void> signOut() async {
     _signOuts++;
     _dropReply();
+    editingId = null;
     await _auth.signOut();
     signedIn = false;
     selectedVaultId = null;
@@ -1463,7 +1550,14 @@ class AppState extends ChangeNotifier {
     // Taken before the new message is added: the history is what came
     // before this prompt, and the prompt travels on its own.
     final List<ChatTurn> history = chatHistory;
-    final ModelRoute route = routeFor(body, reply: reply);
+    // A change to a picture made in this chat goes to a model that makes
+    // pictures, with the picture: "make the petals purple" used to go to
+    // the chat model, which had only the picture's file name.
+    final ChatMessage? target = reply ? null : _editTarget(body);
+    final SentFile? editFile = target == null ? null : madeFileOf(target);
+    final ModelRoute route =
+        target != null ? _editRoute(target) : routeFor(body, reply: reply);
+    editingId = null;
     messages = <ChatMessage>[
       ...messages,
       ChatMessage(
@@ -1471,6 +1565,7 @@ class AppState extends ChangeNotifier {
         author: MessageAuthor.you,
         body: body,
         files: <SentFile>[
+          if (editFile != null) editFile,
           ...keep,
           for (final PickedFile f in files)
             SentFile(
@@ -1925,6 +2020,7 @@ class AppState extends ChangeNotifier {
 
   void clearThread() {
     _dropReply();
+    editingId = null;
     messages = <ChatMessage>[];
     // The chat that was on screen is already saved; this is a new one.
     currentThreadId = null;

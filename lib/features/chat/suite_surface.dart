@@ -13,6 +13,7 @@ import '../../util/picked_file.dart';
 import '../../widgets/common.dart';
 import '../../widgets/markdown_text.dart';
 import '../../widgets/spinner.dart';
+import '../vault/eco_feed.dart' show sharePiece;
 import 'failure_card.dart';
 import '../../widgets/alert.dart';
 
@@ -28,6 +29,11 @@ class SuiteSurface extends StatefulWidget {
 class _SuiteSurfaceState extends State<SuiteSurface> {
   final ScrollController _scroll = ScrollController();
   int _lastCount = 0;
+
+  /// How many pieces the vault held at the last build. A made picture
+  /// shows in the thread once its vault row is read in, after the answer,
+  /// so the thread follows that too.
+  int _lastVault = 0;
 
   /// How long the reply being written out was at the last build.
   int _lastLength = 0;
@@ -76,8 +82,9 @@ class _SuiteSurfaceState extends State<SuiteSurface> {
       });
     }
 
-    if (count != _lastCount) {
+    if (count != _lastCount || state.vault.length != _lastVault) {
       _lastCount = count;
+      _lastVault = state.vault.length;
       WidgetsBinding.instance.addPostFrameCallback((_) => _followTheThread());
     }
 
@@ -120,10 +127,13 @@ class _SuiteSurfaceState extends State<SuiteSurface> {
         // sparkle rewrites what is in it, and both should still work
         // while there is nobody to send to.
         if (state.chatNeedsSignIn) const _SignInToChat(),
+        if (state.editing != null) _EditingChip(target: state.editing!),
         PillComposer(
-          hint: state.privateChat
-              ? 'Private chat — nothing here is saved'
-              : 'Ask anything',
+          hint: state.editing != null
+              ? 'Describe the change'
+              : state.privateChat
+                  ? 'Private chat — nothing here is saved'
+                  : 'Ask anything',
           showSparkle: true,
           showAvatarPicker: true,
           onSend: state.sendMessage,
@@ -524,7 +534,7 @@ class _MessageTile extends StatelessWidget {
         ],
         if (message.attachment != null) ...<Widget>[
           const SizedBox(height: Space.x4),
-          ArtifactCard(attachment: message.attachment!),
+          ArtifactCard(attachment: message.attachment!, replyId: message.id),
         ],
         if (offer != null) ...<Widget>[
           const SizedBox(height: Space.x4),
@@ -785,9 +795,12 @@ class _ChoiceButton extends StatelessWidget {
 /// The artifact card: what a generation produced, with the one action that
 /// matters — open it where it lives.
 class ArtifactCard extends StatelessWidget {
-  const ArtifactCard({required this.attachment, super.key});
+  const ArtifactCard({required this.attachment, this.replyId, super.key});
 
   final MessageAttachment attachment;
+
+  /// The reply it came with, so Edit can name the picture to change.
+  final String? replyId;
 
   @override
   Widget build(BuildContext context) {
@@ -803,6 +816,20 @@ class ArtifactCard extends StatelessWidget {
       state.selectVaultItem(attachment.vaultItemId);
       state.setSurface(Surface.vault);
     }
+
+    // The made thing itself, not only its name: the picture from the
+    // answer, or from its vault row once that is read in. It used to be a
+    // file name beside an icon, so "generate an image of a pink flower"
+    // came back looking like nothing had been made.
+    final VaultItem? row = state.vault
+        .where((VaultItem v) => v.id == attachment.vaultItemId)
+        .firstOrNull;
+    final String? picture = video
+        ? attachment.thumbnailUrl ?? row?.thumbnailUrl
+        : attachment.url ??
+            row?.mediaUrl ??
+            attachment.thumbnailUrl ??
+            row?.thumbnailUrl;
 
     final Widget thumb = Container(
       width: 44,
@@ -839,7 +866,7 @@ class ArtifactCard extends StatelessWidget {
       ],
     );
 
-    return Container(
+    final Widget card = Container(
       padding: const EdgeInsets.all(Space.x3),
       decoration: BoxDecoration(
         color: c.surface,
@@ -886,6 +913,220 @@ class ArtifactCard extends StatelessWidget {
             ],
           );
         },
+      ),
+    );
+
+    if (picture == null) return card;
+    final bool editingThis = replyId != null && state.editingId == replyId;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        MadePreview(
+          url: picture,
+          aspect: row?.aspect ?? 1,
+          video: video,
+          label: attachment.fileName,
+          onTap: canOpen ? open : null,
+        ),
+        const SizedBox(height: Space.x1),
+        // What can be done with it, here in the chat: change it, send it
+        // on, or open it with everything else in the vault.
+        Wrap(
+          children: <Widget>[
+            if (!video && replyId != null && !state.chatNeedsSignIn)
+              _MessageAction(
+                icon: editingThis
+                    ? Icons.check_rounded
+                    : Icons.auto_fix_high_rounded,
+                label: editingThis ? 'Editing image' : 'Edit image',
+                color: editingThis ? c.accent : c.textMuted,
+                onPressed: () => editingThis
+                    ? state.stopEditing()
+                    : state.editMade(replyId!),
+              ),
+            if (row != null)
+              Builder(
+                builder: (BuildContext anchor) => _MessageAction(
+                  icon: Icons.ios_share_rounded,
+                  label: 'Share',
+                  color: c.textMuted,
+                  onPressed: () => sharePiece(anchor, row),
+                ),
+              ),
+            if (canOpen)
+              _MessageAction(
+                icon: Icons.photo_library_outlined,
+                label: 'Open in Vault',
+                color: c.textMuted,
+                onPressed: open,
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+/// Above the bar while a made picture is picked for editing: which one,
+/// and a way out. The next message changes that picture.
+class _EditingChip extends StatelessWidget {
+  const _EditingChip({required this.target});
+
+  final ChatMessage target;
+
+  @override
+  Widget build(BuildContext context) {
+    final AppState state = AppScope.of(context);
+    final ShiftColors c = ShiftColors.of(context);
+    final String? url = state.madeFileOf(target)?.url;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(Space.x5, 0, Space.x5, Space.x2),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 950),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(
+                Space.x2,
+                Space.x1,
+                Space.x1,
+                Space.x1,
+              ),
+              decoration: BoxDecoration(
+                color: c.surface,
+                borderRadius: Radii.pillAll,
+                border: Border.all(color: c.accent),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  ClipRRect(
+                    borderRadius: Radii.smAll,
+                    child: SizedBox(
+                      width: 28,
+                      height: 28,
+                      child: url == null
+                          ? Icon(Icons.image_outlined, size: 18, color: c.sky)
+                          : Image.network(
+                              url,
+                              fit: BoxFit.cover,
+                              errorBuilder: (BuildContext context, Object _,
+                                      StackTrace? __) =>
+                                  Icon(
+                                Icons.image_outlined,
+                                size: 18,
+                                color: c.sky,
+                              ),
+                            ),
+                    ),
+                  ),
+                  const SizedBox(width: Space.x2),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 260),
+                    child: Text(
+                      'Editing ${target.attachment?.fileName ?? 'the picture'}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: ShiftType.bodySm(c.text),
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Stop editing',
+                    onPressed: state.stopEditing,
+                    icon: Icon(
+                      Icons.close_rounded,
+                      size: 16,
+                      color: c.textMuted,
+                    ),
+                    constraints:
+                        const BoxConstraints(minWidth: 36, minHeight: 36),
+                    padding: EdgeInsets.zero,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A made picture (or a video's first frame) shown in the thread at its own
+/// shape, up to a comfortable size. Tapping it opens it in the vault.
+///
+/// A picture that will not load says so, rather than showing drawn art in
+/// its place that could pass for what was made.
+class MadePreview extends StatelessWidget {
+  const MadePreview({
+    required this.url,
+    required this.aspect,
+    required this.video,
+    required this.label,
+    this.onTap,
+    super.key,
+  });
+
+  final String url;
+  final double aspect;
+  final bool video;
+  final String label;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final ShiftColors c = ShiftColors.of(context);
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 520, maxHeight: 520),
+      child: AspectRatio(
+        aspectRatio: aspect.clamp(0.5, 2.0),
+        child: Semantics(
+          image: true,
+          button: onTap != null,
+          label: video ? 'Video: $label' : 'Image: $label',
+          child: GestureDetector(
+            onTap: onTap,
+            child: ClipRRect(
+              borderRadius: Radii.lgAll,
+              child: ColoredBox(
+                color: c.surface,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: <Widget>[
+                    Image.network(
+                      url,
+                      fit: BoxFit.cover,
+                      gaplessPlayback: true,
+                      filterQuality: FilterQuality.medium,
+                      loadingBuilder: (BuildContext context, Widget child,
+                              ImageChunkEvent? progress) =>
+                          progress == null
+                              ? child
+                              : Center(
+                                  child: ShiftSpinner(color: c.textMuted),
+                                ),
+                      errorBuilder:
+                          (BuildContext context, Object _, StackTrace? __) =>
+                              Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(Space.x4),
+                          child: Text(
+                            'The picture did not load. It is saved in your '
+                            'vault.',
+                            textAlign: TextAlign.center,
+                            style: ShiftType.bodySm(c.textMuted),
+                          ),
+                        ),
+                      ),
+                    ),
+                    if (video) const Center(child: PlayDisc(size: 56)),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

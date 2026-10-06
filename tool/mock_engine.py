@@ -181,6 +181,41 @@ def answer(body):
     }]
 
 
+COLOURS = {"purple": (170, 70, 255), "blue": (60, 120, 255),
+           "yellow": (255, 210, 50), "red": (240, 40, 40),
+           "green": (60, 200, 110), "orange": (255, 140, 30)}
+
+
+def picture_png(size=256, colour=(255, 60, 150)):
+    """A made "picture": a pink bloom on a dark ground, as a real PNG.
+
+    Enough to see the chat draw what was made, with no image library.
+    """
+    import struct
+    import zlib
+    rows = []
+    mid = size / 2
+    for y in range(size):
+        row = bytearray(b"\x00")
+        for x in range(size):
+            d = ((x - mid) ** 2 + (y - mid) ** 2) ** 0.5 / mid
+            if d < 0.55:
+                k = 1 - d / 0.55
+                row += bytes(min(255, int(c + (255 - c) * 0.5 * k))
+                             for c in colour)
+            else:
+                row += bytes((20, 12, int(30 + 30 * y / size)))
+        rows.append(bytes(row))
+
+    def chunk(kind, data):
+        return (struct.pack(">I", len(data)) + kind + data +
+                struct.pack(">I", zlib.crc32(kind + data) & 0xffffffff))
+    header = struct.pack(">IIBBBBB", size, size, 8, 2, 0, 0, 0)
+    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", header) +
+            chunk(b"IDAT", zlib.compress(b"".join(rows))) +
+            chunk(b"IEND", b""))
+
+
 def make(body, model, history):
     """What an image or video model answers with: the file, in the vault.
 
@@ -204,13 +239,27 @@ def make(body, model, history):
         **({"durationSeconds": 20, "width": 1080, "height": 1920}
            if kind == "video" else {"width": 1024, "height": 1024}),
     }
+    # The file itself, served from this mock like an upload, so the chat
+    # and the vault have a real picture to draw. A video gets a still.
+    # An edit: a picture sent back with the prompt (a vault reference) is
+    # changed rather than drawn from nothing, in the colour asked for.
+    source = next((f for f in body.get("attachments") or []
+                   if f.get("vaultItemId")), None)
+    colour = next((rgb for word, rgb in COLOURS.items()
+                   if word in prompt.lower()), (255, 60, 150))
+    UPLOADS[f"made-{n}"] = (picture_png(colour=colour), "image/png")
+    still = f"{BASE}/v1/mock/media/made-{n}"
+    row["thumbnailUrl"] = still
+    if kind == "image":
+        row["mediaUrl"] = still
     VAULT.insert(0, row)
     name = "png" if kind == "image" else "mp4"
     return {
         "id": f"m{len(history) + 1}", "author": "shift", "model": model,
         "modelName": MODELS_BY_ID[model],
         "eyebrow": f"ShiftAi · {kind.title()}",
-        "body": f"Made it: {prompt}",
+        "body": (f"Edited {source.get('name')}: {prompt}" if source
+                 else f"Made it: {prompt}"),
         "attachment": {
             "fileName": f"mock-{n}.{name}", "kind": kind,
             "meta": ("1024 × 1024 · 4 CREDITS" if kind == "image"

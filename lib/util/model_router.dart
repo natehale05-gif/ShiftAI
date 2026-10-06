@@ -178,6 +178,53 @@ abstract final class ModelRouter {
     caseSensitive: false,
   );
 
+  /// Words that change a picture: "make the petals purple", "add a bee",
+  /// "brighter", "remove the background".
+  static final RegExp _edit = _words(<String>[
+    'make',
+    'change',
+    'add',
+    'remove',
+    'replace',
+    'turn',
+    'swap',
+    'put',
+    'edit',
+    'fix',
+    'tweak',
+    'adjust',
+    'crop',
+    'zoom',
+    'brighter',
+    'darker',
+    'lighter',
+    'warmer',
+    'cooler',
+    'bigger',
+    'smaller',
+    'more',
+    'less',
+    'without',
+    'instead',
+    'background',
+    'colour',
+    'color',
+    'recolor',
+    'recolour',
+    'style',
+    'try',
+  ]);
+
+  /// Whether [prompt], sent right after a picture was made, asks for that
+  /// picture to change, rather than asking about it ("what flower is
+  /// this?") or for something else ("write a caption for it").
+  static bool looksLikeEdit(String prompt) {
+    if (_question.hasMatch(prompt)) return false;
+    final TaskKind? kind = kindOf(prompt);
+    if (kind != null && kind != TaskKind.image) return false;
+    return _edit.hasMatch(prompt);
+  }
+
   /// What [prompt] asks for, or null for talk no specialist covers.
   ///
   /// A piece of text is writing, whatever it is for. Otherwise a medium

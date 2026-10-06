@@ -96,6 +96,50 @@ data: [{"id":"m4","author":"shift","model":"claude-opus-5-5","modelName":"Claude
 - `404`: the app says "This server cannot delete accounts yet, so nothing
   was deleted", and the person stays signed in.
 
+## 5b. A made image has to come with its file
+
+On 6 October "generate an image of a pink flower" reached SHIFT Image,
+and the answer came back with `image-94be8963.png` (1024 × 1024) as its
+attachment. The chat now draws the picture itself, but it can only draw
+a file it can load:
+
+- Put the file on the attachment as `url` (the full image) and, if you
+  have one, `thumbnailUrl`. **Or** make sure the vault row named by
+  `vaultItemId` is in `GET /v1/vault` by the time you answer, with
+  `mediaUrl` (and `thumbnailUrl`) filled in. The app reads the vault right
+  after the answer for exactly this.
+- The URL has to load **with no Authorization header** (public by an
+  unguessable name, as `docs/API.md` says for vault media).
+- If the web app is ever served from a different origin from the files,
+  send `Access-Control-Allow-Origin` on them; the web app cannot draw a
+  cross-origin image without it.
+
+With none of those, the chat shows the file name and "Open in Vault", and
+nothing to look at, which is what it showed on 6 October.
+
+`python3 tool/check_engine.py ... --image` makes one image through the
+first model with `bestFor: ["image"]` and checks each of these.
+
+## 5c. Editing a picture in the chat
+
+Under each made picture the chat now has **Edit image**, **Share** and
+**Open in Vault**. An edit, whether picked with Edit image or written
+straight after a picture ("make the petals purple"), goes to the model
+that made it, with the picture as an attachment **by vault reference**:
+
+```json
+"attachments": [{ "vaultItemId": "v1", "name": "image-94be8963.png",
+                  "mimeType": "image/png", "url": "https://..." }]
+```
+
+- Look the file up by `vaultItemId` (this account's vault only), or
+  fetch `url`, and give it to the image model as the image to edit
+  (image-to-image / an edit endpoint), with `prompt` as the instruction.
+- Answer like any made image: a new vault row, an attachment naming it.
+- Assistant turns in `history` that made a picture carry it the same
+  way. Pass it to whichever model answers, so a chat model asked "what
+  flower is this?" can see it.
+
 ## 6. Check your work: `tool/check_engine.py`
 
 It is in the ShiftAI repo and uses only the Python standard library. It
@@ -112,5 +156,6 @@ python3 tool/check_engine.py https://app.shiftai.club/app-preview/api \
     --email you@shiftai.club --password '...' --spend
 ```
 
-It never calls `DELETE /v1/me`, which would delete the account it signed
-in with.
+Add `--image` to make one image and check the chat can show it
+(section 5b). It never calls `DELETE /v1/me`, which would delete the
+account it signed in with.
