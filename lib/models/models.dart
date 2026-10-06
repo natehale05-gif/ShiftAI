@@ -960,6 +960,10 @@ class ChatTurn {
 
 /// A file sent with a message: the id `POST /v1/uploads` gave it, and
 /// what it is. An empty [uploadId] is one still on its way up.
+///
+/// Or a piece already in the vault, named by [vaultItemId] with its [url]:
+/// a picture made earlier in the chat, sent back so it can be edited or
+/// looked at. It needs no upload.
 @immutable
 class SentFile {
   const SentFile({
@@ -967,17 +971,34 @@ class SentFile {
     required this.name,
     required this.mimeType,
     this.sizeBytes,
+    this.vaultItemId,
+    this.url,
   });
+
+  /// A made piece from the vault, sent by reference.
+  const SentFile.made({
+    required String this.vaultItemId,
+    required this.name,
+    required this.mimeType,
+    this.url,
+  })  : uploadId = '',
+        sizeBytes = null;
 
   final String uploadId;
   final String name;
   final String mimeType;
   final int? sizeBytes;
+  final String? vaultItemId;
+  final String? url;
 
-  bool get uploading => uploadId.isEmpty;
+  bool get uploading => uploadId.isEmpty && vaultItemId == null;
+
+  bool get isImage => mimeType.toLowerCase().startsWith('image/');
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'uploadId': uploadId,
+        if (uploadId.isNotEmpty) 'uploadId': uploadId,
+        if (vaultItemId != null) 'vaultItemId': vaultItemId,
+        if (url != null) 'url': url,
         'name': name,
         'mimeType': mimeType,
         if (sizeBytes != null) 'sizeBytes': sizeBytes,
@@ -986,13 +1007,19 @@ class SentFile {
   static SentFile? tryParse(Object? raw) {
     if (raw is! Map<String, dynamic>) return null;
     final Object? id = raw['uploadId'];
+    final Object? vault = raw['vaultItemId'];
     final Object? name = raw['name'];
-    if (id is! String || id.isEmpty || name is! String) return null;
+    if (name is! String) return null;
+    final bool uploaded = id is String && id.isNotEmpty;
+    final bool made = vault is String && vault.isNotEmpty;
+    if (!uploaded && !made) return null;
     return SentFile(
-      uploadId: id,
+      uploadId: uploaded ? id : '',
       name: name,
       mimeType: raw['mimeType'] as String? ?? 'application/octet-stream',
       sizeBytes: (raw['sizeBytes'] as num?)?.toInt(),
+      vaultItemId: made ? vault : null,
+      url: raw['url'] is String ? raw['url'] as String : null,
     );
   }
 }

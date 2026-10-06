@@ -181,7 +181,12 @@ def answer(body):
     }]
 
 
-def picture_png(size=256):
+COLOURS = {"purple": (170, 70, 255), "blue": (60, 120, 255),
+           "yellow": (255, 210, 50), "red": (240, 40, 40),
+           "green": (60, 200, 110), "orange": (255, 140, 30)}
+
+
+def picture_png(size=256, colour=(255, 60, 150)):
     """A made "picture": a pink bloom on a dark ground, as a real PNG.
 
     Enough to see the chat draw what was made, with no image library.
@@ -196,7 +201,8 @@ def picture_png(size=256):
             d = ((x - mid) ** 2 + (y - mid) ** 2) ** 0.5 / mid
             if d < 0.55:
                 k = 1 - d / 0.55
-                row += bytes((255, int(60 + 120 * k), int(150 + 60 * k)))
+                row += bytes(min(255, int(c + (255 - c) * 0.5 * k))
+                             for c in colour)
             else:
                 row += bytes((20, 12, int(30 + 30 * y / size)))
         rows.append(bytes(row))
@@ -235,7 +241,13 @@ def make(body, model, history):
     }
     # The file itself, served from this mock like an upload, so the chat
     # and the vault have a real picture to draw. A video gets a still.
-    UPLOADS[f"made-{n}"] = (picture_png(), "image/png")
+    # An edit: a picture sent back with the prompt (a vault reference) is
+    # changed rather than drawn from nothing, in the colour asked for.
+    source = next((f for f in body.get("attachments") or []
+                   if f.get("vaultItemId")), None)
+    colour = next((rgb for word, rgb in COLOURS.items()
+                   if word in prompt.lower()), (255, 60, 150))
+    UPLOADS[f"made-{n}"] = (picture_png(colour=colour), "image/png")
     still = f"{BASE}/v1/mock/media/made-{n}"
     row["thumbnailUrl"] = still
     if kind == "image":
@@ -246,7 +258,8 @@ def make(body, model, history):
         "id": f"m{len(history) + 1}", "author": "shift", "model": model,
         "modelName": MODELS_BY_ID[model],
         "eyebrow": f"ShiftAi · {kind.title()}",
-        "body": f"Made it: {prompt}",
+        "body": (f"Edited {source.get('name')}: {prompt}" if source
+                 else f"Made it: {prompt}"),
         "attachment": {
             "fileName": f"mock-{n}.{name}", "kind": kind,
             "meta": ("1024 × 1024 · 4 CREDITS" if kind == "image"

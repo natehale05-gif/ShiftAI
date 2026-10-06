@@ -115,8 +115,11 @@ void main() {
     final MadePreview preview =
         tester.widget<MadePreview>(find.byType(MadePreview));
     expect(preview.url, 'https://app.example.com/media/flower.png');
-    expect(find.text('image-94be8963.png'), findsOneWidget,
-        reason: 'the card with Open in Vault stays under it');
+    // What can be done with it, under it: the file-name card it used to
+    // be is not repeated.
+    expect(find.text('Edit image'), findsOneWidget);
+    expect(find.text('Share'), findsOneWidget);
+    expect(find.text('Open in Vault'), findsOneWidget);
   });
 
   testWidgets('a link on the answer itself is used first',

@@ -478,6 +478,31 @@ picks the conversation up later can be given them too. Before this the
 app sent only the names, as text in the prompt, and no model ever saw a
 file. A file with `private: true` is not kept after the answer.
 
+**Editing a made picture, in the chat.** A picture made earlier in the
+conversation is sent back by reference, as a vault piece rather than an
+upload:
+
+```json
+{ "prompt": "make the petals purple", "model": "shift-image",
+  "attachments": [{ "vaultItemId": "v1", "name": "image-94be8963.png",
+                    "mimeType": "image/png",
+                    "url": "https://.../image-94be8963.png" }],
+  "history": [ ...,
+    { "role": "assistant", "model": "shift-image", "body": "...",
+      "attachments": [{ "vaultItemId": "v1", ... }] } ] }
+```
+
+- The app sends one when someone taps **Edit image** under a picture, or
+  writes a change ("make the petals purple", "add a bee", "brighter")
+  straight after one. It goes to the model that made the picture, or
+  another with `bestFor: ["image"]`, never to a chat model.
+- An image model given a picture in `attachments` **edits that picture**
+  (image-to-image) and answers as for a new one: a new vault row and an
+  attachment pointing at it.
+- Every assistant turn in `history` that made something carries it the
+  same way, so a chat model asked "what flower is this?" or "write a
+  caption for it" can be given the picture to look at.
+
 **A made file, shown in the thread.** The chat draws a made image (or a
 video's first frame) above its card. It takes the picture from
 `attachment.url` / `attachment.thumbnailUrl` when the answer has them,

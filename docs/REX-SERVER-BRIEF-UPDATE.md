@@ -120,6 +120,26 @@ nothing to look at, which is what it showed on 6 October.
 `python3 tool/check_engine.py ... --image` makes one image through the
 first model with `bestFor: ["image"]` and checks each of these.
 
+## 5c. Editing a picture in the chat
+
+Under each made picture the chat now has **Edit image**, **Share** and
+**Open in Vault**. An edit, whether picked with Edit image or written
+straight after a picture ("make the petals purple"), goes to the model
+that made it, with the picture as an attachment **by vault reference**:
+
+```json
+"attachments": [{ "vaultItemId": "v1", "name": "image-94be8963.png",
+                  "mimeType": "image/png", "url": "https://..." }]
+```
+
+- Look the file up by `vaultItemId` (this account's vault only), or
+  fetch `url`, and give it to the image model as the image to edit
+  (image-to-image / an edit endpoint), with `prompt` as the instruction.
+- Answer like any made image: a new vault row, an attachment naming it.
+- Assistant turns in `history` that made a picture carry it the same
+  way. Pass it to whichever model answers, so a chat model asked "what
+  flower is this?" can see it.
+
 ## 6. Check your work: `tool/check_engine.py`
 
 It is in the ShiftAI repo and uses only the Python standard library. It
