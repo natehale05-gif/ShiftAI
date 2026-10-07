@@ -140,6 +140,48 @@ that made it, with the picture as an attachment **by vault reference**:
   way. Pass it to whichever model answers, so a chat model asked "what
   flower is this?" can see it.
 
+## 5d. Edits are drawing a new picture instead of changing the one sent
+
+On 7 October, on the preview: "generate an image of a pink flower" made
+`image-67b55903.png`. Then "make one of the petals blue" went to SHIFT
+Image with that picture attached, exactly as in 5c:
+
+```json
+{ "prompt": "make one of the petals blue", "model": "<SHIFT Image's id>",
+  "attachments": [{ "vaultItemId": "<its row>", "name": "image-67b55903.png",
+                    "mimeType": "image/png", "url": "https://..." }],
+  "history": [ ..., { "role": "assistant", "model": "<SHIFT Image's id>",
+                      "attachments": [{ "vaultItemId": "<its row>", ... }] } ] }
+```
+
+It came back as a **different flower** (white petals, one blue), so the
+model was given the words and not the picture. To fix:
+
+- When the model makes images and `attachments` has an image (by
+  `vaultItemId`, looked up in this account's vault, or by `url`), call
+  the provider's **edit / image-to-image** route with that image and
+  `prompt` as the instruction, not its text-to-image route. Which route
+  depends on what SHIFT Image runs on, for example:
+  - OpenAI `gpt-image-1`: `POST /v1/images/edits` with the image.
+  - Gemini image models: the image as an `inlineData` part beside the
+    text in `generateContent`.
+  - Flux: a Kontext model with the image as its input image.
+  - Anything on Replicate or fal: the model's image input
+    (`image` / `image_url` / `input_image`).
+- If the provider has no way to edit, say so in the answer
+  (`"body": "SHIFT Image can't edit pictures yet"`) rather than drawing a
+  new one: a new picture labelled as the edit reads as the edit having
+  gone wrong.
+- Answer as for any made image: a **new** vault row, and an attachment
+  naming it, plus **`"editedFrom": "<the vaultItemId you were sent>"`**
+  on that attachment. That is how the checker (and later the app) can
+  tell an edit from a fresh picture.
+
+Check it with `--edit` (below): it makes a picture, asks for exactly
+this edit, and says `differs` until the answer carries `editedFrom`. It
+prints both links; look at them, since only a person (or you, reading the
+two images) can tell whether the petal changed on the same flower.
+
 ## 6. Check your work: `tool/check_engine.py`
 
 It is in the ShiftAI repo and uses only the Python standard library. It
@@ -157,5 +199,6 @@ python3 tool/check_engine.py https://app.shiftai.club/app-preview/api \
 ```
 
 Add `--image` to make one image and check the chat can show it
-(section 5b). It never calls `DELETE /v1/me`, which would delete the
+(section 5b), and `--edit` to then edit it the way the chat does
+(section 5d). It never calls `DELETE /v1/me`, which would delete the
 account it signed in with.

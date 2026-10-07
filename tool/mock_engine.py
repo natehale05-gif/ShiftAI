@@ -39,6 +39,10 @@ STREAM = os.environ.get("MOCK_STREAM", "1") != "0"
 # MOCK_MODELS_LATE=6: the first GET /v1/models takes that many seconds, so
 # the app opens before it knows which models there are.
 MODELS_LATE = float(os.environ.get("MOCK_MODELS_LATE", "0"))
+# MOCK_EDITS=ignore: the image model draws a new picture from the words of
+# an edit and ignores the picture sent with it, as the preview did on
+# 7 Oct ("make one of the petals blue" came back as a different flower).
+EDITS_IGNORED = os.environ.get("MOCK_EDITS", "") == "ignore"
 _models_late_done = []
 BASE = "http://127.0.0.1:8111"
 
@@ -250,6 +254,8 @@ def make(body, model, history):
     # changed rather than drawn from nothing, in the colour asked for.
     source = next((f for f in body.get("attachments") or []
                    if f.get("vaultItemId")), None)
+    if EDITS_IGNORED:
+        source = None
     colour = next((rgb for word, rgb in COLOURS.items()
                    if word in prompt.lower()), (255, 60, 150))
     UPLOADS[f"made-{n}"] = (picture_png(colour=colour), "image/png")
@@ -269,6 +275,9 @@ def make(body, model, history):
             "meta": ("1024 × 1024 · 4 CREDITS" if kind == "image"
                      else "20S · 1080 × 1920 · 14 CREDITS"),
             "vaultItemId": row["id"],
+            # Which picture this one changed: the server saying it was an
+            # edit of what it was sent, not a new picture from the words.
+            **({"editedFrom": source["vaultItemId"]} if source else {}),
         },
     }
     misbehave(made_case(prompt), n, row, answer)

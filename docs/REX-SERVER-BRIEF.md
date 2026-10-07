@@ -340,6 +340,11 @@ the app.
      model is connected".
    - **"write a caption for it"** should get a text reply from the chat
      model, which can see the image turn in `history`.
+   - **"make one of the petals blue"** straight after a flower should
+     change *that* flower: the picture comes back in `attachments`, goes
+     to the provider's edit route, and the answer carries `editedFrom`
+     (`docs/REX-SERVER-BRIEF-UPDATE.md`, 5c and 5d). On 7 Oct it drew a
+     different flower instead.
    - Close the app and sign in on another device: the chat should be in
      Recents.
    - The sparkle on "make a poster" should give a full brief back in the
