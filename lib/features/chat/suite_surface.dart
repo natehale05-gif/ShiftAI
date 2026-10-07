@@ -955,6 +955,9 @@ class ArtifactCard extends StatelessWidget {
       ),
     );
 
+    final ChatMessage? reply = replyId == null
+        ? null
+        : state.messages.where((ChatMessage m) => m.id == replyId).firstOrNull;
     if (pictures.isEmpty) {
       final String? id = replyId;
       if (id == null) return card;
@@ -1021,6 +1024,7 @@ class ArtifactCard extends StatelessWidget {
           label: attachment.fileName,
           onTap: canOpen ? open : null,
         ),
+        if (reply != null) _EditNote(reply: reply),
         const SizedBox(height: Space.x1),
         // What can be done with it, here in the chat: change it, send it
         // on, or open it with everything else in the vault.
@@ -1056,6 +1060,52 @@ class ArtifactCard extends StatelessWidget {
           ],
         ),
       ],
+    );
+  }
+}
+
+/// Under a picture made by changing another: what it was changed from,
+/// or, when the model came back with a picture but did not say it changed
+/// the one it was sent, that it may be a new one. A new picture labelled
+/// as the edit read as the edit having gone wrong.
+class _EditNote extends StatelessWidget {
+  const _EditNote({required this.reply});
+
+  final ChatMessage reply;
+
+  @override
+  Widget build(BuildContext context) {
+    final AppState state = AppScope.of(context);
+    final ShiftColors c = ShiftColors.of(context);
+    final String? from = state.editedFromName(reply);
+    final bool unsure = from == null && state.editNotConfirmed(reply);
+    if (from == null && !unsure) return const SizedBox.shrink();
+    final String who = reply.modelName ?? 'The image model';
+    return Padding(
+      padding: const EdgeInsets.only(top: Space.x2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Padding(
+            padding: const EdgeInsets.only(top: 1),
+            child: Icon(
+              unsure ? Icons.info_outline_rounded : Icons.auto_fix_high_rounded,
+              size: 14,
+              color: c.textMuted,
+            ),
+          ),
+          const SizedBox(width: Space.x1),
+          Expanded(
+            child: Text(
+              unsure
+                  ? '$who may have made a new picture rather than changing '
+                      'yours: it did not say it edited the one you sent.'
+                  : 'Edited from $from',
+              style: ShiftType.caption(c.textMuted),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
