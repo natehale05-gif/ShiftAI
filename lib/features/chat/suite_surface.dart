@@ -990,15 +990,19 @@ class ArtifactCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
                   Text(
-                    'No picture came with this answer, and it is not in '
-                    'your vault yet.',
+                    "The picture hasn't reached your vault yet. It may "
+                    'still be on its way.',
                     style: ShiftType.caption(c.textMuted),
                   ),
+                  // What was looked for, so a screenshot still
+                  // shows which half is missing: the link on the answer
+                  // or the vault row.
                   Text(
                     attachment.vaultItemId.isEmpty
-                        ? 'The answer named no vault item.'
-                        : 'Looked for vault item "${attachment.vaultItemId}" '
-                            'among ${state.vault.length}.',
+                        ? 'No link or vault item came with the answer.'
+                        : 'No link came with the answer; vault item '
+                            '"${attachment.vaultItemId}" is not among '
+                            '${state.vault.length}.',
                     style: ShiftType.caption(c.textMuted),
                   ),
                   _MessageAction(
