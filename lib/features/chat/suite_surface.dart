@@ -53,11 +53,43 @@ class _SuiteSurfaceState extends State<SuiteSurface> {
   /// landing below the fold and waiting to be found.
   void _followTheThread() {
     if (!_scroll.hasClients) return;
-    _scroll.animateTo(
-      _scroll.position.maxScrollExtent,
-      duration: const Duration(milliseconds: 260),
-      curve: Curves.easeOutCubic,
-    );
+    _following = true;
+    _scroll
+        .animateTo(
+          _scroll.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 260),
+          curve: Curves.easeOutCubic,
+        )
+        .whenComplete(() => _following = false);
+  }
+
+  /// Bringing the thread to its end, as [_followTheThread] does.
+  bool _following = false;
+
+  /// How far the thread could scroll at the last change of size.
+  double _lastMax = 0;
+
+  /// The thread grew without a new row: a picture in a reply finished
+  /// loading and took its height. The scroll had already gone to the old
+  /// end, so the picture was left cut off below the fold. When the reader
+  /// was at the end (or being brought there), the thread follows it; when
+  /// they had scrolled up to read, it leaves them be.
+  bool _onResize(ScrollMetricsNotification note) {
+    final ScrollMetrics m = note.metrics;
+    final bool grew = m.maxScrollExtent > _lastMax + 1;
+    final bool wasAtEnd = _lastMax - m.pixels < 160;
+    _lastMax = m.maxScrollExtent;
+    if (grew && (wasAtEnd || _following)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!_scroll.hasClients) return;
+        if (_following) {
+          _followTheThread();
+        } else {
+          _scroll.jumpTo(_scroll.position.maxScrollExtent);
+        }
+      });
+    }
+    return false;
   }
 
   @override
@@ -98,32 +130,35 @@ class _SuiteSurfaceState extends State<SuiteSurface> {
         Expanded(
           child: empty
               ? const _EmptyState()
-              : Scrollbar(
-                  controller: _scroll,
-                  child: ListView.separated(
+              : NotificationListener<ScrollMetricsNotification>(
+                  onNotification: _onResize,
+                  child: Scrollbar(
                     controller: _scroll,
-                    padding: const EdgeInsets.fromLTRB(
-                      Space.x5,
-                      Space.x6,
-                      Space.x5,
-                      Space.x5,
+                    child: ListView.separated(
+                      controller: _scroll,
+                      padding: const EdgeInsets.fromLTRB(
+                        Space.x5,
+                        Space.x6,
+                        Space.x5,
+                        Space.x5,
+                      ),
+                      itemCount: count,
+                      separatorBuilder: (_, __) =>
+                          const SizedBox(height: Space.x5),
+                      itemBuilder: (BuildContext context, int index) {
+                        final bool last = index == state.messages.length;
+                        return Center(
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 820),
+                            child: !last
+                                ? _MessageTile(message: state.messages[index])
+                                : state.thinking
+                                    ? const _Thinking()
+                                    : const _AskAgain(),
+                          ),
+                        );
+                      },
                     ),
-                    itemCount: count,
-                    separatorBuilder: (_, __) =>
-                        const SizedBox(height: Space.x5),
-                    itemBuilder: (BuildContext context, int index) {
-                      final bool last = index == state.messages.length;
-                      return Center(
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 820),
-                          child: !last
-                              ? _MessageTile(message: state.messages[index])
-                              : state.thinking
-                                  ? const _Thinking()
-                                  : const _AskAgain(),
-                        ),
-                      );
-                    },
                   ),
                 ),
         ),
