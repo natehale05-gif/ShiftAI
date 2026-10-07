@@ -1270,12 +1270,18 @@ class MessageAttachment {
     required this.vaultItemId,
     this.url,
     this.thumbnailUrl,
+    this.editedFrom,
   });
 
   final String fileName;
   final String meta;
   final MediaKind kind;
   final String vaultItemId;
+
+  /// The vault row of the picture this one changed, when the engine says
+  /// it was an edit of the picture it was sent (docs/API.md). Null for a
+  /// picture made from words alone.
+  final String? editedFrom;
 
   /// The made file itself, when the engine puts it on the answer. Without
   /// it the chat finds the picture through the vault row ([vaultItemId]).
@@ -1291,6 +1297,7 @@ class MessageAttachment {
         'vaultItemId': vaultItemId,
         if (url != null) 'url': url,
         if (thumbnailUrl != null) 'thumbnailUrl': thumbnailUrl,
+        if (editedFrom != null) 'editedFrom': editedFrom,
       };
 
   static MessageAttachment? tryParse(Object? raw) {
@@ -1334,6 +1341,7 @@ class MessageAttachment {
         'thumbUrl',
         'previewUrl',
       ]),
+      editedFrom: text(const <String>['editedFrom', 'edited_from']),
     );
   }
 
@@ -1356,6 +1364,7 @@ class MessageAttachment {
         vaultItemId: vaultItemId,
         url: resolve(url),
         thumbnailUrl: resolve(thumbnailUrl),
+        editedFrom: editedFrom,
       );
 }
 

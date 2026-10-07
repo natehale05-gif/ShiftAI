@@ -725,6 +725,51 @@ class AppState extends ChangeNotifier {
 
   /// The file a reply made, as something to send back: its vault row and
   /// the link to it. Null for a reply that made nothing.
+  /// The question [replyId] answered: the newest of yours before it.
+  ChatMessage? questionOf(String replyId) {
+    final int at = messages.indexWhere((ChatMessage m) => m.id == replyId);
+    for (int i = at - 1; i >= 0; i--) {
+      if (messages[i].author == MessageAuthor.you) return messages[i];
+    }
+    return null;
+  }
+
+  /// What a picture made by [reply] was changed from, by name, when the
+  /// engine says it edited one (`editedFrom`). Null when it does not.
+  String? editedFromName(ChatMessage reply) {
+    final String? id = reply.attachment?.editedFrom;
+    if (id == null) return null;
+    final String? inThread = messages
+        .where((ChatMessage m) => m.attachment?.vaultItemId == id)
+        .firstOrNull
+        ?.attachment
+        ?.fileName;
+    final String? sent = questionOf(reply.id)
+        ?.files
+        .where((SentFile f) => f.vaultItemId == id)
+        .firstOrNull
+        ?.name;
+    final String? row =
+        vault.where((VaultItem v) => v.id == id).firstOrNull?.title;
+    return inThread ?? sent ?? row ?? 'the picture before';
+  }
+
+  /// [reply] answered a change to a picture (its question carried one
+  /// made in this chat), came back with a picture, and does not say it
+  /// changed the one it was sent. On 7 Oct "make one of the petals blue"
+  /// came back as a different flower, labelled as if it were the edit.
+  bool editNotConfirmed(ChatMessage reply) {
+    final MessageAttachment? made = reply.attachment;
+    if (made == null ||
+        made.kind != MediaKind.image ||
+        made.editedFrom != null) {
+      return false;
+    }
+    return questionOf(reply.id)?.files.any((SentFile f) =>
+            f.isImage && (f.vaultItemId?.isNotEmpty ?? false)) ??
+        false;
+  }
+
   SentFile? madeFileOf(ChatMessage m) {
     final MessageAttachment? a = m.attachment;
     if (a == null) return null;

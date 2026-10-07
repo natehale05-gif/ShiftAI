@@ -53,11 +53,43 @@ class _SuiteSurfaceState extends State<SuiteSurface> {
   /// landing below the fold and waiting to be found.
   void _followTheThread() {
     if (!_scroll.hasClients) return;
-    _scroll.animateTo(
-      _scroll.position.maxScrollExtent,
-      duration: const Duration(milliseconds: 260),
-      curve: Curves.easeOutCubic,
-    );
+    _following = true;
+    _scroll
+        .animateTo(
+          _scroll.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 260),
+          curve: Curves.easeOutCubic,
+        )
+        .whenComplete(() => _following = false);
+  }
+
+  /// Bringing the thread to its end, as [_followTheThread] does.
+  bool _following = false;
+
+  /// How far the thread could scroll at the last change of size.
+  double _lastMax = 0;
+
+  /// The thread grew without a new row: a picture in a reply finished
+  /// loading and took its height. The scroll had already gone to the old
+  /// end, so the picture was left cut off below the fold. When the reader
+  /// was at the end (or being brought there), the thread follows it; when
+  /// they had scrolled up to read, it leaves them be.
+  bool _onResize(ScrollMetricsNotification note) {
+    final ScrollMetrics m = note.metrics;
+    final bool grew = m.maxScrollExtent > _lastMax + 1;
+    final bool wasAtEnd = _lastMax - m.pixels < 160;
+    _lastMax = m.maxScrollExtent;
+    if (grew && (wasAtEnd || _following)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!_scroll.hasClients) return;
+        if (_following) {
+          _followTheThread();
+        } else {
+          _scroll.jumpTo(_scroll.position.maxScrollExtent);
+        }
+      });
+    }
+    return false;
   }
 
   @override
@@ -98,32 +130,35 @@ class _SuiteSurfaceState extends State<SuiteSurface> {
         Expanded(
           child: empty
               ? const _EmptyState()
-              : Scrollbar(
-                  controller: _scroll,
-                  child: ListView.separated(
+              : NotificationListener<ScrollMetricsNotification>(
+                  onNotification: _onResize,
+                  child: Scrollbar(
                     controller: _scroll,
-                    padding: const EdgeInsets.fromLTRB(
-                      Space.x5,
-                      Space.x6,
-                      Space.x5,
-                      Space.x5,
+                    child: ListView.separated(
+                      controller: _scroll,
+                      padding: const EdgeInsets.fromLTRB(
+                        Space.x5,
+                        Space.x6,
+                        Space.x5,
+                        Space.x5,
+                      ),
+                      itemCount: count,
+                      separatorBuilder: (_, __) =>
+                          const SizedBox(height: Space.x5),
+                      itemBuilder: (BuildContext context, int index) {
+                        final bool last = index == state.messages.length;
+                        return Center(
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 820),
+                            child: !last
+                                ? _MessageTile(message: state.messages[index])
+                                : state.thinking
+                                    ? const _Thinking()
+                                    : const _AskAgain(),
+                          ),
+                        );
+                      },
                     ),
-                    itemCount: count,
-                    separatorBuilder: (_, __) =>
-                        const SizedBox(height: Space.x5),
-                    itemBuilder: (BuildContext context, int index) {
-                      final bool last = index == state.messages.length;
-                      return Center(
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 820),
-                          child: !last
-                              ? _MessageTile(message: state.messages[index])
-                              : state.thinking
-                                  ? const _Thinking()
-                                  : const _AskAgain(),
-                        ),
-                      );
-                    },
                   ),
                 ),
         ),
@@ -920,6 +955,9 @@ class ArtifactCard extends StatelessWidget {
       ),
     );
 
+    final ChatMessage? reply = replyId == null
+        ? null
+        : state.messages.where((ChatMessage m) => m.id == replyId).firstOrNull;
     if (pictures.isEmpty) {
       final String? id = replyId;
       if (id == null) return card;
@@ -952,15 +990,19 @@ class ArtifactCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
                   Text(
-                    'No picture came with this answer, and it is not in '
-                    'your vault yet.',
+                    "The picture hasn't reached your vault yet. It may "
+                    'still be on its way.',
                     style: ShiftType.caption(c.textMuted),
                   ),
+                  // What was looked for, so a screenshot still
+                  // shows which half is missing: the link on the answer
+                  // or the vault row.
                   Text(
                     attachment.vaultItemId.isEmpty
-                        ? 'The answer named no vault item.'
-                        : 'Looked for vault item "${attachment.vaultItemId}" '
-                            'among ${state.vault.length}.',
+                        ? 'No link or vault item came with the answer.'
+                        : 'No link came with the answer; vault item '
+                            '"${attachment.vaultItemId}" is not among '
+                            '${state.vault.length}.',
                     style: ShiftType.caption(c.textMuted),
                   ),
                   _MessageAction(
@@ -986,6 +1028,7 @@ class ArtifactCard extends StatelessWidget {
           label: attachment.fileName,
           onTap: canOpen ? open : null,
         ),
+        if (reply != null) _EditNote(reply: reply),
         const SizedBox(height: Space.x1),
         // What can be done with it, here in the chat: change it, send it
         // on, or open it with everything else in the vault.
@@ -1021,6 +1064,52 @@ class ArtifactCard extends StatelessWidget {
           ],
         ),
       ],
+    );
+  }
+}
+
+/// Under a picture made by changing another: what it was changed from,
+/// or, when the model came back with a picture but did not say it changed
+/// the one it was sent, that it may be a new one. A new picture labelled
+/// as the edit read as the edit having gone wrong.
+class _EditNote extends StatelessWidget {
+  const _EditNote({required this.reply});
+
+  final ChatMessage reply;
+
+  @override
+  Widget build(BuildContext context) {
+    final AppState state = AppScope.of(context);
+    final ShiftColors c = ShiftColors.of(context);
+    final String? from = state.editedFromName(reply);
+    final bool unsure = from == null && state.editNotConfirmed(reply);
+    if (from == null && !unsure) return const SizedBox.shrink();
+    final String who = reply.modelName ?? 'The image model';
+    return Padding(
+      padding: const EdgeInsets.only(top: Space.x2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Padding(
+            padding: const EdgeInsets.only(top: 1),
+            child: Icon(
+              unsure ? Icons.info_outline_rounded : Icons.auto_fix_high_rounded,
+              size: 14,
+              color: c.textMuted,
+            ),
+          ),
+          const SizedBox(width: Space.x1),
+          Expanded(
+            child: Text(
+              unsure
+                  ? '$who may have made a new picture rather than changing '
+                      'yours: it did not say it edited the one you sent.'
+                  : 'Edited from $from',
+              style: ShiftType.caption(c.textMuted),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
