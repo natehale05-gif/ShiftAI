@@ -498,7 +498,10 @@ upload:
   another with `bestFor: ["image"]`, never to a chat model.
 - An image model given a picture in `attachments` **edits that picture**
   (image-to-image) and answers as for a new one: a new vault row and an
-  attachment pointing at it.
+  attachment pointing at it, with `"editedFrom": "<the vaultItemId it
+  was sent>"` on that attachment. A text-to-image call with only the
+  prompt is not an edit: on 7 Oct "make one of the petals blue" came
+  back as a different flower. `tool/check_engine.py --edit` checks this.
 - Every assistant turn in `history` that made something carries it the
   same way, so a chat model asked "what flower is this?" or "write a
   caption for it" can be given the picture to look at.

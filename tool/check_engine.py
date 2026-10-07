@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Checks a server against what the ShiftAi app reads (docs/API.md).
 
-    python3 tool/check_engine.py BASE_URL --email ... --password ... [--spend] [--image]
+    python3 tool/check_engine.py BASE_URL --email ... --password ... [--spend] [--image] [--edit]
 
 Signs in, calls every route the app uses, and prints one line per check:
 
@@ -17,7 +17,9 @@ credits on a real server. It never calls DELETE /v1/me, which would
 delete the account it signed in with. --image generates one image (through
 the first model with bestFor ["image"]) and checks the app could show it:
 an attachment on the answer, a vault row with mediaUrl, and a file that
-loads with no auth header.
+loads with no auth header. --edit (implies --image) then asks the same
+model to change that picture, the way the chat's "Edit image" does, and
+checks it answered with a new picture marked as an edit of the first.
 
 Standard library only. Exit code 1 when anything differs.
 """
@@ -394,6 +396,11 @@ def check_messages(engine, spend):
 
 
 def check_image(engine, enabled):
+    """See made_image; returns what it made, or None."""
+    return made_image(engine, enabled)
+
+
+def made_image(engine, enabled):
     """One image, the way the app asks for it, and whether the app can show
     it: the answer names a vault row, the row (or the answer) has the file,
     and the file loads."""
@@ -424,6 +431,8 @@ def check_image(engine, enabled):
         return
     say("ok", f"image generation ({model})",
         f"attachment {made.get('fileName')}")
+    made_by = {"model": model, "attachment": made,
+               "body": msgs[-1].get("body") or ""}
     url = made.get("url") or made.get("mediaUrl")
     row_id = made.get("vaultItemId")
     if not url and row_id:
@@ -445,6 +454,7 @@ def check_image(engine, enabled):
     if not url:
         say("differs", "made image", "no url on the answer and no vaultItemId")
         return
+    made_by["url"] = url
     req = urllib.request.Request(url, method="GET")
     try:
         with urllib.request.urlopen(req, timeout=engine.timeout) as res:
@@ -461,12 +471,69 @@ def check_image(engine, enabled):
                     "no Access-Control-Allow-Origin: fine where the app is "
                     "served from the same origin, but the web app on any "
                     "other origin cannot draw it")
+            return made_by
     except urllib.error.HTTPError as e:
         say("differs", "made image file",
             f"{e.code} without a token: the app loads it with no "
             "Authorization header")
     except Exception as e:  # noqa: BLE001 - report anything else plainly
         say("differs", "made image file", f"{url}: {e}")
+
+
+def check_edit(engine, enabled, made):
+    """Edit image, as the chat sends it: the picture goes back by vault
+    reference to the model that made it, with the change as the prompt.
+
+    An image model that ignores the attachment answers with a new picture
+    from the words alone ("make one of the petals blue" came back as a
+    different flower on 7 Oct). The answer cannot be judged by its pixels
+    here; `editedFrom` on the attachment is the server saying it edited
+    the picture it was given, and both links are printed to look at.
+    """
+    if not enabled:
+        say("skipped", "image edit", "edits the made image; run with --edit")
+        return
+    if not made:
+        say("skipped", "image edit", "no made image to edit (see above)")
+        return
+    source = made["attachment"]
+    source_id = source.get("vaultItemId") or ""
+    picture = {"vaultItemId": source_id, "name": source.get("fileName"),
+               "mimeType": "image/png", "url": made["url"]}
+    status, msgs, _, error = ask(engine, {
+        "prompt": "make one of the petals blue", "model": made["model"],
+        "private": True,
+        "attachments": [picture],
+        "history": [
+            {"role": "user", "body": "Generate an image of a pink flower"},
+            {"role": "assistant", "model": made["model"],
+             "body": made["body"], "attachments": [picture]},
+        ]})
+    if error or status != 200 or not msgs:
+        say("differs", f"image edit ({made['model']})", error or f"{status}")
+        return
+    edited = next((m.get("attachment") for m in msgs
+                   if isinstance(m.get("attachment"), dict)), None)
+    if not edited:
+        say("differs", f"image edit ({made['model']})",
+            "the answer has no attachment: " +
+            repr(str(msgs[-1].get("body"))[:60]))
+        return
+    if edited.get("vaultItemId") == source_id and source_id:
+        say("differs", f"image edit ({made['model']})",
+            "the answer names the original's vault row; an edit is a new "
+            "row, so both stay in the vault")
+        return
+    new_url = edited.get("url") or edited.get("mediaUrl") or "(vault row " \
+        + str(edited.get("vaultItemId")) + ")"
+    if edited.get("editedFrom") == source_id:
+        say("ok", f"image edit ({made['model']})",
+            f"editedFrom {source_id}: look at {made['url']} then {new_url}")
+    else:
+        say("differs", f"image edit ({made['model']})",
+            "no editedFrom on the answer's attachment, so nothing says the "
+            "picture sent was edited rather than a new one drawn from the "
+            f"words. Compare {made['url']} with {new_url}")
 
 
 def main():
@@ -476,6 +543,8 @@ def main():
     ap.add_argument("--password", required=True)
     ap.add_argument("--image", action="store_true",
                     help="also generate one image and check the app can show it")
+    ap.add_argument("--edit", action="store_true",
+                    help="also edit that image, as the chat's Edit image does")
     ap.add_argument("--spend", action="store_true",
                     help="also send messages, polish, upload, save a chat")
     ap.add_argument("--timeout", type=float, default=20,
@@ -498,7 +567,8 @@ def main():
     check_threads(engine, args.spend)
     check_polish(engine, args.spend)
     check_messages(engine, args.spend)
-    check_image(engine, args.image)
+    made = check_image(engine, args.image or args.edit)
+    check_edit(engine, args.edit, made)
     say("skipped", "DELETE /v1/me", "it would delete this account")
 
     differs = RESULTS.count("differs")

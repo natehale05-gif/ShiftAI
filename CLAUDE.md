@@ -156,7 +156,10 @@ screen that differs is a place the shapes diverge. "mock:late",
 "mock:markdown" or "mock:nocors" in an image prompt replays one of the
 ways a real engine has handed back a picture the chat could not show.
 `MOCK_MODELS_LATE=20` makes its first `/v1/models` take 20 s, so the app
-opens before it knows which models there are.
+opens before it knows which models there are. `MOCK_EDITS=ignore` replays
+the preview on 7 Oct: an edit sent with its picture comes back as a new
+picture drawn from the words. A real edit carries `editedFrom` on its
+attachment; `tool/check_engine.py --edit` checks for it.
 
 An image, video or audio request is never turned away on the model list
 on screen: that list is empty until the load lands (the app opens at
