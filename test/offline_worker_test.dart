@@ -27,6 +27,32 @@ void main() {
     expect(worker, contains("rel === '' || FILES.has(rel)"));
   });
 
+  test(
+      'every file the worker fetches is revalidated, never taken from the '
+      'browser\'s cache of the last build', () {
+    final String worker = _worker();
+    // main.dart.js has the same name in every build and Pages lets a
+    // browser reuse it for 10 minutes: a new build's cache was filled with
+    // the old one, and the app did not update until the deploy after.
+    expect(worker, contains("cache: 'no-cache'"));
+    expect(RegExp(r'\bfetch\(req\)').hasMatch(worker), isFalse);
+    expect(worker, isNot(contains('cache.add(')));
+    expect(worker, contains('hit || fresh(req)'));
+    expect(worker, contains('var network = fresh(req)'));
+  });
+
+  test(
+      'the page reloads once when a new build\'s worker takes over from '
+      'an old one', () {
+    final String script = File('tool/build_web_hosted.sh').readAsStringSync();
+    // The old worker handed a fresh page the old main.dart.js; the page's
+    // build id matched the server's, so nothing ever reloaded it.
+    expect(script, contains("addEventListener('controllerchange'"));
+    expect(script,
+        contains('var hadWorker = !!navigator.serviceWorker.controller;'));
+    expect(script, contains('if (!hadWorker || reloaded) return;'));
+  });
+
   test('the build writes the file list into the worker', () {
     final String script = File('tool/build_web_hosted.sh').readAsStringSync();
     expect(script, contains("js.replace('__FILES__', json.dumps(files))"));
