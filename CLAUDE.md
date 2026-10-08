@@ -184,6 +184,14 @@ contract's kind was image or video. A song from SHIFT Music was drawn as
 a picture that "did not load" on 8 Oct; it now plays in the thread.
 `mock-music` on the mock makes a real WAV.
 
+A web page in a reply (an `html` block holding a whole document, or a
+bare `<!doctype html>`) is a website card: a live preview in an
+`<iframe sandbox="allow-scripts">` (never `allow-same-origin`: the
+session lives in this origin's storage), full screen on a tap, Copy code
+and Download. Off the web it shows its code. On 8 Oct the preview's chat
+model answered "build a website" with a brief; brief update 5e asks for
+the page.
+
 A made picture in the chat tries every link it has (the answer's `url`,
 the vault row's `mediaUrl`, then the thumbnails the vault itself draws)
 and re-reads the vault for up to 45 s for a row saved after the answer.
@@ -234,6 +242,6 @@ exploratory, branch.
 flutter analyze && flutter test
 ```
 
-395 tests. They have caught every regression listed above at least once,
+400 tests. They have caught every regression listed above at least once,
 including several of mine. If one fails, read it before changing it —
 twice now the test was right and my expectation was wrong.

@@ -182,6 +182,44 @@ this edit, and says `differs` until the answer carries `editedFrom`. It
 prints both links; look at them, since only a person (or you, reading the
 two images) can tell whether the petal changed on the same flower.
 
+## 5e. "Build me a website" should come back as the page, not a brief
+
+On 8 October, "put this into a website about pink flowers" went to
+Claude Sonnet 5, which asked two questions with buttons (good) and then
+answered "Here's a brief for your romantic pink flower shop site. Use
+this as a blueprint…": a description of a site, not a site.
+
+The chat now shows a web page in a reply as the page itself: a live
+preview in the thread, full screen on a tap (links and buttons work),
+Copy code and Download. It runs sandboxed (scripts only, no access to
+the app). For that, the model has to send the page:
+
+- When someone asks to build, make or design a website, landing page or
+  web page, the answer contains **one complete HTML document** in a
+  fenced block marked `html`:
+
+  ````
+  Here is your site.
+
+  ```html
+  <!doctype html>
+  <html> ... </html>
+  ```
+  ````
+
+- Everything in the one file: CSS in `<style>`, any JS in `<script>`.
+  Images by `https://` URL (a picture made in the chat has one: its
+  vault `mediaUrl`) or `data:` URI. No other local files: there is
+  nowhere for them to come from.
+- Asking a question or two first is fine; the final answer is the page.
+  If the Suite's chat system prompt tells the model to write briefs or
+  blueprints for the user to build elsewhere, that is what to change.
+- Streaming works: while the block is open the thread says "Building
+  the page… N lines"; the preview appears when the closing fence lands.
+
+`tool/mock_engine.py` answers "build me a website" this way, so you can
+see it in the app against the mock.
+
 ## 6. Check your work: `tool/check_engine.py`
 
 It is in the ShiftAI repo and uses only the Python standard library. It
