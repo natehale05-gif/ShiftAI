@@ -190,7 +190,11 @@ bare `<!doctype html>`) is a website card: a live preview in an
 session lives in this origin's storage), full screen on a tap, Copy code
 and Download. Off the web it shows its code. On 8 Oct the preview's chat
 model answered "build a website" with a brief; brief update 5e asks for
-the page.
+the page. A page's references to a picture made in the chat (its file
+name, or the id on its suite link) become the picture's real address,
+and a made-up picture name ("pink-flower.jpg") the newest picture
+(`HtmlArtifact.withAssets`): the first real page drew white words on a
+blank hero.
 
 A made picture in the chat tries every link it has (the answer's `url`,
 the vault row's `mediaUrl`, then the thumbnails the vault itself draws)
@@ -242,6 +246,6 @@ exploratory, branch.
 flutter analyze && flutter test
 ```
 
-400 tests. They have caught every regression listed above at least once,
+403 tests. They have caught every regression listed above at least once,
 including several of mine. If one fails, read it before changing it —
 twice now the test was right and my expectation was wrong.
