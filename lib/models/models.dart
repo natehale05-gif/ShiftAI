@@ -1271,12 +1271,29 @@ class MessageAttachment {
     this.url,
     this.thumbnailUrl,
     this.editedFrom,
+    this.mediaType,
   });
 
   final String fileName;
   final String meta;
   final MediaKind kind;
   final String vaultItemId;
+
+  /// What the file really is, when it is more than [kind] can say: a song
+  /// or a voiceover is audio. [kind] stays image or video so older saved
+  /// chats keep parsing; a song used to arrive as an "image" and the chat
+  /// tried to draw it ("The picture did not load").
+  final MediaType? mediaType;
+
+  /// What the file says it is: [mediaType], a video [kind], or its own
+  /// name or link. Null when nothing does, as for "kind": "image" alone.
+  MediaType? get evidentType =>
+      mediaType ??
+      (kind == MediaKind.video ? MediaType.video : null) ??
+      _typeOf(path: url ?? fileName);
+
+  /// What the file is, an image when nothing says.
+  MediaType get type => evidentType ?? MediaType.image;
 
   /// The vault row of the picture this one changed, when the engine says
   /// it was an edit of the picture it was sent (docs/API.md). Null for a
@@ -1298,6 +1315,7 @@ class MessageAttachment {
         if (url != null) 'url': url,
         if (thumbnailUrl != null) 'thumbnailUrl': thumbnailUrl,
         if (editedFrom != null) 'editedFrom': editedFrom,
+        if (mediaType != null) 'mediaType': mediaType!.name,
       };
 
   static MessageAttachment? tryParse(Object? raw) {
@@ -1329,10 +1347,16 @@ class MessageAttachment {
     final String? name = text(const <String>['fileName', 'filename', 'name']) ??
         (url == null ? null : _nameIn(url));
     if (name == null) return null;
+    final MediaType? type = _typeOf(
+      said: text(const <String>['mediaType', 'kind']),
+      mime: text(const <String>['mimeType', 'mime_type', 'contentType']),
+      path: url ?? name,
+    );
     return MessageAttachment(
       fileName: name,
       meta: raw['meta'] as String? ?? '',
-      kind: raw['kind'] == 'video' ? MediaKind.video : MediaKind.image,
+      kind: type == MediaType.video ? MediaKind.video : MediaKind.image,
+      mediaType: type,
       vaultItemId: text(const <String>['vaultItemId', 'vaultId']) ?? '',
       url: url,
       thumbnailUrl: text(const <String>[
@@ -1343,6 +1367,80 @@ class MessageAttachment {
       ]),
       editedFrom: text(const <String>['editedFrom', 'edited_from']),
     );
+  }
+
+  /// What a made file is, from what the engine called it, its MIME type,
+  /// or failing both its extension: SHIFT Music's "country song" came back
+  /// with no kind the app knew, and was drawn as a picture.
+  static MediaType? _typeOf(
+      {String? said, String? mime, required String path}) {
+    final String k = (said ?? '').toLowerCase();
+    final String m = (mime ?? '').toLowerCase();
+    final String p = path.toLowerCase().split('?').first;
+    final String ext =
+        p.contains('.') ? p.substring(p.lastIndexOf('.') + 1) : '';
+    const Set<String> audio = <String>{
+      'mp3',
+      'wav',
+      'm4a',
+      'aac',
+      'ogg',
+      'oga',
+      'flac',
+      'opus',
+      'weba',
+    };
+    const Set<String> video = <String>{'mp4', 'mov', 'webm', 'm4v', 'm3u8'};
+    const Set<String> document = <String>{
+      'pdf',
+      'doc',
+      'docx',
+      'txt',
+      'md',
+      'pptx',
+      'key',
+      'csv',
+      'xlsx',
+    };
+    if (<String>['audio', 'music', 'song', 'voice', 'speech', 'sound']
+            .contains(k) ||
+        m.startsWith('audio/') ||
+        p.startsWith('data:audio/') ||
+        audio.contains(ext)) {
+      return MediaType.audio;
+    }
+    if (k == 'video' ||
+        m.startsWith('video/') ||
+        p.startsWith('data:video/') ||
+        video.contains(ext)) {
+      return MediaType.video;
+    }
+    if (k == 'document' ||
+        m == 'application/pdf' ||
+        m.startsWith('text/') ||
+        document.contains(ext)) {
+      return MediaType.document;
+    }
+    const Set<String> image = <String>{
+      'png',
+      'jpg',
+      'jpeg',
+      'webp',
+      'gif',
+      'avif',
+      'heic',
+      'svg',
+    };
+    // "kind": "image" alone is no evidence: the contract's kind was image
+    // or video, so a song from an engine that follows it arrives as one.
+    if (m.startsWith('image/') ||
+        p.startsWith('data:image/') ||
+        image.contains(ext)) {
+      return MediaType.image;
+    }
+    // Nothing says: what made it, or its vault row, decides
+    // (AppState.madeTypeOf).
+    return null;
   }
 
   /// The last part of a link's path, as a file name: "flower.png".
@@ -1365,6 +1463,7 @@ class MessageAttachment {
         url: resolve(url),
         thumbnailUrl: resolve(thumbnailUrl),
         editedFrom: editedFrom,
+        mediaType: mediaType,
       );
 }
 

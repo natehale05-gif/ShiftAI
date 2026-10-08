@@ -38,7 +38,7 @@ void main() {
     expect(RegExp(r'\bfetch\(req\)').hasMatch(worker), isFalse);
     expect(worker, isNot(contains('cache.add(')));
     expect(worker, contains('hit || fresh(req)'));
-    expect(worker, contains('var network = fresh(req)'));
+    expect(worker, contains('return hit || fresh(req).then('));
   });
 
   test(
@@ -51,6 +51,23 @@ void main() {
     expect(script,
         contains('var hadWorker = !!navigator.serviceWorker.controller;'));
     expect(script, contains('if (!hadWorker || reloaded) return;'));
+  });
+
+  test(
+      'the page opens from this build\'s copy without waiting on the '
+      'network', () {
+    final String worker = _worker();
+    // It used to race the network for up to 2 s on every open: on a weak
+    // signal, 2 s of loading screen before a copy already in the cache.
+    expect(worker, isNot(contains('PAGE_WAIT_MS')));
+    expect(worker, isNot(contains('setTimeout')));
+    final String page = worker.substring(worker.indexOf('function page(req)'),
+        worker.indexOf("self.addEventListener('fetch'"));
+    final int cached = page.indexOf("cache.match('index.html'");
+    final int network = page.indexOf('return hit || fresh(req).then(');
+    expect(cached, isNonNegative);
+    expect(network, greaterThan(cached),
+        reason: 'the cache is asked first, the network only after');
   });
 
   test('the build writes the file list into the worker', () {

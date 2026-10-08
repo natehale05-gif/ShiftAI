@@ -504,6 +504,15 @@ void main() {
         'make this photo brighter': TaskKind.image,
         'thanks, shorter please': null,
         'why is the sky blue?': null,
+        // Something built is code, picture or no picture in it. "put this
+        // into a website about pink flowers" went to the image model as a
+        // change to the picture, and came back as more flowers.
+        'put this into a website about pink flowers': TaskKind.code,
+        'make a landing page for the bakery with these images': TaskKind.code,
+        'build me a web page for the launch': TaskKind.code,
+        // Named only as what the thing is for, it is still the thing.
+        'generate a logo for my website': TaskKind.image,
+        'write the copy for our landing page': TaskKind.writing,
       };
       cases.forEach((String prompt, TaskKind? kind) {
         expect(ModelRouter.kindOf(prompt), kind, reason: prompt);

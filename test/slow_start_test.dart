@@ -57,7 +57,10 @@ Map<String, Object> _deviceOf(String account) => <String, Object>{
       }),
     };
 
-Future<(AppState, _SlowEngine)> _open(Map<String, Object> prefs) async {
+Future<(AppState, _SlowEngine)> _open(
+  Map<String, Object> prefs, {
+  bool defaultBudgets = false,
+}) async {
   SharedPreferences.setMockInitialValues(prefs);
   final TokenStore tokens = MemoryTokenStore();
   await tokens.write(Session(
@@ -70,10 +73,15 @@ Future<(AppState, _SlowEngine)> _open(Map<String, Object> prefs) async {
       AuthController(service: _StubAuth(), store: tokens);
   await auth.restore();
   final _SlowEngine engine = _SlowEngine();
-  final AppState state = await AppState.load(
-    engine: Backend(repository: engine, auth: auth, seeded: false),
-    firstScreenBudget: const Duration(milliseconds: 50),
-  );
+  final Backend backend =
+      Backend(repository: engine, auth: auth, seeded: false);
+  final AppState state = defaultBudgets
+      ? await AppState.load(engine: backend)
+      : await AppState.load(
+          engine: backend,
+          firstScreenBudget: const Duration(milliseconds: 50),
+          cachedScreenBudget: const Duration(milliseconds: 50),
+        );
   return (state, engine);
 }
 
@@ -159,5 +167,29 @@ void main() {
     expect(state.threads, isEmpty,
         reason: 'Recents are the account\'s, like the vault');
     expect(state.showingCached, isFalse);
+  });
+
+  test(
+      'with this account\'s copy on the device, a slow server holds the '
+      'first screen well under a second, not 3 s', () async {
+    final Stopwatch took = Stopwatch()..start();
+    final (AppState state, _) =
+        await _open(_deviceOf(Seed.creator.email), defaultBudgets: true);
+    took.stop();
+    expect(took.elapsedMilliseconds, lessThan(1500));
+    expect(state.showingCached, isTrue);
+    expect(state.notes.single.title, 'Last seen');
+  });
+
+  test('with no copy to show, it still gives the server its full wait',
+      () async {
+    bool opened = false;
+    final Future<(AppState, _SlowEngine)> opening =
+        _open(_deviceOf('someone@else.com'), defaultBudgets: true)
+          ..then((_) => opened = true);
+    await Future<void>.delayed(const Duration(milliseconds: 1200));
+    expect(opened, isFalse,
+        reason: 'nothing of this account\'s to show, so it waits');
+    await opening;
   });
 }

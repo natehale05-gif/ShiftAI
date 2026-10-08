@@ -26,7 +26,12 @@ class VaultMedia extends StatelessWidget {
     final String? file = item.mediaUrl;
     return switch (item.mediaType) {
       MediaType.video when file != null => _VideoView(item: item, url: file),
-      MediaType.audio when file != null => _AudioView(item: item, url: file),
+      MediaType.audio when file != null => AudioPiece(
+          url: file,
+          title: item.title,
+          seed: item.id,
+          thumbnailUrl: item.thumbnailUrl,
+        ),
       // The full file for an image, the preview until it arrives.
       MediaType.image => Stack(
           fit: StackFit.expand,
@@ -173,19 +178,30 @@ class _VideoViewState extends State<_VideoView> {
   }
 }
 
-/// Audio over the piece's art: play or pause, how far along, and a bar to
-/// move through it.
-class _AudioView extends StatefulWidget {
-  const _AudioView({required this.item, required this.url});
+/// A song or a voiceover: its art, and a player over it. Nothing is
+/// fetched until Play. The vault's detail and the chat both use it, so a
+/// track made in the chat plays where it was made.
+class AudioPiece extends StatefulWidget {
+  const AudioPiece({
+    required this.url,
+    required this.title,
+    required this.seed,
+    this.thumbnailUrl,
+    super.key,
+  });
 
-  final VaultItem item;
   final String url;
+  final String title;
+
+  /// What the art is drawn from when there is no still.
+  final String seed;
+  final String? thumbnailUrl;
 
   @override
-  State<_AudioView> createState() => _AudioViewState();
+  State<AudioPiece> createState() => _AudioPieceState();
 }
 
-class _AudioViewState extends State<_AudioView> {
+class _AudioPieceState extends State<AudioPiece> {
   VideoPlayerController? _player;
   bool _failed = false;
 
@@ -196,7 +212,8 @@ class _AudioViewState extends State<_AudioView> {
       setState(() => _player = player);
       try {
         await player.initialize();
-      } on Object {
+      } on Object catch (error) {
+        debugPrint('audio: ${widget.url} would not play — $error');
         if (mounted) setState(() => _failed = true);
         return;
       }
@@ -222,7 +239,7 @@ class _AudioViewState extends State<_AudioView> {
     return Stack(
       fit: StackFit.expand,
       children: <Widget>[
-        MediaArt(seed: widget.item.id, thumbnailUrl: widget.item.thumbnailUrl),
+        MediaArt(seed: widget.seed, thumbnailUrl: widget.thumbnailUrl),
         Positioned(
           left: Space.x3,
           right: Space.x3,
@@ -254,7 +271,7 @@ class _AudioViewState extends State<_AudioView> {
                       ),
                       Expanded(
                         child: Text(
-                          _failed ? 'This would not play.' : widget.item.title,
+                          _failed ? 'This would not play.' : widget.title,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: ShiftType.copy(

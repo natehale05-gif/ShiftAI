@@ -187,6 +187,20 @@ void main() {
     expect(engine.sent.last.model, _chat.id);
   });
 
+  test(
+      'putting the picture into a website goes to a model that builds one, '
+      'with the picture, not back to the image model', () async {
+    final (AppState state, _Engine engine) = await _withAFlower();
+    state.sendMessage('put this into a website about pink flowers');
+    await _settle();
+    expect(engine.sent.last.model, _chat.id,
+        reason: 'it went to SHIFT Image as an edit and came back as more '
+            'flowers');
+    expect(engine.sent.last.files, isEmpty);
+    expect(engine.sent.last.history.last.files.single.vaultItemId, 'v-1',
+        reason: 'the picture is in the conversation for it to use');
+  });
+
   test('Edit picks the picture, whatever the words, and then lets go',
       () async {
     final (AppState state, _Engine engine) = await _withAFlower();
@@ -234,6 +248,9 @@ void main() {
       'write a caption for it',
       'thanks',
       'make a video of it',
+      // Using the picture in something else is not changing it.
+      'put this into a website about pink flowers',
+      'make a landing page with it',
     ]) {
       expect(ModelRouter.looksLikeEdit(other), isFalse, reason: other);
     }

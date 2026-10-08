@@ -77,10 +77,12 @@ reference, Runner group, and the Resources build phase. A manifest that
 is not in Copy Bundle Resources is one Apple never sees.
 
 **Nothing waits forever at startup.** The web app's offline worker
-serves each build's files from that build's cache and gives the network
-2 s for the page before opening on its last copy; it used to be network
-first with no limit, and a stalled request meant a loading screen for
-good. It caches only the build's own files, listed by name at build time:
+serves each build's files, and its page, from that build's cache at
+once; it used to be network first with no limit (a stalled request meant
+a loading screen for good), then gave the network 2 s for the page on
+every open, which on a weak signal was 2 s of loading screen before a
+copy already cached. A build's page never changes; a new build arrives
+as a new worker and the page reloads once when it takes over. It caches only the build's own files, listed by name at build time:
 the preview serves the API from the same origin, and a worker that cached
 every GET answered `/v1/vault`, `/v1/avatars` and `/v1/me` from their
 first copy until the next deploy, whoever was signed in. Every fetch the
@@ -90,7 +92,11 @@ minutes, so a new build's cache was filled with the old one. And the page
 reloads once when a new build's worker takes over from an old one, since
 the old worker can hand a fresh page the old `main.dart.js` (6 Oct: "the
 app seems to not be updating"). `AppState.load` gives the engine 3 s and then opens on the
-account's last-seen copy while the rest lands.
+account's last-seen copy while the rest lands, or 0.6 s when that
+account's copy is on the device (a slow server held the loading screen
+for 3 s on every open). The hosted page also preconnects to the saved
+server before the engine loads. The web app marks `shift-ready` on the
+performance timeline when real content first draws; time opens with it.
 
 **Bundle ids are `club.shiftai.app` on both platforms** and cannot change
 after the first upload.
@@ -155,7 +161,8 @@ screen that differs is a place the shapes diverge. "mock:late",
 "mock:lost", "mock:broken", "mock:relative", "mock:renamed",
 "mock:markdown" or "mock:nocors" in an image prompt replays one of the
 ways a real engine has handed back a picture the chat could not show.
-`MOCK_MODELS_LATE=20` makes its first `/v1/models` take 20 s, so the app
+`MOCK_DELAY_MS=2500` slows every read, to time how the app opens on a
+slow server. `MOCK_MODELS_LATE=20` makes its first `/v1/models` take 20 s, so the app
 opens before it knows which models there are. `MOCK_EDITS=ignore` replays
 the preview on 7 Oct: an edit sent with its picture comes back as a new
 picture drawn from the words. A real edit carries `editedFrom` on its
@@ -168,6 +175,22 @@ a pink flower" was refused that way on 6 Oct with SHIFT Image connected.
 The list is read again first, under its own URL (a browser holds a second
 GET for a URL behind the first), and the refusal names the models the
 server listed, or why the list did not load.
+
+A made file is drawn, played or shown by what it is: the answer's
+`mediaType`/`kind`/MIME type or its file's extension, else its vault
+row's `mediaType`, else the model that made it (a model that only makes
+audio made a track). "kind": "image" alone proves nothing, since the
+contract's kind was image or video. A song from SHIFT Music was drawn as
+a picture that "did not load" on 8 Oct; it now plays in the thread.
+`mock-music` on the mock makes a real WAV.
+
+A web page in a reply (an `html` block holding a whole document, or a
+bare `<!doctype html>`) is a website card: a live preview in an
+`<iframe sandbox="allow-scripts">` (never `allow-same-origin`: the
+session lives in this origin's storage), full screen on a tap, Copy code
+and Download. Off the web it shows its code. On 8 Oct the preview's chat
+model answered "build a website" with a brief; brief update 5e asks for
+the page.
 
 A made picture in the chat tries every link it has (the answer's `url`,
 the vault row's `mediaUrl`, then the thumbnails the vault itself draws)
@@ -219,6 +242,6 @@ exploratory, branch.
 flutter analyze && flutter test
 ```
 
-384 tests. They have caught every regression listed above at least once,
+400 tests. They have caught every regression listed above at least once,
 including several of mine. If one fails, read it before changing it —
 twice now the test was right and my expectation was wrong.

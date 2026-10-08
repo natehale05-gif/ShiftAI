@@ -506,6 +506,13 @@ upload:
   same way, so a chat model asked "what flower is this?" or "write a
   caption for it" can be given the picture to look at.
 
+**A web page in a reply.** A fenced block marked `html` holding a whole
+document (or a bare `<!doctype html>` document) is shown as the page: a
+live, sandboxed preview, full screen on a tap, Copy code and Download.
+Answer a request to build a website, landing page or web page with one
+complete HTML document that way, CSS and JS inline, images by `https://`
+URL or `data:` URI.
+
 **A made file, shown in the thread.** The chat draws a made image (or a
 video's first frame) above its card. It takes the picture from
 `attachment.url` / `attachment.thumbnailUrl` when the answer has them,
