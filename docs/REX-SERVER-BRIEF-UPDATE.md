@@ -211,6 +211,16 @@ the app). For that, the model has to send the page:
   Images by `https://` URL (a picture made in the chat has one: its
   vault `mediaUrl`) or `data:` URI. No other local files: there is
   nowhere for them to come from.
+- **Tell the model where the chat's pictures are.** On 8 October a page
+  "using that pink flower image as the background" came back with the
+  hero blank: the model had the picture (or its name) but not its
+  address. Beside each picture you pass from `attachments` /
+  `history`, add a line of text such as
+  `image-1c97aaa8.png is at https://…/image-1c97aaa8.png`. The app now
+  swaps a page's references to a picture made in the chat (by its file
+  name, or the id on its link) for the real address, and a made-up
+  picture name for the newest picture, but a real address from the
+  model is better than a guess.
 - Asking a question or two first is fine; the final answer is the page.
   If the Suite's chat system prompt tells the model to write briefs or
   blueprints for the user to build elsewhere, that is what to change.

@@ -70,4 +70,41 @@ void main() {
     expect(find.textContaining('Building the page'), findsOneWidget);
     expect(find.byType(CodeBlock), findsNothing);
   });
+
+  group('a page uses the pictures made in the chat', () {
+    const List<PageAsset> made = <PageAsset>[
+      PageAsset('image-0aa11bb2.png', 'https://cdn.example.com/u/first.png'),
+      PageAsset('image-1c97aaa8.png', 'https://cdn.example.com/u/flower.png'),
+    ];
+    String use(String html) => HtmlArtifact.withAssets(html, made);
+
+    test('by its file name, its stem, or the id on its link', () {
+      expect(use('<img src="image-1c97aaa8.png">'),
+          '<img src="https://cdn.example.com/u/flower.png">');
+      expect(use("<img src='./images/image-0aa11bb2.jpg'>"),
+          "<img src='https://cdn.example.com/u/first.png'>");
+      expect(
+          use('.hero{background:url(https://suite.shiftai.club/r/1c97aaa8)}'),
+          ".hero{background:url('https://cdn.example.com/u/flower.png')}");
+    });
+
+    test(
+        'a made-up picture name on no server is the newest picture: on 8 Oct '
+        'the hero drew white words on a blank page', () {
+      expect(use("background: url('pink-flower.jpg') center / cover"),
+          "background: url('https://cdn.example.com/u/flower.png') center / cover");
+      expect(use('<video poster="hero.webp">'),
+          '<video poster="https://cdn.example.com/u/flower.png">');
+    });
+
+    test('real addresses, embedded pictures and links are left be', () {
+      const String page = '<img src="https://images.example.com/rose.jpg">'
+          '<img src="data:image/png;base64,AAAA">'
+          '<a href="shop.html">Shop</a><script src="app.js"></script>';
+      expect(use(page), page);
+      expect(
+          HtmlArtifact.withAssets('<img src="pink.jpg">', const <PageAsset>[]),
+          '<img src="pink.jpg">');
+    });
+  });
 }
