@@ -209,6 +209,30 @@ cat > index.html <<'HTML'
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <script>
+    // The app's server, connected to while the app itself is still
+    // loading. It was first contacted only once main.dart.js had run, so
+    // every open paid for the DNS lookup, the TCP and the TLS handshakes
+    // (several round trips on a phone) after the engine was ready, before
+    // any of the sixteen reads could start. The address is the one the
+    // app saved (shared_preferences keeps it under flutter.<key>, as JSON).
+    // anonymous: the app's reads are CORS without cookies, and only a
+    // connection opened that way is the one they reuse.
+    (function () {
+      try {
+        var saved = localStorage.getItem('flutter.shift-backend');
+        var base = saved && JSON.parse(saved);
+        if (typeof base !== 'string' || !base) return;
+        var origin = new URL(base, location.href).origin;
+        if (origin === location.origin) return;
+        var link = document.createElement('link');
+        link.rel = 'preconnect';
+        link.href = origin;
+        link.crossOrigin = 'anonymous';
+        document.head.appendChild(link);
+      } catch (e) { /* no saved server, or storage blocked */ }
+    })();
+  </script>
   <meta name="description" content="ShiftAi — the creator suite: chat, earnings, vault, trophies, notes, agents.">
   <!--
     The live theme-color tag is what Chrome reads, in real time, for the
