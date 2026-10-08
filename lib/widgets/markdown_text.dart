@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../theme/tokens.dart';
 import '../theme/type.dart';
+import 'html_artifact.dart';
 import 'made_preview.dart';
 
 /// A reply as the model wrote it: Markdown, drawn in the app's own type.
@@ -118,8 +119,15 @@ class MarkdownText extends StatelessWidget {
         );
       case MdRule():
         return Divider(height: Space.x3, color: c.border);
-      case MdCode(:final String code):
-        return _CodeBlock(code: code);
+      case MdCode(:final String code, :final String lang, :final bool closed):
+        // A web page is shown as the page; while it is still being written
+        // it says so, rather than streaming its source past.
+        if (HtmlArtifact.isPage(code, lang)) {
+          return closed
+              ? HtmlArtifact(html: code)
+              : HtmlArtifactBuilding(code: code);
+        }
+        return CodeBlock(code: code);
       case MdImage(:final String url, :final String alt):
         return _Picture(url: url, alt: alt);
     }
@@ -199,8 +207,8 @@ class MarkdownText extends StatelessWidget {
 
 /// A code block: the source as written, scrolled sideways rather than
 /// wrapped, with its own Copy.
-class _CodeBlock extends StatelessWidget {
-  const _CodeBlock({required this.code});
+class CodeBlock extends StatelessWidget {
+  const CodeBlock({required this.code, super.key});
 
   final String code;
 
@@ -266,7 +274,11 @@ sealed class MdBlock {
   static final RegExp _bullet = RegExp(r'^(\s*)[-*+]\s+(.*)$');
   static final RegExp _ordered = RegExp(r'^(\s*)(\d{1,3})[.)]\s+(.*)$');
   static final RegExp _quote = RegExp(r'^\s{0,3}>\s?(.*)$');
-  static final RegExp _fence = RegExp(r'^\s{0,3}(```|~~~)');
+  static final RegExp _fence = RegExp(r'^\s{0,3}(```|~~~)\s*([\w+#.-]*)');
+
+  /// A whole web page given bare, with no fence round it.
+  static final RegExp _page =
+      RegExp(r'^\s*(?:<!doctype\s+html|<html[\s>])', caseSensitive: false);
 
   /// `![alt](url "title")` alone on its line.
   static final RegExp _image = RegExp(
@@ -306,13 +318,31 @@ sealed class MdBlock {
         endParagraph();
         endQuote();
         final String mark = fence.group(1)!;
+        final String lang = (fence.group(2) ?? '').toLowerCase();
         final List<String> code = <String>[];
         i++;
         while (i < lines.length && !lines[i].trimLeft().startsWith(mark)) {
           code.add(lines[i]);
           i++;
         }
-        out.add(MdCode(code.join('\n')));
+        // Still open at the end: a reply being written out as it comes.
+        out.add(MdCode(code.join('\n'), lang: lang, closed: i < lines.length));
+        continue;
+      }
+      if (_page.hasMatch(line)) {
+        endParagraph();
+        endQuote();
+        final List<String> page = <String>[];
+        bool ended = false;
+        while (i < lines.length) {
+          page.add(lines[i]);
+          if (lines[i].toLowerCase().contains('</html>')) {
+            ended = true;
+            break;
+          }
+          i++;
+        }
+        out.add(MdCode(page.join('\n'), lang: 'html', closed: ended));
         continue;
       }
       if (line.trim().isEmpty) {
@@ -412,8 +442,14 @@ class MdRule extends MdBlock {
 }
 
 class MdCode extends MdBlock {
-  const MdCode(this.code);
+  const MdCode(this.code, {this.lang = '', this.closed = true});
   final String code;
+
+  /// The language after the opening fence ("html"), lower case.
+  final String lang;
+
+  /// Whether its closing fence has arrived.
+  final bool closed;
 }
 
 /// A picture in the reply: [url] to draw, [alt] to say what it is.

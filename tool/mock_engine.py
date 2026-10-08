@@ -151,6 +151,14 @@ def answer(body):
     made = make(body, model, history)
     if made is not None:
         return [made]
+    # A page, the way a model should answer "build me a website": one
+    # whole HTML document in an html block, which the chat shows as the
+    # page. On 8 Oct the preview's chat model wrote a brief instead.
+    if re.search(r"\b(website|web ?page|landing page)\b", prompt or "", re.I):
+        return [{"id": f"m{len(history) + 1}", "author": "shift",
+                 "model": model, "modelName": names.get(model, model),
+                 "body": "Here is the page.\n\n```html\n" + PAGE_REPLY +
+                 "\n```\n\nTap it to open it full screen."}]
     asked = ask(body, history)
     if asked is not None:
         asked.update({
@@ -388,6 +396,36 @@ def misbehave(case, n, row, answer):
         UPLOADS[f"nocors-{n}"] = UPLOADS[f"made-{n}"]
         answer["attachment"]["url"] = f"{BASE}/v1/mock/media/nocors-{n}"
     VAULT.insert(0, row)
+
+
+PAGE_REPLY = """<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Petal &amp; Pink</title>
+<style>
+  body { margin: 0; font-family: Georgia, serif; background: #fff5f8; color: #5a2a3c; }
+  header { padding: 48px 24px; text-align: center;
+           background: linear-gradient(135deg, #ffd1dc, #ffe9ef); }
+  h1 { font-size: 40px; margin: 0 0 8px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+          gap: 16px; padding: 24px; }
+  .card { background: white; border-radius: 16px; padding: 16px; text-align: center;
+          box-shadow: 0 4px 14px rgba(200, 80, 120, .15); }
+  button { background: #e75a8c; color: white; border: 0; border-radius: 999px;
+           padding: 10px 18px; font-size: 15px; }
+</style>
+</head>
+<body>
+<header><h1>Petal &amp; Pink</h1><p>Romantic, soft, hand-tied pink flowers.</p></header>
+<section class="grid">
+  <div class="card"><h3>Blush Roses</h3><p>$48</p><button onclick="this.textContent='Added'">Add to basket</button></div>
+  <div class="card"><h3>Peony Cloud</h3><p>$62</p><button onclick="this.textContent='Added'">Add to basket</button></div>
+  <div class="card"><h3>Sweet Pea Posy</h3><p>$36</p><button onclick="this.textContent='Added'">Add to basket</button></div>
+</section>
+</body>
+</html>"""
 
 
 MARKDOWN_REPLY = """### Shot list
