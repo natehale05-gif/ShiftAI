@@ -7,9 +7,9 @@
 #   - Debug symbol maps and the skwasm renderer are dropped; the JS build
 #     only ever loads canvaskit.
 #   - Flutter's own service worker is removed: it served a stale cache.
-#     offline_worker.js replaces it: this build's files from this build's
-#     cache at once, the page from the network if it answers within 2 s
-#     and from its last copy otherwise. A new build clears the old cache.
+#     offline_worker.js replaces it: this build's files and page from this
+#     build's cache at once, the network only for what is not cached yet.
+#     A new build is a new worker, which clears the old cache.
 #     Only the build's own files are cached (listed at the end); the API
 #     and everything else on the origin go straight to the network.
 #   - AssetManifest.bin is copied to a .wasm name and a small shim in
@@ -61,8 +61,8 @@ PY
 cp assets/AssetManifest.bin assets/AssetManifest.bin.wasm
 
 cat > offline_worker.js <<'JS'
-// The app's files come from this build's own cache, straight away; only
-// the page itself asks the network first, and not for long.
+// The app's files, and the page itself, come from this build's own cache,
+// straight away. Only what is not cached yet goes to the network.
 //
 // It used to be network first for everything, with no time limit. Every
 // open waited on the network for all ~3.8 MB (CanvasKit, main.dart.js,
@@ -97,8 +97,6 @@ cat > offline_worker.js <<'JS'
 var BUILD = '__BUILD_ID__';
 var FILES = new Set(__FILES__);
 var KEEP = 'shiftai-' + BUILD;
-// How long the page waits on the network before opening on its last copy.
-var PAGE_WAIT_MS = 2000;
 
 self.addEventListener('install', function () { self.skipWaiting(); });
 self.addEventListener('activate', function (event) {
@@ -163,28 +161,26 @@ function fromBuild(req) {
   });
 }
 
-// The page: the network if it answers within PAGE_WAIT_MS, else the last
-// copy, so a new build is picked up when the signal allows and the app
-// still opens when it does not.
+// The page: this build's copy at once, the network only when there is
+// none yet. A build's page never changes (it is the build), so there is
+// nothing newer to wait for here. It used to ask the network first and
+// wait up to 2 s on every open, which on a weak signal was 2 s of loading
+// screen before a copy that was sitting in the cache all along. A new
+// build arrives as a new worker: the browser checks for one on every
+// open, the page polls build_id.txt, and the page reloads once when the
+// new worker takes over; its cache starts empty, so that open is from the
+// network.
 function page(req) {
   return caches.open(KEEP).then(function (cache) {
-    var network = fresh(req).then(function (res) { return keep(cache, req, res); });
-    var cached = cache.match(req, { ignoreSearch: true }).then(function (hit) {
+    return cache.match(req, { ignoreSearch: true }).then(function (hit) {
       return hit || cache.match('./', { ignoreSearch: true });
     }).then(function (hit) {
       return hit || cache.match('index.html', { ignoreSearch: true });
+    }).then(function (hit) {
+      return hit || fresh(req).then(function (res) {
+        return keep(cache, req, res);
+      });
     });
-    var late = new Promise(function (resolve) {
-      setTimeout(function () {
-        cached.then(function (hit) { if (hit) resolve(hit); });
-      }, PAGE_WAIT_MS);
-    });
-    return Promise.race([
-      network.catch(function () {
-        return cached.then(function (hit) { return hit || Response.error(); });
-      }),
-      late,
-    ]);
   });
 }
 
