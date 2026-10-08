@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -6,6 +7,41 @@ import '../theme/type.dart';
 import '../util/html_frame.dart';
 import 'markdown_text.dart' show CodeBlock;
 import 'spinner.dart';
+
+/// A picture made in this chat, by the name the chat shows and where it
+/// really is.
+@immutable
+class PageAsset {
+  const PageAsset(this.name, this.url);
+
+  final String name;
+  final String url;
+
+  @override
+  bool operator ==(Object other) =>
+      other is PageAsset && other.name == name && other.url == url;
+
+  @override
+  int get hashCode => Object.hash(name, url);
+}
+
+/// The pictures made in the thread, oldest first, for the pages in it to
+/// use. A model asked for a page "using that pink flower image" knows the
+/// picture by its file name, or by the suite.shiftai.club/r/… link drawn
+/// on it, rarely by where the file is; the page drew a blank where the
+/// picture should have been.
+class PageAssets extends InheritedWidget {
+  const PageAssets({required this.assets, required super.child, super.key});
+
+  final List<PageAsset> assets;
+
+  static List<PageAsset> of(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<PageAssets>()?.assets ??
+      const <PageAsset>[];
+
+  @override
+  bool updateShouldNotify(PageAssets old) => !listEquals(old.assets, assets);
+}
 
 /// A web page a model wrote, shown as the page: a live preview in the
 /// thread, full screen on a tap, and its code to copy or save.
@@ -58,6 +94,69 @@ class HtmlArtifact extends StatefulWidget {
       .replaceAll('&nbsp;', ' ')
       .replaceAll('&amp;', '&');
 
+  /// [html] with the chat's pictures where it points at them.
+  ///
+  /// A reference (an `src`, a `poster`, a CSS `url(...)`) that names one
+  /// of [assets] by file name, or by the id in it ("1c97aaa8", which the
+  /// picture's own link carries), becomes that picture's address. A bare
+  /// picture file the chat has no picture by ("pink-flower.jpg", on no
+  /// server) is the newest picture: the one the page was asked to use.
+  /// Addresses that are already real, and `data:` pictures, are left be.
+  static String withAssets(String html, List<PageAsset> assets) {
+    if (assets.isEmpty) return html;
+    String? real(String ref) {
+      final String r = ref.trim();
+      if (r.isEmpty || r.startsWith('data:') || r.startsWith('#')) {
+        return null;
+      }
+      if (assets.any((PageAsset a) => a.url == r)) return null;
+      final String low = r.toLowerCase();
+      for (final PageAsset a in assets.reversed) {
+        if (_namesOf(a.name).any(low.contains)) return a.url;
+      }
+      final bool relative = !RegExp(
+        r'^(?:[a-z][a-z0-9+.-]*:|//)',
+        caseSensitive: false,
+      ).hasMatch(r);
+      final bool picture = RegExp(
+        r'\.(?:png|jpe?g|webp|gif|avif)(?:[?#].*)?$',
+        caseSensitive: false,
+      ).hasMatch(r);
+      return relative && picture ? assets.last.url : null;
+    }
+
+    return html.replaceAllMapped(
+      RegExp(
+        r'''(\b(?:src|poster)\s*=\s*)(["'])(.*?)\2''',
+        caseSensitive: false,
+      ),
+      (Match m) {
+        final String? to = real(m.group(3)!);
+        return to == null ? m.group(0)! : '${m[1]}${m[2]}$to${m[2]}';
+      },
+    ).replaceAllMapped(
+      RegExp(r'''url\(\s*(["']?)([^"')]*)\1\s*\)''', caseSensitive: false),
+      (Match m) {
+        final String? to = real(m.group(2)!);
+        return to == null ? m.group(0)! : "url('$to')";
+      },
+    );
+  }
+
+  /// What a picture can be named by in a page: its file name, that
+  /// without the extension, and the id in it.
+  static List<String> _namesOf(String fileName) {
+    final String name = fileName.trim().toLowerCase();
+    final int dot = name.lastIndexOf('.');
+    final String stem = dot > 0 ? name.substring(0, dot) : name;
+    return <String>[
+      if (name.length >= 6) name,
+      if (stem.length >= 6) stem,
+      for (final Match m in RegExp(r'[0-9a-f]{6,}').allMatches(stem))
+        if (RegExp(r'[0-9]').hasMatch(m.group(0)!)) m.group(0)!,
+    ];
+  }
+
   /// A name to save it under: the title, made safe for a file.
   static String fileNameOf(String html) {
     final String slug = titleOf(html)
@@ -72,26 +171,31 @@ class HtmlArtifact extends StatefulWidget {
 }
 
 class _HtmlArtifactState extends State<HtmlArtifact> {
+  /// The page as shown, copied and saved: with the chat's pictures in it.
+  String get _page => HtmlArtifact.withAssets(
+        widget.html,
+        PageAssets.of(context),
+      );
+
   bool _showCode = false;
 
   /// Off the web there is no preview, so the code shows unless hidden.
   bool get _codeShown => _showCode != !canShowHtml;
 
   void _copy() {
-    Clipboard.setData(ClipboardData(text: widget.html));
+    Clipboard.setData(ClipboardData(text: _page));
     ScaffoldMessenger.maybeOf(context)?.showSnackBar(
       const SnackBar(content: Text('Page code copied')),
     );
   }
 
-  void _download() =>
-      downloadHtml(HtmlArtifact.fileNameOf(widget.html), widget.html);
+  void _download() => downloadHtml(HtmlArtifact.fileNameOf(widget.html), _page);
 
   void _open() => Navigator.of(context).push<void>(
         MaterialPageRoute<void>(
           fullscreenDialog: true,
           builder: (BuildContext _) => _PageScreen(
-            html: widget.html,
+            html: _page,
             onCopy: _copy,
             onDownload: _download,
           ),
@@ -152,7 +256,7 @@ class _HtmlArtifactState extends State<HtmlArtifact> {
                 child: SizedBox(
                   height: 380,
                   child: AbsorbPointer(
-                    child: htmlFrame(widget.html, interactive: false),
+                    child: htmlFrame(_page, interactive: false),
                   ),
                 ),
               ),
@@ -208,7 +312,7 @@ class _HtmlArtifactState extends State<HtmlArtifact> {
                 Space.x3,
                 Space.x3,
               ),
-              child: CodeBlock(code: widget.html),
+              child: CodeBlock(code: _page),
             ),
         ],
       ),
