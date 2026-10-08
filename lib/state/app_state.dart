@@ -272,6 +272,7 @@ class AppState extends ChangeNotifier {
     Backend? engine,
     TokenStore? tokenStore,
     Duration firstScreenBudget = const Duration(seconds: 3),
+    Duration cachedScreenBudget = const Duration(milliseconds: 600),
   }) async {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     Map<String, dynamic> blob = <String, dynamic>{};
@@ -314,8 +315,17 @@ class AppState extends ChangeNotifier {
       snapshot = emptySnapshot();
     } else {
       final Future<ShiftSnapshot> loading = repo.load();
+      // With this account's last session on the device, there is
+      // something real to open on, so the wait for the engine is short:
+      // a slow server used to hold the loading screen for the full 3 s on
+      // every open with the last copy sitting here. A server that answers
+      // within it opens on fresh data with no swap.
+      final String me = backend.auth.creator?.email ?? '';
+      final bool haveCopy =
+          !seeded && me.isNotEmpty && blob['account'] == me;
       try {
-        snapshot = await loading.timeout(firstScreenBudget);
+        snapshot = await loading
+            .timeout(haveCopy ? cachedScreenBudget : firstScreenBudget);
       } on TimeoutException {
         pending = loading;
         snapshot = emptySnapshot();
