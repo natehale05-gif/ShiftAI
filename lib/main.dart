@@ -8,6 +8,7 @@ import 'app/app.dart';
 import 'state/app_state.dart';
 import 'theme/tokens.dart';
 import 'theme/type.dart';
+import 'util/startup_mark.dart';
 import 'widgets/common.dart';
 import 'widgets/spinner.dart';
 
@@ -53,7 +54,12 @@ class _ShiftBootState extends State<ShiftBoot> {
     return FutureBuilder<AppState>(
       future: _state,
       builder: (BuildContext context, AsyncSnapshot<AppState> snap) {
-        if (snap.hasData) return ShiftApp(state: snap.data!);
+        if (snap.hasData) {
+          // Timed from outside: when real content first reaches the screen.
+          WidgetsBinding.instance
+              .addPostFrameCallback((_) => markStartupReady());
+          return ShiftApp(state: snap.data!);
+        }
         // load() answers even when the engine refuses, so an error here is
         // the store itself failing — a corrupt preferences file, say.
         return _BootScreen(error: snap.error);

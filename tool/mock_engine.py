@@ -43,6 +43,9 @@ MODELS_LATE = float(os.environ.get("MOCK_MODELS_LATE", "0"))
 # an edit and ignores the picture sent with it, as the preview did on
 # 7 Oct ("make one of the petals blue" came back as a different flower).
 EDITS_IGNORED = os.environ.get("MOCK_EDITS", "") == "ignore"
+# MOCK_DELAY_MS=2500: every GET under /v1 answers that much later, like a
+# server relaying each read to the Suite, to time how the app opens.
+DELAY = float(os.environ.get("MOCK_DELAY_MS", "0")) / 1000
 _models_late_done = []
 BASE = "http://127.0.0.1:8111"
 
@@ -452,6 +455,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = self.path.split("?")[0]
+        if DELAY and path.startswith("/v1/") and \
+                not path.startswith("/v1/mock/"):
+            time.sleep(DELAY)
         if path == "/v1/league":
             return self._send(200, league_placement() if LOCATION["set"] else {})
         if path == "/v1/threads":
