@@ -142,6 +142,35 @@ abstract final class ModelRouter {
     'proofread',
   ]);
 
+  /// Something built, not drawn or written: a website, a page. "put this
+  /// into a website about pink flowers", straight after a picture, read
+  /// as a change to the picture ("put") and went to the image model, which
+  /// drew more flowers. It goes to a model that writes code, or the
+  /// general one, with the picture in the conversation.
+  static final RegExp _build = _words(<String>[
+    'website',
+    'websites',
+    'web site',
+    'webpage',
+    'web page',
+    'landing page',
+    'homepage',
+    'home page',
+    'web app',
+    'html',
+    'css',
+    'react',
+  ]);
+
+  /// The built thing named only as what something else is for: "a logo
+  /// for my website" is still a picture.
+  static final RegExp _buildItIsFor = RegExp(
+    r'\b(?:for|on|of|from|to)\s+(?:my|our|your|the|a|an|this|that|his|her|their)'
+    r'\s+(?:new\s+)?(?:website|web site|webpage|web page|landing page|homepage|'
+    r'home page|web app)\b',
+    caseSensitive: false,
+  );
+
   /// A piece of text, whatever it is for: "make me a caption for the
   /// video" is writing, as is a script, lyrics or a title, and so is a
   /// plan for one: a shot list, an outline, ideas. "Give me a shot list
@@ -232,6 +261,9 @@ abstract final class ModelRouter {
   /// nothing is asked to be written: "make a video of Miami" is a video,
   /// "a poster for Friday" is an image, "describe this photo" is writing.
   static TaskKind? kindOf(String prompt) {
+    if (_build.hasMatch(prompt.replaceAll(_buildItIsFor, ''))) {
+      return TaskKind.code;
+    }
     if (_text.hasMatch(prompt)) return TaskKind.writing;
     final bool makes = _make.hasMatch(prompt);
     final bool writes = _write.hasMatch(prompt);
