@@ -176,6 +176,14 @@ The list is read again first, under its own URL (a browser holds a second
 GET for a URL behind the first), and the refusal names the models the
 server listed, or why the list did not load.
 
+A made file is drawn, played or shown by what it is: the answer's
+`mediaType`/`kind`/MIME type or its file's extension, else its vault
+row's `mediaType`, else the model that made it (a model that only makes
+audio made a track). "kind": "image" alone proves nothing, since the
+contract's kind was image or video. A song from SHIFT Music was drawn as
+a picture that "did not load" on 8 Oct; it now plays in the thread.
+`mock-music` on the mock makes a real WAV.
+
 A made picture in the chat tries every link it has (the answer's `url`,
 the vault row's `mediaUrl`, then the thumbnails the vault itself draws)
 and re-reads the vault for up to 45 s for a row saved after the answer.
@@ -226,6 +234,6 @@ exploratory, branch.
 flutter analyze && flutter test
 ```
 
-390 tests. They have caught every regression listed above at least once,
+395 tests. They have caught every regression listed above at least once,
 including several of mine. If one fails, read it before changing it —
 twice now the test was right and my expectation was wrong.

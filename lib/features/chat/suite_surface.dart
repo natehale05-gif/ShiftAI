@@ -15,6 +15,7 @@ import '../../widgets/made_preview.dart';
 import '../../widgets/markdown_text.dart';
 import '../../widgets/spinner.dart';
 import '../vault/eco_feed.dart' show sharePiece;
+import '../vault/media_player.dart' show AudioPiece;
 import 'failure_card.dart';
 import '../../widgets/alert.dart';
 
@@ -846,7 +847,12 @@ class ArtifactCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final AppState state = AppScope.of(context);
     final ShiftColors c = ShiftColors.of(context);
-    final bool video = attachment.kind == MediaKind.video;
+    // A song is played, a picture or a video's still is drawn, anything
+    // else is its card. A song used to be drawn as a picture: "The picture
+    // did not load".
+    final MediaType type = state.madeTypeOf(attachment);
+    final bool video = type == MediaType.video;
+    final bool drawn = type == MediaType.image || video;
 
     // With the Vault switched off there is nowhere for this to go, and a
     // button that silently returns you to Suite is worse than no button.
@@ -866,8 +872,10 @@ class ArtifactCard extends StatelessWidget {
     // the end of it.
     final VaultItem? row = state.vaultRowOf(attachment);
     final List<String> pictures = <String>{
-      if (!video) ...<String?>[attachment.url, row?.mediaUrl].nonNulls,
-      ...<String?>[attachment.thumbnailUrl, row?.thumbnailUrl].nonNulls,
+      if (type == MediaType.image)
+        ...<String?>[attachment.url, row?.mediaUrl].nonNulls,
+      if (drawn)
+        ...<String?>[attachment.thumbnailUrl, row?.thumbnailUrl].nonNulls,
     }.toList();
 
     final Widget thumb = Container(
@@ -879,7 +887,12 @@ class ArtifactCard extends StatelessWidget {
         border: Border.all(color: c.borderStrong),
       ),
       child: Icon(
-        video ? Icons.play_arrow_rounded : Icons.image_outlined,
+        switch (type) {
+          MediaType.video => Icons.play_arrow_rounded,
+          MediaType.audio => Icons.music_note_rounded,
+          MediaType.document => Icons.description_outlined,
+          MediaType.image => Icons.image_outlined,
+        },
         size: 18,
         color: c.sky,
       ),
@@ -955,6 +968,61 @@ class ArtifactCard extends StatelessWidget {
       ),
     );
 
+    // What it is, in the lines said while it is looked for.
+    final String thing = switch (type) {
+      MediaType.audio => 'track',
+      MediaType.video => 'video',
+      MediaType.document => 'file',
+      MediaType.image => 'picture',
+    };
+
+    // A track: played here, where it was made, as in the vault.
+    final String? track =
+        type == MediaType.audio ? attachment.url ?? row?.mediaUrl : null;
+    if (track != null) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 520),
+            child: ClipRRect(
+              borderRadius: Radii.lgAll,
+              child: SizedBox(
+                height: 168,
+                child: AudioPiece(
+                  url: track,
+                  title: row?.title ?? attachment.fileName,
+                  seed: row?.id ?? attachment.fileName,
+                  thumbnailUrl: attachment.thumbnailUrl ?? row?.thumbnailUrl,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: Space.x1),
+          Wrap(
+            children: <Widget>[
+              if (row != null)
+                Builder(
+                  builder: (BuildContext anchor) => _MessageAction(
+                    icon: Icons.ios_share_rounded,
+                    label: 'Share',
+                    color: c.textMuted,
+                    onPressed: () => sharePiece(anchor, row),
+                  ),
+                ),
+              if (canOpen)
+                _MessageAction(
+                  icon: Icons.library_music_outlined,
+                  label: 'Open in Vault',
+                  color: c.textMuted,
+                  onPressed: open,
+                ),
+            ],
+          ),
+        ],
+      );
+    }
+
     final ChatMessage? reply = replyId == null
         ? null
         : state.messages.where((ChatMessage m) => m.id == replyId).firstOrNull;
@@ -974,7 +1042,7 @@ class ArtifactCard extends StatelessWidget {
                   const SizedBox(width: Space.x2),
                   Expanded(
                     child: Text(
-                      'Getting the picture from your vault…',
+                      'Getting the $thing from your vault…',
                       style: ShiftType.caption(c.textMuted),
                     ),
                   ),
@@ -990,7 +1058,7 @@ class ArtifactCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
                   Text(
-                    "The picture hasn't reached your vault yet. It may "
+                    "The $thing hasn't reached your vault yet. It may "
                     'still be on its way.',
                     style: ShiftType.caption(c.textMuted),
                   ),
@@ -1034,7 +1102,9 @@ class ArtifactCard extends StatelessWidget {
         // on, or open it with everything else in the vault.
         Wrap(
           children: <Widget>[
-            if (!video && replyId != null && !state.chatNeedsSignIn)
+            if (type == MediaType.image &&
+                replyId != null &&
+                !state.chatNeedsSignIn)
               _MessageAction(
                 icon: editingThis
                     ? Icons.check_rounded

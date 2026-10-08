@@ -114,6 +114,8 @@ MODELS = [
      "bestFor": ["video"]},
     {"id": "mock-image", "name": "Mock Image", "provider": "Mock",
      "bestFor": ["image"]},
+    {"id": "mock-music", "name": "Mock Music", "provider": "Mock",
+     "bestFor": ["audio"]},
 ]
 
 MODELS_BY_ID = {m["id"]: m["name"] for m in MODELS}
@@ -235,9 +237,12 @@ def make(body, model, history):
     so the app's "Open in Vault" has something to open. There is no real
     file behind it; the vault draws its seeded art for a row without one.
     """
-    kind = {"mock-image": "image", "mock-video": "video"}.get(model)
+    kind = {"mock-image": "image", "mock-video": "video",
+            "mock-music": "audio"}.get(model)
     if kind is None:
         return None
+    if kind == "audio":
+        return make_track(body, model, history)
     n = _next_id[0]
     _next_id[0] += 1
     prompt = (body.get("prompt") or "").strip()
@@ -285,6 +290,57 @@ def make(body, model, history):
     }
     misbehave(made_case(prompt), n, row, answer)
     return answer
+
+
+def tone_wav(seconds=3.0, hz=440.0, rate=22050):
+    """A made "song": a few seconds of a soft tone, as a real WAV."""
+    import io
+    import math
+    import struct
+    import wave
+    out = io.BytesIO()
+    with wave.open(out, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(rate)
+        frames = bytearray()
+        for i in range(int(seconds * rate)):
+            fade = min(1.0, i / 2000, (seconds * rate - i) / 2000)
+            v = 0.3 * fade * math.sin(2 * math.pi * hz * i / rate)
+            frames += struct.pack("<h", int(v * 32767))
+        w.writeframes(bytes(frames))
+    return out.getvalue()
+
+
+def make_track(body, model, history):
+    """What a music model answers with: a track in the vault.
+
+    The vault row says what the file is (mediaType "audio"; kind stays
+    "image" as in the contract's first draft) and the answer calls it
+    "audio". On 8 Oct SHIFT Music's "country song" was drawn by the chat
+    as a picture that "did not load".
+    """
+    n = _next_id[0]
+    _next_id[0] += 1
+    prompt = (body.get("prompt") or "").strip()
+    UPLOADS[f"song-{n}"] = (tone_wav(), "audio/wav")
+    url = f"{BASE}/v1/mock/media/song-{n}"
+    row = {
+        "id": f"v{n}", "title": prompt[:60] or "Untitled", "kind": "image",
+        "mediaType": "audio", "prompt": prompt, "model": MODELS_BY_ID[model],
+        "createdAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "credits": 6, "aspect": 1.0, "published": False,
+        "durationSeconds": 3, "mediaUrl": url,
+    }
+    VAULT.insert(0, row)
+    return {
+        "id": f"m{len(history) + 1}", "author": "shift", "model": model,
+        "modelName": MODELS_BY_ID[model], "eyebrow": "ShiftAi · Music",
+        "body": "Instrumental track",
+        "attachment": {"fileName": f"track-{n}.wav", "kind": "audio",
+                       "meta": "0:03 · 6 CREDITS", "vaultItemId": row["id"],
+                       "url": url},
+    }
 
 
 # The ways a real engine has handed back a made picture that the chat

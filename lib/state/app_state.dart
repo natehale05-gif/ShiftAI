@@ -771,7 +771,7 @@ class AppState extends ChangeNotifier {
   bool editNotConfirmed(ChatMessage reply) {
     final MessageAttachment? made = reply.attachment;
     if (made == null ||
-        made.kind != MediaKind.image ||
+        madeTypeOf(made) != MediaType.image ||
         made.editedFrom != null) {
       return false;
     }
@@ -780,16 +780,49 @@ class AppState extends ChangeNotifier {
         false;
   }
 
+  /// What a made file is: what the answer says, or, when the answer says
+  /// no more than "image" by default, what its vault row says. A song the
+  /// answer did not label is audio by its row.
+  MediaType madeTypeOf(MessageAttachment a, {ChatMessage? reply}) {
+    final MediaType? said = a.evidentType;
+    if (said != null) return said;
+    final MediaType? row = vaultRowOf(a)?.mediaType;
+    if (row != null && row != MediaType.image) return row;
+    // Nothing says what it is: a model that only makes audio made a
+    // track, one that only makes video made a video. SHIFT Music's
+    // "country song" was drawn as a picture that did not load.
+    final ChatMessage? by = reply ??
+        messages.where((ChatMessage m) => m.attachment == a).firstOrNull;
+    final Set<TaskKind> makes = chatModels
+            .where((ChatModel m) => m.id == by?.model)
+            .firstOrNull
+            ?.bestFor ??
+        const <TaskKind>{};
+    if (!makes.contains(TaskKind.image)) {
+      if (makes.contains(TaskKind.audio)) return MediaType.audio;
+      if (makes.contains(TaskKind.video)) return MediaType.video;
+    }
+    return MediaType.image;
+  }
+
   SentFile? madeFileOf(ChatMessage m) {
     final MessageAttachment? a = m.attachment;
     if (a == null) return null;
     final VaultItem? row = vaultRowOf(a);
     if (row == null && a.vaultItemId.isEmpty && a.url == null) return null;
-    final bool video = a.kind == MediaKind.video;
+    final String name = a.fileName.toLowerCase();
     return SentFile.made(
       vaultItemId: row?.id ?? a.vaultItemId,
       name: a.fileName,
-      mimeType: video ? 'video/mp4' : 'image/png',
+      mimeType: switch (madeTypeOf(a)) {
+        MediaType.video => 'video/mp4',
+        MediaType.audio when name.endsWith('.wav') => 'audio/wav',
+        MediaType.audio when name.endsWith('.m4a') => 'audio/mp4',
+        MediaType.audio => 'audio/mpeg',
+        MediaType.document when name.endsWith('.pdf') => 'application/pdf',
+        MediaType.document => 'application/octet-stream',
+        MediaType.image => 'image/png',
+      },
       url: a.url ?? row?.mediaUrl ?? a.thumbnailUrl ?? row?.thumbnailUrl,
     );
   }
@@ -828,7 +861,8 @@ class AppState extends ChangeNotifier {
         .lastOrNull;
     if (last == null ||
         last.attachment == null ||
-        last.attachment!.kind != MediaKind.image ||
+        // A picture: a song or a video is not changed by "make it brighter".
+        madeTypeOf(last.attachment!) != MediaType.image ||
         last.attachment!.vaultItemId.isEmpty) {
       return null;
     }
