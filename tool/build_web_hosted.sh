@@ -98,7 +98,43 @@ var BUILD = '__BUILD_ID__';
 var FILES = new Set(__FILES__);
 var KEEP = 'shiftai-' + BUILD;
 
-self.addEventListener('install', function () { self.skipWaiting(); });
+// A new build's worker fetches, before it takes over, the files this
+// device was using from the last build (the old cache lists them: the
+// page, flutter_bootstrap.js, main.dart.js, the CanvasKit this browser
+// loads, the fonts), so the reload onto the new build opens from the
+// cache. It used to take over at once with an empty cache: the page
+// reloaded and downloaded the whole build (~3 MB) in front of a loading
+// screen, and every return to the tab meanwhile reloaded the old build
+// again. Measured on a 2 Mbps link: 12 page loads and 20.7 s before the
+// new build was in use. A file that will not come is left for the page
+// to fetch when it asks; nothing here holds the install up for good.
+self.addEventListener('install', function (event) {
+  event.waitUntil(caches.keys().then(function (names) {
+    var older = names.filter(function (name) {
+      return name.indexOf('shiftai') === 0 && name !== KEEP;
+    });
+    return Promise.all(older.map(function (name) {
+      return caches.open(name).then(function (cache) { return cache.keys(); });
+    }));
+  }).then(function (lists) {
+    var wanted = {};
+    lists.forEach(function (requests) {
+      requests.forEach(function (req) {
+        var rel = ours(req.url);
+        if (rel !== null && (rel === '' || FILES.has(rel))) {
+          wanted[req.url.split('?')[0].split('#')[0]] = true;
+        }
+      });
+    });
+    return caches.open(KEEP).then(function (cache) {
+      return Promise.all(Object.keys(wanted).map(function (u) {
+        return fresh(u).then(function (res) {
+          if (res && res.ok) return cache.put(u, res);
+        }).catch(function () {});
+      }));
+    });
+  }).catch(function () {}).then(function () { return self.skipWaiting(); }));
+});
 self.addEventListener('activate', function (event) {
   event.waitUntil(caches.keys().then(function (names) {
     return Promise.all(names.map(function (name) {
@@ -363,6 +399,64 @@ cat > index.html <<'HTML'
       var boot = document.getElementById('boot');
       if (boot) { boot.remove(); }
     });
+    // A loading screen that has gone on too long says so, and then offers
+    // a way out: "Start fresh" forgets this browser's saved copy of the
+    // app (the offline worker and its cache, never the account) and loads
+    // it again from the network. Whatever has wedged a load, a person is
+    // not left looking at the logo with nothing to do.
+    (function () {
+      function note(text, fresh) {
+        var boot = document.getElementById('boot');
+        if (!boot) return;
+        var line = document.getElementById('boot-note');
+        if (!line) {
+          boot.style.flexDirection = 'column';
+          line = document.createElement('div');
+          line.id = 'boot-note';
+          line.style.cssText = 'margin-top:20px;font:14px -apple-system,' +
+            'system-ui,sans-serif;opacity:.7;text-align:center;padding:0 24px';
+          boot.appendChild(line);
+        }
+        line.textContent = text;
+        if (fresh && !document.getElementById('boot-fresh')) {
+          var b = document.createElement('button');
+          b.id = 'boot-fresh';
+          b.textContent = 'Start fresh';
+          b.style.cssText = 'margin-top:14px;padding:10px 18px;border-radius:999px;' +
+            'border:1px solid currentColor;background:transparent;color:inherit;' +
+            'font:600 15px -apple-system,system-ui,sans-serif';
+          b.onclick = function () {
+            b.disabled = true;
+            var sw = navigator.serviceWorker;
+            var forget = sw && sw.getRegistrations
+              ? sw.getRegistrations().then(function (regs) {
+                  return Promise.all(regs.map(function (r) { return r.unregister(); }));
+                })
+              : Promise.resolve();
+            forget.then(function () {
+              return window.caches ? caches.keys().then(function (names) {
+                return Promise.all(names.filter(function (n) {
+                  return n.indexOf('shiftai') === 0;
+                }).map(function (n) { return caches.delete(n); }));
+              }) : null;
+            }).catch(function () {}).then(function () { location.reload(); });
+          };
+          boot.appendChild(b);
+        }
+      }
+      // The very first open downloads the whole app (~3 MB), which on a
+      // slow line can take this long honestly; starting it again would
+      // only start the download again. Opening from a saved copy cannot.
+      var saved = !!(navigator.serviceWorker && navigator.serviceWorker.controller);
+      setTimeout(function () { note('Still loading…', false); }, 10000);
+      setTimeout(function () {
+        if (saved) {
+          note('This is taking longer than it should.', true);
+        } else {
+          note('Still loading. The first open downloads the app.', false);
+        }
+      }, 20000);
+    })();
   </script>
   <script>
     // Offline, and fast. The worker serves this build's files from its
@@ -412,13 +506,28 @@ cat > index.html <<'HTML'
     // keep running whatever it first loaded, forever — reload it whenever
     // the id this page booted with no longer matches the one on the
     // server, which a fresh build always rewrites.
+    //
+    // With the offline worker, a new build is the worker's to fetch: it is
+    // asked to look now, and the page reloads (controllerchange, above)
+    // once the new build is saved. Reloading here instead reopened the old
+    // build from the old worker's cache, every time the tab came back,
+    // until the new one had finished downloading. Only a browser with no
+    // worker reloads.
     (function () {
       var BUILD_ID = '__BUILD_ID__';
       function checkForUpdate() {
         fetch('build_id.txt', { cache: 'no-store' })
           .then(function (r) { return r.text(); })
           .then(function (id) {
-            if (id.trim() && id.trim() !== BUILD_ID) { window.location.reload(); }
+            if (!id.trim() || id.trim() === BUILD_ID) return;
+            var sw = navigator.serviceWorker;
+            if (sw && sw.controller) {
+              sw.getRegistration().then(function (reg) {
+                if (reg) reg.update().catch(function () {});
+              });
+            } else {
+              window.location.reload();
+            }
           })
           .catch(function () { /* offline, or unreachable — try again next time */ });
       }
