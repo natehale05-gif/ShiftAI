@@ -155,9 +155,15 @@ def answer(body):
     # whole HTML document in an html block, which the chat shows as the
     # page. On 8 Oct the preview's chat model wrote a brief instead.
     if re.search(r"\b(website|web ?page|landing page)\b", prompt or "", re.I):
+        # After a picture, the way the preview's model did on 8 Oct: the
+        # picture as the hero's background, by a name it made up, with
+        # white words over it. The app puts the real picture there.
+        pictured = any(f.get("vaultItemId") for t in history
+                       for f in t.get("attachments") or [])
+        page = PAGE_HERO if pictured else PAGE_REPLY
         return [{"id": f"m{len(history) + 1}", "author": "shift",
                  "model": model, "modelName": names.get(model, model),
-                 "body": "Here is the page.\n\n```html\n" + PAGE_REPLY +
+                 "body": "Here is the page.\n\n```html\n" + page +
                  "\n```\n\nTap it to open it full screen."}]
     asked = ask(body, history)
     if asked is not None:
@@ -423,6 +429,33 @@ PAGE_REPLY = """<!doctype html>
   <div class="card"><h3>Blush Roses</h3><p>$48</p><button onclick="this.textContent='Added'">Add to basket</button></div>
   <div class="card"><h3>Peony Cloud</h3><p>$62</p><button onclick="this.textContent='Added'">Add to basket</button></div>
   <div class="card"><h3>Sweet Pea Posy</h3><p>$36</p><button onclick="this.textContent='Added'">Add to basket</button></div>
+</section>
+</body>
+</html>"""
+
+
+PAGE_HERO = """<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bloom &amp; Co. Florist</title>
+<style>
+  body { margin: 0; font-family: Georgia, serif; }
+  .hero { min-height: 100vh; display: flex; flex-direction: column;
+          align-items: center; justify-content: center; text-align: center;
+          color: white; text-shadow: 0 2px 12px rgba(0, 0, 0, .45);
+          background: url('pink-flower.jpg') center / cover no-repeat; }
+  h1 { font-size: 56px; margin: 0; }
+  a { margin-top: 24px; background: #e75a8c; color: white; padding: 12px 22px;
+      border-radius: 999px; text-decoration: none; text-shadow: none; }
+</style>
+</head>
+<body>
+<section class="hero">
+  <h1>Bloom &amp; Co.</h1>
+  <p>Fresh flowers, delivered with care.</p>
+  <a href="#shop">Shop Now</a>
 </section>
 </body>
 </html>"""

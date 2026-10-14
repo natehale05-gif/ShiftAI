@@ -11,6 +11,7 @@ import '../../util/haptics.dart';
 import '../../util/model_router.dart';
 import '../../util/picked_file.dart';
 import '../../widgets/common.dart';
+import '../../widgets/html_artifact.dart' show PageAsset, PageAssets;
 import '../../widgets/made_preview.dart';
 import '../../widgets/markdown_text.dart';
 import '../../widgets/spinner.dart';
@@ -133,32 +134,43 @@ class _SuiteSurfaceState extends State<SuiteSurface> {
               ? const _EmptyState()
               : NotificationListener<ScrollMetricsNotification>(
                   onNotification: _onResize,
-                  child: Scrollbar(
-                    controller: _scroll,
-                    child: ListView.separated(
+                  // The pictures made here, for a page asked to use one.
+                  child: PageAssets(
+                    assets: <PageAsset>[
+                      for (final ChatMessage m in state.messages)
+                        if (m.attachment != null &&
+                            state.madeTypeOf(m.attachment!, reply: m) ==
+                                MediaType.image)
+                          if (state.madeFileOf(m)?.url case final String url)
+                            PageAsset(m.attachment!.fileName, url),
+                    ],
+                    child: Scrollbar(
                       controller: _scroll,
-                      padding: const EdgeInsets.fromLTRB(
-                        Space.x5,
-                        Space.x6,
-                        Space.x5,
-                        Space.x5,
+                      child: ListView.separated(
+                        controller: _scroll,
+                        padding: const EdgeInsets.fromLTRB(
+                          Space.x5,
+                          Space.x6,
+                          Space.x5,
+                          Space.x5,
+                        ),
+                        itemCount: count,
+                        separatorBuilder: (_, __) =>
+                            const SizedBox(height: Space.x5),
+                        itemBuilder: (BuildContext context, int index) {
+                          final bool last = index == state.messages.length;
+                          return Center(
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 820),
+                              child: !last
+                                  ? _MessageTile(message: state.messages[index])
+                                  : state.thinking
+                                      ? const _Thinking()
+                                      : const _AskAgain(),
+                            ),
+                          );
+                        },
                       ),
-                      itemCount: count,
-                      separatorBuilder: (_, __) =>
-                          const SizedBox(height: Space.x5),
-                      itemBuilder: (BuildContext context, int index) {
-                        final bool last = index == state.messages.length;
-                        return Center(
-                          child: ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 820),
-                            child: !last
-                                ? _MessageTile(message: state.messages[index])
-                                : state.thinking
-                                    ? const _Thinking()
-                                    : const _AskAgain(),
-                          ),
-                        );
-                      },
                     ),
                   ),
                 ),

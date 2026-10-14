@@ -70,6 +70,50 @@ void main() {
         reason: 'the cache is asked first, the network only after');
   });
 
+  test(
+      'a new build is fetched before it takes over, from the list the last '
+      'build kept, so the switch opens from the cache', () {
+    final String worker = _worker();
+    final String install = worker.substring(
+        worker.indexOf("self.addEventListener('install'"),
+        worker.indexOf("self.addEventListener('activate'"));
+    // 12 page loads and 20.7 s on a 2 Mbps link, before: the new worker
+    // took over empty-handed and the page downloaded the build in front
+    // of a loading screen.
+    expect(install, contains('event.waitUntil('));
+    expect(install, contains('caches.keys()'));
+    expect(install, contains("name !== KEEP"));
+    expect(install, contains('fresh(u)'));
+    expect(install.indexOf('self.skipWaiting()'),
+        greaterThan(install.indexOf('cache.put(u, res)')),
+        reason: 'it takes over only once the files are in');
+  });
+
+  test(
+      'the new-build poll asks the worker to update rather than reloading '
+      'the old build again', () {
+    final String script = File('tool/build_web_hosted.sh').readAsStringSync();
+    final String poll = script.substring(
+        script.indexOf('function checkForUpdate()'),
+        script.indexOf("document.addEventListener('visibilitychange'"));
+    expect(poll, contains('reg.update()'));
+    // Only a browser with no worker reloads.
+    expect(poll.indexOf('window.location.reload()'),
+        greaterThan(poll.indexOf('} else {')));
+  });
+
+  test(
+      'a long loading screen says so, and a saved copy that will not open '
+      'can be started fresh', () {
+    final String script = File('tool/build_web_hosted.sh').readAsStringSync();
+    expect(script, contains("note('Still loading…', false)"));
+    expect(script, contains("b.textContent = 'Start fresh';"));
+    expect(script, contains('r.unregister()'));
+    expect(script, contains("n.indexOf('shiftai') === 0"));
+    // Not on a first open, which is a real download.
+    expect(script, contains('if (saved) {'));
+  });
+
   test('the build writes the file list into the worker', () {
     final String script = File('tool/build_web_hosted.sh').readAsStringSync();
     expect(script, contains("js.replace('__FILES__', json.dumps(files))"));

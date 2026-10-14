@@ -82,7 +82,16 @@ once; it used to be network first with no limit (a stalled request meant
 a loading screen for good), then gave the network 2 s for the page on
 every open, which on a weak signal was 2 s of loading screen before a
 copy already cached. A build's page never changes; a new build arrives
-as a new worker and the page reloads once when it takes over. It caches only the build's own files, listed by name at build time:
+as a new worker, which first fetches the files the last build kept (the
+page, main.dart.js, this browser's CanvasKit, fonts) and only then takes
+over; the page reloads once onto it, from the cache. The build_id poll
+asks the worker to update and never reloads while a worker controls the
+page. Before (13 Oct, "the app is taking forever to load"): after each
+deploy the page reloaded onto an empty cache and downloaded the build in
+front of a loading screen, and each return to the tab reloaded the old
+build again; 11.3 s of loading screens on 2 Mbps, now 3.4 s. A loading
+screen past 10 s says so; past 20 s, opening from a saved copy, it
+offers "Start fresh" (unregisters the worker, clears its caches). It caches only the build's own files, listed by name at build time:
 the preview serves the API from the same origin, and a worker that cached
 every GET answered `/v1/vault`, `/v1/avatars` and `/v1/me` from their
 first copy until the next deploy, whoever was signed in. Every fetch the
@@ -190,7 +199,11 @@ bare `<!doctype html>`) is a website card: a live preview in an
 session lives in this origin's storage), full screen on a tap, Copy code
 and Download. Off the web it shows its code. On 8 Oct the preview's chat
 model answered "build a website" with a brief; brief update 5e asks for
-the page.
+the page. A page's references to a picture made in the chat (its file
+name, or the id on its suite link) become the picture's real address,
+and a made-up picture name ("pink-flower.jpg") the newest picture
+(`HtmlArtifact.withAssets`): the first real page drew white words on a
+blank hero.
 
 A made picture in the chat tries every link it has (the answer's `url`,
 the vault row's `mediaUrl`, then the thumbnails the vault itself draws)
@@ -242,6 +255,6 @@ exploratory, branch.
 flutter analyze && flutter test
 ```
 
-400 tests. They have caught every regression listed above at least once,
+406 tests. They have caught every regression listed above at least once,
 including several of mine. If one fails, read it before changing it —
 twice now the test was right and my expectation was wrong.
