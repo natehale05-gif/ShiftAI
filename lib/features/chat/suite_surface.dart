@@ -1186,7 +1186,11 @@ class _EditNote extends StatelessWidget {
               unsure
                   ? '$who may have made a new picture rather than changing '
                       'yours: it did not say it edited the one you sent.'
-                  : 'Edited from $from',
+                  : state.madeTypeOf(reply.attachment!, reply: reply) ==
+                          MediaType.image
+                      ? 'Edited from $from'
+                      // A video of a picture: made from it, not a change.
+                      : 'Made from $from',
               style: ShiftType.caption(c.textMuted),
             ),
           ),

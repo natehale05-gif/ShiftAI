@@ -244,11 +244,120 @@ abstract final class ModelRouter {
     'try',
   ]);
 
+  /// Movement: what a picture cannot do and a video of it can. "make it
+  /// sway in the wind", sent under a Spanish flag on 16 Oct, read as a
+  /// change to the picture ("make") and SHIFT Image drew the same flag,
+  /// still. Not words that only describe a still ("flowing hair",
+  /// "motion blur", "rotate it 90 degrees").
+  static final RegExp _motion = _words(<String>[
+    'sway',
+    'sways',
+    'swaying',
+    'flutter',
+    'flutters',
+    'fluttering',
+    'flap',
+    'flaps',
+    'flapping',
+    'ripple',
+    'ripples',
+    'rippling',
+    'billow',
+    'billows',
+    'billowing',
+    'blowing',
+    'blow in the wind',
+    'wave in the wind',
+    'waving',
+    'animate',
+    'animated',
+    'animation',
+    'come alive',
+    'come to life',
+    'bring it to life',
+    'bring it alive',
+    'in motion',
+    'motion',
+    'movement',
+    'moving',
+    'spin',
+    'spins',
+    'spinning',
+    'dance',
+    'dances',
+    'dancing',
+    'flying',
+    'drift',
+    'drifting',
+    'blink',
+    'blinks',
+    'blinking',
+    'swirl',
+    'swirling',
+    'twinkle',
+    'twinkling',
+    'flicker',
+    'flickering',
+    'slow motion',
+    'slow-mo',
+    'looping',
+    'cinemagraph',
+    'time-lapse',
+    'timelapse',
+  ]);
+
+  /// "make it move", but not "move the sun to the left".
+  static final RegExp _makeItMove = RegExp(
+    r'\bmake\s+(?:it|them|him|her|this|that|the\s+\w+)\s+move\b'
+    r'(?!\s+(?:to|left|right|up|down|over|into|closer|away|further|the|it|this)\b)',
+    caseSensitive: false,
+  );
+
+  /// Still pictures that only sound like motion.
+  static final RegExp _stillMotion = RegExp(
+    r'\bmotion\s+blur\b',
+    caseSensitive: false,
+  );
+
+  /// Something added to a picture, which may itself be moving ("add a
+  /// girl dancing"): an edit, unless what is added is the movement.
+  static final RegExp _adds = _words(<String>['add', 'put', 'insert']);
+  static final RegExp _addsMotion =
+      _words(<String>['motion', 'movement', 'animation', 'life']);
+
+  /// Whether [prompt], sent right after a picture was made, asks for that
+  /// picture to move: a video of it, not another still.
+  static bool looksLikeMotion(String prompt) {
+    if (_question.hasMatch(prompt)) return false;
+    final String said = prompt.replaceAll(_stillMotion, '');
+    // Read without the movement itself: "make the petals flutter" is not
+    // a question about Flutter.
+    final TaskKind? kind = kindOf(said.replaceAll(_motion, ''));
+    if (kind != null && kind != TaskKind.video) return false;
+    if (!_motion.hasMatch(said) && !_makeItMove.hasMatch(said)) return false;
+    return !_adds.hasMatch(said) || _addsMotion.hasMatch(said);
+  }
+
+  /// "a video of it": a video asked of the thing already in the chat,
+  /// rather than of something named ("a video of Miami").
+  static final RegExp _refersBack = RegExp(
+    r'\b(?:it|this|that|them|the\s+(?:image|picture|photo|pic|one))\b',
+    caseSensitive: false,
+  );
+
+  /// Whether [prompt], right after a picture was made, asks for a video
+  /// of that picture.
+  static bool wantsVideoOf(String prompt) =>
+      looksLikeMotion(prompt) ||
+      (kindOf(prompt) == TaskKind.video && _refersBack.hasMatch(prompt));
+
   /// Whether [prompt], sent right after a picture was made, asks for that
   /// picture to change, rather than asking about it ("what flower is
-  /// this?") or for something else ("write a caption for it").
+  /// this?") or for something else ("write a caption for it"), or for it
+  /// to move.
   static bool looksLikeEdit(String prompt) {
     if (_question.hasMatch(prompt)) return false;
+    if (looksLikeMotion(prompt)) return false;
     final TaskKind? kind = kindOf(prompt);
     if (kind != null && kind != TaskKind.image) return false;
     return _edit.hasMatch(prompt);

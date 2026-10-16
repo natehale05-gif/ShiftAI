@@ -230,6 +230,27 @@ the app). For that, the model has to send the page:
 `tool/mock_engine.py` answers "build me a website" this way, so you can
 see it in the app against the mock.
 
+## 5f. "Make it sway in the wind": a video of the picture sent
+
+On 16 October a Spanish flag was made, then "make it sway in the wind"
+went to SHIFT Image as an edit and came back as the same flag, still.
+The app now sends movement asked of a picture ("make it sway", "animate
+it", "bring it to life", "a video of it") to a model with
+`bestFor: ["video"]`, with the picture in `attachments`
+(`vaultItemId`, `url`, `name`, `mimeType`), exactly as an edit sends it
+to the image model.
+
+- A video model sent a picture should **animate that picture**
+  (image-to-video, the picture as the first frame), not make a video
+  from the words alone.
+- Answer as for any video, and put `"editedFrom": "<the vaultItemId it
+  was sent>"` on the attachment. The app shows "Made from <name>" under
+  the video.
+- If no model on the server makes video, `/v1/models` should list none
+  with `bestFor: ["video"]`: the app then says "No video model is
+  connected yet" and sends nothing, rather than paying the image model
+  for another still.
+
 ## 6. Check your work: `tool/check_engine.py`
 
 It is in the ShiftAI repo and uses only the Python standard library. It

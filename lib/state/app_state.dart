@@ -54,8 +54,8 @@ class AppState extends ChangeNotifier {
     // added by a later version is on by default instead of silently
     // missing for everyone who already has a blob.
     _disabled = <ShiftFeature>{
-      for (final Object? raw in (blob['disabledFeatures'] as List<Object?>?) ??
-          const <Object?>[])
+      for (final Object? raw
+          in (blob['disabledFeatures'] as List<Object?>?) ?? const <Object?>[])
         if (ShiftFeature.parse(raw as String?) case final ShiftFeature f) f,
     };
     surface = Surface.parse(blob['surface'] as String?);
@@ -321,8 +321,7 @@ class AppState extends ChangeNotifier {
       // every open with the last copy sitting here. A server that answers
       // within it opens on fresh data with no swap.
       final String me = backend.auth.creator?.email ?? '';
-      final bool haveCopy =
-          !seeded && me.isNotEmpty && blob['account'] == me;
+      final bool haveCopy = !seeded && me.isNotEmpty && blob['account'] == me;
       try {
         snapshot = await loading
             .timeout(haveCopy ? cachedScreenBudget : firstScreenBudget);
@@ -853,20 +852,55 @@ class AppState extends ChangeNotifier {
   /// or, when the newest answer made a picture and [prompt] reads like a
   /// change to it, that one. Null for anything else.
   ChatMessage? _editTarget(String prompt) {
-    final ChatMessage? picked = editing;
-    if (picked != null) return picked;
+    final ChatMessage? picture = editing ?? _lastPicture;
+    if (picture == null) return null;
+    if (ModelRouter.looksLikeMotion(prompt)) return null;
+    return editing != null || ModelRouter.looksLikeEdit(prompt)
+        ? picture
+        : null;
+  }
+
+  /// The newest answer, when it made a picture. A song or a video is not
+  /// changed by "make it brighter".
+  ChatMessage? get _lastPicture {
     final ChatMessage? last = messages
         .where((ChatMessage m) =>
             m.author != MessageAuthor.you && m.failure == null)
         .lastOrNull;
     if (last == null ||
         last.attachment == null ||
-        // A picture: a song or a video is not changed by "make it brighter".
         madeTypeOf(last.attachment!) != MediaType.image ||
         last.attachment!.vaultItemId.isEmpty) {
       return null;
     }
-    return ModelRouter.looksLikeEdit(prompt) ? last : null;
+    return last;
+  }
+
+  /// The made picture [prompt] asks to see move: "make it sway in the
+  /// wind", "a video of it". It goes to a video model with the picture,
+  /// so the video is of that picture. On 16 Oct "make it sway in the
+  /// wind", under a Spanish flag, went to SHIFT Image as an edit and came
+  /// back as the same flag, still.
+  ChatMessage? _motionTarget(String prompt) {
+    final ChatMessage? picture = editing ?? _lastPicture;
+    if (picture == null) return null;
+    return ModelRouter.wantsVideoOf(prompt) ? picture : null;
+  }
+
+  /// Who makes a picture move: the video model that answered last, or
+  /// another. Never a chat or image model, which can only describe a
+  /// video or draw another still.
+  ModelRoute _motionRoute() {
+    final List<ChatModel> able = chatModels
+        .where((ChatModel m) => m.bestFor.contains(TaskKind.video))
+        .toList();
+    if (able.isEmpty) return const ModelRoute(null, missing: TaskKind.video);
+    final String? last = _lastAnswerer;
+    final ChatModel? picked = chatModel;
+    if (picked != null && able.contains(picked)) return ModelRoute(picked);
+    return ModelRoute(
+      able.where((ChatModel m) => m.id == last).firstOrNull ?? able.first,
+    );
   }
 
   /// Who edits a picture: the model that made it, or another that makes
@@ -1308,9 +1342,8 @@ class AppState extends ChangeNotifier {
   /// leaderboard, in place of whichever avatar was personal before.
   Future<bool> makeAvatarPersonal(String id) async {
     final List<Avatar> before = avatars;
-    avatars = avatars
-        .map((Avatar a) => a.copyWith(personal: a.id == id))
-        .toList();
+    avatars =
+        avatars.map((Avatar a) => a.copyWith(personal: a.id == id)).toList();
     activeAvatarId ??= id;
     _changed();
     return _push(
@@ -1665,10 +1698,17 @@ class AppState extends ChangeNotifier {
     // A change to a picture made in this chat goes to a model that makes
     // pictures, with the picture: "make the petals purple" used to go to
     // the chat model, which had only the picture's file name.
-    final ChatMessage? target = reply ? null : _editTarget(body);
-    final SentFile? editFile = target == null ? null : madeFileOf(target);
-    final ModelRoute route =
-        target != null ? _editRoute(target) : routeFor(body, reply: reply);
+    final ChatMessage? moving = reply ? null : _motionTarget(body);
+    final ChatMessage? target =
+        reply || moving != null ? null : _editTarget(body);
+    final ChatMessage? source = moving ?? target;
+    final SentFile? editFile = source == null ? null : madeFileOf(source);
+    ModelRoute routeNow() => moving != null
+        ? _motionRoute()
+        : target != null
+            ? _editRoute(target)
+            : routeFor(body, reply: reply);
+    final ModelRoute route = routeNow();
     editingId = null;
     messages = <ChatMessage>[
       ...messages,
@@ -1694,8 +1734,7 @@ class AppState extends ChangeNotifier {
       stamp: stamp,
       history: history,
       route: route,
-      reroute: () =>
-          target != null ? _editRoute(target) : routeFor(body, reply: reply),
+      reroute: routeNow,
       question: 'you-$stamp',
       toUpload: files,
     );
@@ -2223,8 +2262,7 @@ class AppState extends ChangeNotifier {
     final int signOuts = _signOuts;
     // A private ask is kept nowhere, the vault included: one read, in
     // case the engine keeps it anyway, and no waiting for a row.
-    final List<Duration> waits =
-        privateChat ? const <Duration>[] : vaultWaits;
+    final List<Duration> waits = privateChat ? const <Duration>[] : vaultWaits;
     for (final ChatMessage m in missing) {
       _lookingFor.add(m.id);
       _notFound.remove(m.id);

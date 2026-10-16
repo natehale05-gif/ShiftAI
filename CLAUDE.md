@@ -181,7 +181,11 @@ slow server. `MOCK_MODELS_LATE=20` makes its first `/v1/models` take 20 s, so th
 opens before it knows which models there are. `MOCK_EDITS=ignore` replays
 the preview on 7 Oct: an edit sent with its picture comes back as a new
 picture drawn from the words. A real edit carries `editedFrom` on its
-attachment; `tool/check_engine.py --edit` checks for it.
+attachment; `tool/check_engine.py --edit` checks for it. Movement asked
+of a picture ("make it sway in the wind", "animate it", "a video of it")
+is not an edit: it goes to a video model with the picture attached
+(`ModelRouter.looksLikeMotion`). On 16 Oct it went to SHIFT Image and
+came back a still flag.
 
 An image, video or audio request is never turned away on the model list
 on screen: that list is empty until the load lands (the app opens at
@@ -261,6 +265,6 @@ exploratory, branch.
 flutter analyze && flutter test
 ```
 
-407 tests. They have caught every regression listed above at least once,
+411 tests. They have caught every regression listed above at least once,
 including several of mine. If one fails, read it before changing it —
 twice now the test was right and my expectation was wrong.
