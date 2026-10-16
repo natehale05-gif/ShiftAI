@@ -109,7 +109,11 @@ var KEEP = 'shiftai-' + BUILD;
 // new build was in use. A file that will not come is left for the page
 // to fetch when it asks; nothing here holds the install up for good.
 self.addEventListener('install', function (event) {
-  event.waitUntil(caches.keys().then(function (names) {
+  // At most 20 s: a download that crawls must not hold the new build back
+  // (and the old one in place) for good. What did not arrive is fetched
+  // when the page asks for it.
+  var limit = new Promise(function (resolve) { setTimeout(resolve, 20000); });
+  event.waitUntil(Promise.race([limit, caches.keys().then(function (names) {
     var older = names.filter(function (name) {
       return name.indexOf('shiftai') === 0 && name !== KEEP;
     });
@@ -129,11 +133,11 @@ self.addEventListener('install', function (event) {
     return caches.open(KEEP).then(function (cache) {
       return Promise.all(Object.keys(wanted).map(function (u) {
         return fresh(u).then(function (res) {
-          if (res && res.ok) return cache.put(u, res);
+          if (usable(res)) return cache.put(u, res);
         }).catch(function () {});
       }));
     });
-  }).catch(function () {}).then(function () { return self.skipWaiting(); }));
+  }).catch(function () {})]).then(function () { return self.skipWaiting(); }));
 });
 self.addEventListener('activate', function (event) {
   event.waitUntil(caches.keys().then(function (names) {
@@ -154,7 +158,7 @@ self.addEventListener('message', function (event) {
   event.waitUntil(caches.open(KEEP).then(function (cache) {
     return Promise.all(urls.map(function (u) {
       return cache.match(u, { ignoreSearch: true }).then(function (hit) {
-        return hit || fresh(u).then(function (res) {
+        return usable(hit) ? hit : fresh(u).then(function (res) {
           keep(cache, u, res);
         }).catch(function () {});
       });
@@ -176,13 +180,28 @@ function ours(u) {
 // request is copied with only its cache mode changed, so a navigation
 // keeps its own redirect handling.
 function fresh(u) {
-  return typeof u === 'string'
-    ? fetch(u, { cache: 'no-cache', credentials: 'same-origin' })
-    : fetch(new Request(u, { cache: 'no-cache' }));
+  if (typeof u === 'string') {
+    return fetch(u, { cache: 'no-cache', credentials: 'same-origin' });
+  }
+  // A browser that will not copy a navigation request with a new cache
+  // mode throws here; the request as it came still loads the page.
+  try {
+    return fetch(new Request(u, { cache: 'no-cache' }));
+  } catch (e) {
+    return fetch(u);
+  }
+}
+
+// What may be kept and served again: this server's own answer, whole,
+// with no redirect in it. A redirected response served to a navigation is
+// refused by the browser outright, and the page does not load at all.
+function usable(res) {
+  return !!res && res.ok && !res.redirected &&
+    (res.type === 'basic' || res.type === 'default');
 }
 
 function keep(cache, req, res) {
-  if (res && res.ok) cache.put(req, res.clone());
+  if (usable(res)) cache.put(req, res.clone()).catch(function () {});
   return res;
 }
 
@@ -190,7 +209,7 @@ function keep(cache, req, res) {
 function fromBuild(req) {
   return caches.open(KEEP).then(function (cache) {
     return cache.match(req, { ignoreSearch: true }).then(function (hit) {
-      return hit || fresh(req).then(function (res) {
+      return usable(hit) ? hit : fresh(req).then(function (res) {
         return keep(cache, req, res);
       });
     });
@@ -209,11 +228,11 @@ function fromBuild(req) {
 function page(req) {
   return caches.open(KEEP).then(function (cache) {
     return cache.match(req, { ignoreSearch: true }).then(function (hit) {
-      return hit || cache.match('./', { ignoreSearch: true });
+      return usable(hit) ? hit : cache.match('./', { ignoreSearch: true });
     }).then(function (hit) {
-      return hit || cache.match('index.html', { ignoreSearch: true });
+      return usable(hit) ? hit : cache.match('index.html', { ignoreSearch: true });
     }).then(function (hit) {
-      return hit || fresh(req).then(function (res) {
+      return usable(hit) ? hit : fresh(req).then(function (res) {
         return keep(cache, req, res);
       });
     });
@@ -225,10 +244,13 @@ self.addEventListener('fetch', function (event) {
   if (req.method !== 'GET') return;
   var rel = ours(req.url);
   if (rel === null) return;
+  // Whatever goes wrong in here, the request still goes to the network as
+  // if there were no worker: the cache can make a load faster, never
+  // stop it. ("now it's not loading at all", 16 Oct.)
   if (req.mode === 'navigate' || rel === '' || rel === 'index.html') {
-    event.respondWith(page(req));
+    event.respondWith(page(req).catch(function () { return fetch(req); }));
   } else if (FILES.has(rel)) {
-    event.respondWith(fromBuild(req));
+    event.respondWith(fromBuild(req).catch(function () { return fetch(req); }));
   }
   // Anything else (the API, a vault file, build_id.txt) is the network's.
 });
