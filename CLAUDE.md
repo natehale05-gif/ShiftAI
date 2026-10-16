@@ -91,7 +91,13 @@ deploy the page reloaded onto an empty cache and downloaded the build in
 front of a loading screen, and each return to the tab reloaded the old
 build again; 11.3 s of loading screens on 2 Mbps, now 3.4 s. A loading
 screen past 10 s says so; past 20 s, opening from a saved copy, it
-offers "Start fresh" (unregisters the worker, clears its caches). It caches only the build's own files, listed by name at build time:
+offers "Start fresh" (unregisters the worker, clears its caches).
+The worker can make a load faster, never stop it (16 Oct: "now it's not
+loading at all", after #44, on iPhone Safari): every answer it gives
+falls back to a plain network fetch if its own handling fails, it never
+keeps or serves a redirected response (a browser refuses one for a
+navigation), a navigation request it cannot copy is fetched as it came,
+and a new build's install waits at most 20 s for its files. It caches only the build's own files, listed by name at build time:
 the preview serves the API from the same origin, and a worker that cached
 every GET answered `/v1/vault`, `/v1/avatars` and `/v1/me` from their
 first copy until the next deploy, whoever was signed in. Every fetch the
@@ -255,6 +261,6 @@ exploratory, branch.
 flutter analyze && flutter test
 ```
 
-406 tests. They have caught every regression listed above at least once,
+407 tests. They have caught every regression listed above at least once,
 including several of mine. If one fails, read it before changing it —
 twice now the test was right and my expectation was wrong.

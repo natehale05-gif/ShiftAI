@@ -35,10 +35,14 @@ void main() {
     // browser reuse it for 10 minutes: a new build's cache was filled with
     // the old one, and the app did not update until the deploy after.
     expect(worker, contains("cache: 'no-cache'"));
-    expect(RegExp(r'\bfetch\(req\)').hasMatch(worker), isFalse);
+    // A plain fetch(req) only as the last resort, when the worker's own
+    // handling has failed.
+    final String withoutFallbacks =
+        worker.replaceAll('.catch(function () { return fetch(req); })', '');
+    expect(RegExp(r'\bfetch\(req\)').hasMatch(withoutFallbacks), isFalse);
     expect(worker, isNot(contains('cache.add(')));
-    expect(worker, contains('hit || fresh(req)'));
-    expect(worker, contains('return hit || fresh(req).then('));
+    expect(worker, contains('usable(hit) ? hit : fresh(req)'));
+    expect(worker, contains('usable(hit) ? hit : fresh(req).then('));
   });
 
   test(
@@ -60,11 +64,14 @@ void main() {
     // It used to race the network for up to 2 s on every open: on a weak
     // signal, 2 s of loading screen before a copy already in the cache.
     expect(worker, isNot(contains('PAGE_WAIT_MS')));
-    expect(worker, isNot(contains('setTimeout')));
+    final String pageCode = worker.substring(
+        worker.indexOf('function page(req)'),
+        worker.indexOf("self.addEventListener('fetch'"));
+    expect(pageCode, isNot(contains('setTimeout')));
     final String page = worker.substring(worker.indexOf('function page(req)'),
         worker.indexOf("self.addEventListener('fetch'"));
     final int cached = page.indexOf("cache.match('index.html'");
-    final int network = page.indexOf('return hit || fresh(req).then(');
+    final int network = page.indexOf('usable(hit) ? hit : fresh(req).then(');
     expect(cached, isNonNegative);
     expect(network, greaterThan(cached),
         reason: 'the cache is asked first, the network only after');
@@ -87,6 +94,9 @@ void main() {
     expect(install.indexOf('self.skipWaiting()'),
         greaterThan(install.indexOf('cache.put(u, res)')),
         reason: 'it takes over only once the files are in');
+    // Within 20 s, whatever the line does.
+    expect(install, contains('setTimeout(resolve, 20000)'));
+    expect(install, contains('Promise.race([limit,'));
   });
 
   test(
@@ -112,6 +122,29 @@ void main() {
     expect(script, contains("n.indexOf('shiftai') === 0"));
     // Not on a first open, which is a real download.
     expect(script, contains('if (saved) {'));
+  });
+
+  test(
+      'the worker can make a load faster, never stop it: 16 Oct, "now it\'s '
+      'not loading at all"', () {
+    final String worker = _worker();
+    // Every answer it gives falls back to the network.
+    expect(
+        worker,
+        contains(
+            'event.respondWith(page(req).catch(function () { return fetch(req); }));'));
+    expect(
+        worker,
+        contains(
+            'event.respondWith(fromBuild(req).catch(function () { return fetch(req); }));'));
+    // Nothing redirected is kept or served: a browser refuses a redirected
+    // response to a navigation, and the page does not open at all.
+    expect(worker, contains('!res.redirected'));
+    expect(worker, contains('if (usable(res)) cache.put('));
+    expect(RegExp(r'return hit \|\|').hasMatch(worker), isFalse,
+        reason: 'a cached copy is checked before it is served');
+    // Copying a navigation request can throw; the original still loads.
+    expect(worker, contains('} catch (e) {\n    return fetch(u);'));
   });
 
   test('the build writes the file list into the worker', () {
