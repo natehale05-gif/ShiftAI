@@ -502,6 +502,14 @@ upload:
   was sent>"` on that attachment. A text-to-image call with only the
   prompt is not an edit: on 7 Oct "make one of the petals blue" came
   back as a different flower. `tool/check_engine.py --edit` checks this.
+- Movement asked of that picture ("make it sway in the wind", "animate
+  it", "a video of it") goes to a model with `bestFor: ["video"]`, the
+  picture in `attachments` the same way. A video model given a picture
+  **animates that picture** (image-to-video), with `"editedFrom"` on the
+  video's attachment naming the picture it was made from. The app says
+  "Made from <name>" under it. On 16 Oct "make it sway in the wind"
+  after a flag went to the image model as an edit and came back a still
+  flag.
 - Every assistant turn in `history` that made something carries it the
   same way, so a chat model asked "what flower is this?" or "write a
   caption for it" can be given the picture to look at.

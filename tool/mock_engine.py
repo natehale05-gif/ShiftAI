@@ -290,7 +290,9 @@ def make(body, model, history):
         "id": f"m{len(history) + 1}", "author": "shift", "model": model,
         "modelName": MODELS_BY_ID[model],
         "eyebrow": f"ShiftAi · {kind.title()}",
-        "body": (f"Edited {source.get('name')}: {prompt}" if source
+        "body": ((f"Animated {source.get('name')}: {prompt}"
+                  if kind == "video" else
+                  f"Edited {source.get('name')}: {prompt}") if source
                  else f"Made it: {prompt}"),
         "attachment": {
             "fileName": f"mock-{n}.{name}", "kind": kind,

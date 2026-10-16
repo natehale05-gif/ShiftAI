@@ -17,6 +17,11 @@ const ChatModel _image = ChatModel(
   name: 'SHIFT Image',
   bestFor: <TaskKind>{TaskKind.image},
 );
+const ChatModel _video = ChatModel(
+  id: 'shift-video',
+  name: 'SHIFT Video',
+  bestFor: <TaskKind>{TaskKind.video},
+);
 
 /// Two models; the image one makes a picture, saved in the vault.
 class _Engine extends SeedRepository {
@@ -28,7 +33,7 @@ class _Engine extends SeedRepository {
         List<ChatTurn> history
       })> sent = [];
   int made = 0;
-  List<ChatModel> models = const <ChatModel>[_chat, _image];
+  List<ChatModel> models = const <ChatModel>[_chat, _image, _video];
 
   @override
   Future<ShiftSnapshot> load() async {
@@ -231,6 +236,79 @@ void main() {
     expect(engine.sent.length, before);
     expect(state.messages.last.failure?.sentence,
         'No image model is connected yet.');
+  });
+
+  test(
+      'movement after a picture goes to a video model, with the picture, '
+      'not back to the image model as an edit', () async {
+    final (AppState state, _Engine engine) = await _withAFlower();
+    state.sendMessage('make it sway in the wind');
+    await _settle();
+    expect(engine.sent.last.model, _video.id,
+        reason: 'on 16 Oct it went to SHIFT Image, which drew the same '
+            'flag, still');
+    expect(engine.sent.last.files.single.vaultItemId, 'v-1',
+        reason: 'the video is of this picture, not a new one');
+
+    // A video of it, asked for by name, is the same.
+    final (AppState again, _Engine other) = await _withAFlower();
+    again.sendMessage('make a video of it');
+    await _settle();
+    expect(other.sent.last.model, _video.id);
+    expect(other.sent.last.files.single.vaultItemId, 'v-1');
+  });
+
+  test('movement picked with Edit still goes to the video model', () async {
+    final (AppState state, _Engine engine) = await _withAFlower();
+    state.editMade(state.messages.last.id);
+    state.sendMessage('make the petals flutter');
+    await _settle();
+    expect(engine.sent.last.model, _video.id);
+    expect(engine.sent.last.files.single.vaultItemId, 'v-1');
+  });
+
+  test('with no video model to make it move, nothing is sent', () async {
+    final (AppState state, _Engine engine) = await _withAFlower();
+    engine.models = const <ChatModel>[_chat, _image];
+    await state.refresh();
+    final int before = engine.sent.length;
+    state.sendMessage('make it sway in the wind');
+    await _settle();
+    expect(engine.sent.length, before,
+        reason: 'the image model can only draw another still');
+    expect(state.messages.last.failure?.sentence,
+        'No video model is connected yet.');
+  });
+
+  test('what reads as movement', () {
+    for (final String moving in <String>[
+      'make it sway in the wind',
+      'make the flag wave in the wind',
+      'animate it',
+      'bring it to life',
+      'make it move',
+      'make the petals flutter',
+      'have the leaves drift down',
+      'add some movement',
+    ]) {
+      expect(ModelRouter.looksLikeMotion(moving), isTrue, reason: moving);
+      expect(ModelRouter.looksLikeEdit(moving), isFalse, reason: moving);
+    }
+    for (final String still in <String>[
+      'make the petals purple',
+      'give her long flowing hair',
+      'add motion blur',
+      'rotate it 90 degrees',
+      'move the sun to the left',
+      'add a girl dancing',
+      'generate an image of a dancing girl',
+      'can it move?',
+      'write a caption about the swaying flag',
+    ]) {
+      expect(ModelRouter.looksLikeMotion(still), isFalse, reason: still);
+    }
+    expect(ModelRouter.wantsVideoOf('make a video of it'), isTrue);
+    expect(ModelRouter.wantsVideoOf('make a video of Miami'), isFalse);
   });
 
   test('what reads as a change to a picture', () {
