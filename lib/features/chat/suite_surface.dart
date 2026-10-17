@@ -588,6 +588,9 @@ class _MessageTile extends StatelessWidget {
         if (message.attachment != null) ...<Widget>[
           const SizedBox(height: Space.x4),
           ArtifactCard(attachment: message.attachment!, replyId: message.id),
+        ] else if (message.awaiting != null) ...<Widget>[
+          const SizedBox(height: Space.x3),
+          _MakingNote(message: message),
         ],
         if (offer != null) ...<Widget>[
           const SizedBox(height: Space.x4),
@@ -604,6 +607,58 @@ class _MessageTile extends StatelessWidget {
           const SizedBox(width: double.infinity, height: 44)
         else
           _MessageActions(message: message),
+      ],
+    );
+  }
+}
+
+/// Under a reply that is still making its file: it shows here when it is
+/// in the vault. "Making your video now. It will be in your Vault in about
+/// 3 minutes." used to be the last the chat said of it.
+class _MakingNote extends StatelessWidget {
+  const _MakingNote({required this.message});
+
+  final ChatMessage message;
+
+  @override
+  Widget build(BuildContext context) {
+    final AppState state = AppScope.of(context);
+    final ShiftColors c = ShiftColors.of(context);
+    final String thing = switch (message.awaiting!) {
+      MediaType.video => 'video',
+      MediaType.audio => 'track',
+      MediaType.document => 'file',
+      MediaType.image => 'picture',
+    };
+    if (state.madeLate(message.id)) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            "The $thing isn't in your vault yet. It will be there when it "
+            'is done.',
+            style: ShiftType.caption(c.textMuted),
+          ),
+          _MessageAction(
+            icon: Icons.refresh_rounded,
+            label: 'Look again',
+            color: c.textMuted,
+            onPressed: () => state.lookAgainForMade(message.id),
+          ),
+        ],
+      );
+    }
+    return Row(
+      children: <Widget>[
+        ShiftSpinner(size: 14, color: c.textMuted),
+        const SizedBox(width: Space.x2),
+        Expanded(
+          child: Text(
+            'Making the $thing. It will appear here when it is in your '
+            'vault.',
+            style: ShiftType.caption(c.textMuted),
+          ),
+        ),
       ],
     );
   }

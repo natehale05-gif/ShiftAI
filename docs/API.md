@@ -460,6 +460,23 @@ the model call when its caller goes away saves the credits. An answer
 that needs longer than 3 minutes should come back at once as "working on
 it" and land in the vault when it is done.
 
+The app follows it there. A reply from a model with `bestFor` image, video
+or audio that has no `attachment` and does not end in a question is
+taken as "working on it": the reply says the file is being made, and the
+app re-reads `/v1/vault` every 10 s for up to 10 minutes. The first row
+of that `mediaType` saved after the question, with its `mediaUrl` set,
+not in the vault when it was asked and not already shown in the chat, is
+shown in that reply as if it had come with it. So:
+
+- Save the row with the person's own vault (no `byHandle`), its real
+  `mediaType`, and `createdAt` the time it was made or started.
+- Set `mediaUrl` only once the file is there. A row saved early as a
+  placeholder is fine; the app waits for its `mediaUrl`.
+
+On 16 Oct "make it sway in the wind" was answered "Making your video
+now. It will be in your Vault in about 3 minutes." and the chat never
+showed the video. `MOCK_VIDEO_LATER=1` on the mock replays it.
+
 **Files sent with a message.** Anything attached with "+" is uploaded
 first (`POST /v1/uploads`, one file per request) and the message names
 the files by upload id:

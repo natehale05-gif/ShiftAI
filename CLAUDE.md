@@ -185,7 +185,12 @@ attachment; `tool/check_engine.py --edit` checks for it. Movement asked
 of a picture ("make it sway in the wind", "animate it", "a video of it")
 is not an edit: it goes to a video model with the picture attached
 (`ModelRouter.looksLikeMotion`). On 16 Oct it went to SHIFT Image and
-came back a still flag.
+came back a still flag. A video model answers at once ("Making your
+video now. It will be in your Vault in about 3 minutes.") and saves the
+file later; that reply waits (`ChatMessage.awaiting`, kept in the saved
+chat) and the app re-reads the vault every 10 s for 10 minutes, then shows
+the new row in it. On 16 Oct the chat stopped at those words.
+`MOCK_VIDEO_LATER=1` replays it.
 
 An image, video or audio request is never turned away on the model list
 on screen: that list is empty until the load lands (the app opens at
@@ -265,6 +270,6 @@ exploratory, branch.
 flutter analyze && flutter test
 ```
 
-411 tests. They have caught every regression listed above at least once,
+417 tests. They have caught every regression listed above at least once,
 including several of mine. If one fails, read it before changing it —
 twice now the test was right and my expectation was wrong.

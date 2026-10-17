@@ -304,7 +304,7 @@ def make(body, model, history):
             **({"editedFrom": source["vaultItemId"]} if source else {}),
         },
     }
-    misbehave(made_case(prompt), n, row, answer)
+    misbehave(made_case(prompt, kind), n, row, answer)
     return answer
 
 
@@ -370,11 +370,23 @@ def make_track(body, model, history):
 #   renamed   the answer's vaultItemId is a job id; the row is found by name
 #   markdown  no attachment: the picture is a Markdown image in the words
 #   nocors    the full-size file is sent with no Access-Control-Allow-Origin
-MADE_CASES = ("late", "lost", "broken", "relative", "renamed", "markdown", "nocors")
+#   queued    no attachment: "Making your video now. It will be in your
+#             Vault in about N seconds.", and the row is saved N seconds
+#             later (MOCK_QUEUED_SECONDS, default 15), as the preview's
+#             video model did on 16 Oct
+#
+# MOCK_VIDEO_LATER=1 makes every video "queued", so "make it sway in the
+# wind" after a picture can be tried as it is.
+MADE_CASES = ("late", "lost", "broken", "relative", "renamed", "markdown",
+              "nocors", "queued")
+QUEUED_SECONDS = float(os.environ.get("MOCK_QUEUED_SECONDS", "15"))
+VIDEO_LATER = os.environ.get("MOCK_VIDEO_LATER", "") not in ("", "0")
 
 
-def made_case(prompt):
+def made_case(prompt, kind=None):
     named = next((c for c in MADE_CASES if f"mock:{c}" in prompt), None)
+    if named is None and kind == "video" and VIDEO_LATER:
+        return "queued"
     return named or os.environ.get("MOCK_MADE", "")
 
 
@@ -384,6 +396,21 @@ def misbehave(case, n, row, answer):
         threading.Timer(8, lambda: VAULT.insert(0, row)).start()
         return
     if case == "lost":
+        return
+    if case == "queued":
+        del answer["attachment"]
+        thing = {"image": "picture", "video": "video"}.get(row["kind"], "file")
+        answer["body"] = (f"Making your {thing} now. It will be in your Vault "
+                          f"in about {QUEUED_SECONDS:g} seconds.")
+
+        def done():
+            # The file is there once the row is: the app waits for a
+            # mediaUrl, not a placeholder. The mock's still stands in.
+            row.setdefault("mediaUrl", row["thumbnailUrl"])
+            row["createdAt"] = time.strftime("%Y-%m-%dT%H:%M:%SZ",
+                                             time.gmtime())
+            VAULT.insert(0, row)
+        threading.Timer(QUEUED_SECONDS, done).start()
         return
     if case == "broken":
         row["mediaUrl"] = f"{BASE}/v1/mock/media/gone-{n}"
