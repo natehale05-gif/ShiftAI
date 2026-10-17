@@ -251,6 +251,21 @@ to the image model.
   connected yet" and sends nothing, rather than paying the image model
   for another still.
 
+## 5g. A video made later: what the app looks for
+
+Showcase video answered "make it sway in the wind" with "Making your
+video now. It will be in your Vault in about 3 minutes." and no file.
+The app now waits for it: it re-reads `/v1/vault` every 10 s for up to
+10 minutes and shows the video in that reply when it lands. For it to
+find the row:
+
+- `mediaType: "video"` (or `kind: "video"`), no `byHandle`, and
+  `createdAt` when the job started or finished.
+- `mediaUrl` set only once the file is ready. A placeholder row without
+  one is waited on, not shown.
+- Leave the attachment off that first answer: an attachment there is
+  taken as the finished file.
+
 ## 6. Check your work: `tool/check_engine.py`
 
 It is in the ShiftAI repo and uses only the Python standard library. It

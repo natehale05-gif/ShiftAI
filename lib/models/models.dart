@@ -1059,11 +1059,53 @@ class ChatMessage {
     this.choices = const <ChatChoice>[],
     this.multiSelect = false,
     this.files = const <SentFile>[],
+    this.awaiting,
+    this.askedAt,
   });
 
   final String id;
   final MessageAuthor author;
   final String body;
+
+  /// What this reply said it is still making, when it came back without
+  /// the file: a video model answers at once ("Making your video now. It
+  /// will be in your Vault in about 3 minutes.") and saves the file later.
+  /// The chat watches the vault for it and shows it here when it lands.
+  /// Null once [attachment] is set, and for every other reply.
+  final MediaType? awaiting;
+
+  /// When the question behind an [awaiting] reply was sent: the file is a
+  /// vault row made after it.
+  final DateTime? askedAt;
+
+  /// This reply, waiting for a [type] file made after [at].
+  ChatMessage waitingFor(MediaType type, DateTime at) =>
+      _copy(awaiting: type, askedAt: at);
+
+  /// This reply with the file it was making, no longer waiting.
+  ChatMessage withMade(MessageAttachment file) => _copy(attachment: file);
+
+  ChatMessage _copy({
+    MessageAttachment? attachment,
+    MediaType? awaiting,
+    DateTime? askedAt,
+  }) =>
+      ChatMessage(
+        id: id,
+        author: author,
+        body: body,
+        eyebrow: eyebrow,
+        bullets: bullets,
+        attachment: attachment ?? this.attachment,
+        failure: failure,
+        model: model,
+        modelName: modelName,
+        choices: choices,
+        multiSelect: multiSelect,
+        files: files,
+        awaiting: attachment != null ? null : awaiting ?? this.awaiting,
+        askedAt: attachment != null ? null : askedAt ?? this.askedAt,
+      );
 
   /// The files you sent with this message, shown under it and sent again
   /// on a Retry or an Edit without uploading them twice.
@@ -1099,6 +1141,8 @@ class ChatMessage {
           'choices': choices.map((ChatChoice c) => c.toJson()).toList(),
         if (multiSelect) 'multiSelect': true,
         if (attachment != null) 'attachment': attachment!.toJson(),
+        if (awaiting != null) 'awaiting': awaiting!.name,
+        if (askedAt != null) 'askedAt': askedAt!.toUtc().toIso8601String(),
         // One still uploading has no id to keep; it is not saved.
         if (files.any((SentFile f) => !f.uploading))
           'files': files
@@ -1146,6 +1190,12 @@ class ChatMessage {
       choices: choices,
       multiSelect: multiSelect,
       attachment: MessageAttachment.tryParse(json['attachment']),
+      awaiting: MediaType.values
+          .where((MediaType t) => t.name == json['awaiting'])
+          .firstOrNull,
+      askedAt: json['askedAt'] is String
+          ? DateTime.tryParse(json['askedAt'] as String)
+          : null,
       files: json['files'] is List
           ? (json['files'] as List<dynamic>)
               .map(SentFile.tryParse)

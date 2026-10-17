@@ -512,6 +512,10 @@ class AppState extends ChangeNotifier {
         .lastOrNull;
     surface = Surface.suite;
     mode = ShiftMode.suite;
+    // A file still being made when the chat was left: look again.
+    for (final ChatMessage m in messages) {
+      if (m.awaiting != null) unawaited(_watchMade(m));
+    }
     _changed();
   }
 
@@ -2121,8 +2125,10 @@ class AppState extends ChangeNotifier {
     String? replacing,
     List<SentFile> files = const <SentFile>[],
   }) async {
+    final DateTime asked = DateTime.now();
+    final Set<String> before = vault.map((VaultItem v) => v.id).toSet();
     try {
-      final List<ChatMessage> answer = (await _repo.send(
+      final List<ChatMessage> sent = (await _repo.send(
         prompt,
         private: privateChat,
         avatarId: activeAvatarId,
@@ -2148,6 +2154,12 @@ class AppState extends ChangeNotifier {
                   multiSelect: a.multiSelect,
                 ))
           .toList();
+      final List<ChatMessage> answer = _markComingLater(
+        sent,
+        prompt: prompt,
+        by: as ?? chatModels.where((ChatModel m) => m.id == model).firstOrNull,
+        asked: asked,
+      );
       if (!(stillCurrent?.call() ?? true)) return const <ChatMessage>[];
       // The finished answer takes the place of the one written out as it
       // came.
@@ -2166,6 +2178,9 @@ class AppState extends ChangeNotifier {
       // screen, which was read before it existed: "Open in Vault" opened
       // a vault without it until the next refresh.
       unawaited(_findInVault(answer));
+      for (final ChatMessage m in answer) {
+        if (m.awaiting != null) unawaited(_watchMade(m, before: before));
+      }
       _changed();
       return answer;
     } on ShiftApiException catch (error) {
@@ -2299,6 +2314,205 @@ class AppState extends ChangeNotifier {
     } on ShiftApiException catch (error) {
       debugPrint('vault: not re-read — ${error.message}');
     }
+  }
+
+  /// What [by] is still making, when it answered [prompt] without the
+  /// file: the newest reply in [answer] is marked as waiting for it.
+  ///
+  /// A model that makes video, images or audio and comes back with only
+  /// words has either started the file ("Making your video now. It will
+  /// be in your Vault in about 3 minutes.", 16 Oct) or is asking
+  /// something first. A question is left alone.
+  List<ChatMessage> _markComingLater(
+    List<ChatMessage> answer, {
+    required String prompt,
+    required ChatModel? by,
+    required DateTime asked,
+  }) {
+    if (privateChat || answer.any((ChatMessage m) => m.attachment != null)) {
+      return answer;
+    }
+    final MediaType? type = _madeTypeFor(prompt, by);
+    if (type == null) return answer;
+    final int at = answer.lastIndexWhere((ChatMessage m) =>
+        m.author != MessageAuthor.you &&
+        m.failure == null &&
+        m.choices.isEmpty &&
+        !m.body.trim().endsWith('?'));
+    if (at < 0) return answer;
+    return <ChatMessage>[
+      for (int i = 0; i < answer.length; i++)
+        i == at ? answer[i].waitingFor(type, asked) : answer[i],
+    ];
+  }
+
+  /// The kind of file [prompt] asked [by] to make, or null when [by] does
+  /// not make files or was not asked for one.
+  MediaType? _madeTypeFor(String prompt, ChatModel? by) {
+    final Set<TaskKind> makes = (by?.bestFor ?? const <TaskKind>{})
+        .where(ModelRouter.made.contains)
+        .toSet();
+    final TaskKind? asked = ModelRouter.kindOf(prompt);
+    final TaskKind? want = asked != null && ModelRouter.made.contains(asked)
+        ? asked
+        : ModelRouter.looksLikeMotion(prompt)
+            ? TaskKind.video
+            : null;
+    final TaskKind? kind = want != null && makes.contains(want)
+        ? want
+        : makes.length == 1
+            ? makes.single
+            : null;
+    return switch (kind) {
+      TaskKind.image => MediaType.image,
+      TaskKind.video => MediaType.video,
+      TaskKind.audio => MediaType.audio,
+      _ => null,
+    };
+  }
+
+  /// How often, and for how long after the question, the vault is read for
+  /// a file a reply said is still being made. Shortened by tests.
+  @visibleForTesting
+  static Duration madeEvery = const Duration(seconds: 10);
+  @visibleForTesting
+  static Duration madeFor = const Duration(minutes: 10);
+
+  final Set<String> _watchingMade = <String>{};
+  final Set<String> _madeLate = <String>{};
+
+  /// The reply's file was not in the vault after [madeFor].
+  bool madeLate(String replyId) => _madeLate.contains(replyId);
+
+  /// Looks again, for another [madeFor], for a file that was late.
+  void lookAgainForMade(String replyId) {
+    final ChatMessage? m =
+        messages.where((ChatMessage m) => m.id == replyId).firstOrNull;
+    if (m == null || m.awaiting == null) return;
+    _madeLate.remove(replyId);
+    unawaited(_watchMade(m, from: DateTime.now()));
+    _changed();
+  }
+
+  /// Reads the vault until the file [reply] is waiting for is in it, then
+  /// shows it in the reply. It used to stop at the words: "Making your
+  /// video now. It will be in your Vault in about 3 minutes." and the
+  /// video never appeared in the chat.
+  ///
+  /// The file is the first row of that type made after the question that
+  /// no other message in the chat already shows, and not one of [before],
+  /// the rows already there when it was asked. A video or a song counts
+  /// once its file is there (`mediaUrl`), not while the row is a
+  /// placeholder.
+  Future<void> _watchMade(
+    ChatMessage reply, {
+    Set<String> before = const <String>{},
+    DateTime? from,
+  }) async {
+    final MediaType? type = reply.awaiting;
+    final DateTime? asked = reply.askedAt;
+    if (type == null || asked == null || !_watchingMade.add(reply.id)) return;
+    final int signOuts = _signOuts;
+    final DateTime until = (from ?? asked).add(madeFor);
+    try {
+      while (true) {
+        if (signOuts != _signOuts) return;
+        final VaultItem? row = _madeRowFor(type, asked, before);
+        if (row != null) {
+          _showMade(reply.id, row);
+          return;
+        }
+        if (!DateTime.now().isBefore(until)) break;
+        await Future<void>.delayed(madeEvery);
+        if (signOuts != _signOuts) return;
+        await refreshVault();
+      }
+      _madeLate.add(reply.id);
+      debugPrint('made: no new ${type.name} in ${vault.length} vault rows '
+          'since ${asked.toIso8601String()}');
+      _changed();
+    } finally {
+      _watchingMade.remove(reply.id);
+    }
+  }
+
+  VaultItem? _madeRowFor(MediaType type, DateTime asked, Set<String> before) {
+    final Set<String> shown = <String>{
+      for (final ChatThread t in threads)
+        for (final ChatMessage m in t.messages)
+          if (m.attachment != null) m.attachment!.vaultItemId,
+      for (final ChatMessage m in messages)
+        if (m.attachment != null) m.attachment!.vaultItemId,
+    };
+    // The server's clock and this one can disagree by a little.
+    final DateTime since = asked.subtract(const Duration(minutes: 2));
+    final List<VaultItem> rows = vault
+        .where((VaultItem v) =>
+            v.mine &&
+            v.mediaType == type &&
+            !before.contains(v.id) &&
+            !shown.contains(v.id) &&
+            !v.createdAt.isBefore(since) &&
+            (v.mediaUrl != null ||
+                (type == MediaType.image && v.thumbnailUrl != null)))
+        .toList()
+      ..sort((VaultItem a, VaultItem b) => a.createdAt.compareTo(b.createdAt));
+    return rows.firstOrNull;
+  }
+
+  /// Puts [row] in the reply that was waiting for it, on screen or in the
+  /// saved chat it is in.
+  void _showMade(String replyId, VaultItem row) {
+    final String? link = row.mediaUrl ?? row.thumbnailUrl;
+    final String last =
+        link == null ? '' : (Uri.tryParse(link)?.pathSegments.lastOrNull ?? '');
+    final MessageAttachment file = MessageAttachment(
+      fileName: last.contains('.') ? last : row.title,
+      meta: <String>[
+        if (row.durationSeconds != null) '${row.durationSeconds}S',
+        if (row.width != null && row.height != null)
+          '${row.width} × ${row.height}',
+        if (row.credits > 0) '${row.credits} CREDITS',
+      ].join(' · '),
+      kind: row.kind,
+      mediaType: row.mediaType,
+      vaultItemId: row.id,
+      url: row.mediaUrl,
+      thumbnailUrl: row.thumbnailUrl,
+    );
+    _madeLate.remove(replyId);
+    List<ChatMessage> filled(List<ChatMessage> thread) => <ChatMessage>[
+          for (final ChatMessage m in thread)
+            m.id == replyId ? m.withMade(file) : m,
+        ];
+    if (messages.any((ChatMessage m) => m.id == replyId)) {
+      messages = filled(messages);
+      _saveThread();
+    } else {
+      final ChatThread? saved = threads
+          .where((ChatThread t) =>
+              t.messages.any((ChatMessage m) => m.id == replyId))
+          .firstOrNull;
+      if (saved == null) return;
+      final ChatThread thread = ChatThread(
+        id: saved.id,
+        title: saved.title,
+        updatedAt: saved.updatedAt,
+        messages: filled(saved.messages),
+      );
+      threads = <ChatThread>[
+        for (final ChatThread t in threads) t.id == saved.id ? thread : t,
+      ];
+      unawaited(() async {
+        try {
+          await _repo.saveThread(thread);
+        } on Object catch (error) {
+          debugPrint('chat: not saved on the server — $error');
+        }
+      }());
+    }
+    _closeRing(RingKind.create);
+    _changed();
   }
 
   /// Rewrites what is in the composer into a fuller brief.
