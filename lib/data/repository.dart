@@ -223,6 +223,10 @@ abstract interface class ShiftRepository {
     required List<int> bytes,
   });
 
+  /// The bytes of a made file, by its link (an answer's `url`, a vault
+  /// row's `mediaUrl`), so it can be sent on as an upload.
+  Future<List<int>> download(String url);
+
   /// Release anything held open. Called when the app shuts down.
   void dispose() {}
 }

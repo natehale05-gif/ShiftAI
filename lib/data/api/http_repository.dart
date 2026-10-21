@@ -550,6 +550,9 @@ class HttpRepository implements ShiftRepository {
   Future<void> deleteDesign(String id) => _api.delete('$_designs/$id');
 
   @override
+  Future<List<int>> download(String url) => _api.download(url);
+
+  @override
   Future<String> upload({
     required String fileName,
     required String mimeType,

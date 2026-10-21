@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- The home screen widgets collect nothing and track nothing: they
+       draw what the app wrote into the App Group. An extension is its own
+       bundle, so it needs its own manifest; put this file in the
+       ShiftLeaderboardWidgets target's Copy Bundle Resources when the
+       target is created (docs/WIDGETS.md). -->
+  <key>NSPrivacyTracking</key>
+  <false/>
+  <key>NSPrivacyTrackingDomains</key>
+  <array/>
+  <key>NSPrivacyCollectedDataTypes</key>
+  <array/>
+  <key>NSPrivacyAccessedAPITypes</key>
+  <array>
+    <!-- 1C8F.1: reads UserDefaults(suiteName: "group.club.shiftai.app"),
+         which only this app and its widgets share. -->
+    <dict>
+      <key>NSPrivacyAccessedAPIType</key>
+      <string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+      <key>NSPrivacyAccessedAPITypeReasons</key>
+      <array>
+        <string>1C8F.1</string>
+      </array>
+    </dict>
+  </array>
+</dict>
+</plist>

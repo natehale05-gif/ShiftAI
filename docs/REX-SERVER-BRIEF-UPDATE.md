@@ -277,6 +277,11 @@ the way the image edits did on 7 October (5d).
   `mediaUrl`) to the video model as the image to animate: its
   image-to-video or first-frame input. A text-to-video call with only
   the prompt cannot make this video.
+- The picture now also arrives as an upload: the attachment carries an
+  `uploadId` (the app uploads the file through `POST /v1/uploads` first,
+  as for a "+" photo) beside `vaultItemId` and `url`. Whichever your
+  code already reads, it has the file. Use the original, not a
+  thumbnail.
 - The app now spells the picture out in the prompt as well ("Animate the
   attached picture (image-….png), which shows a green leaf in sunlight:
   make it sway in the wind. Keep its subject, framing and colours; do not
@@ -286,6 +291,13 @@ the way the image edits did on 7 October (5d).
   row (and on the attachment, when there is one). Without it the app
   says under the video that it may be a new video rather than the
   picture animated.
+- Check it with `python3 tool/check_engine.py <BASE> --email … --password
+  … --animate`. It makes a picture, asks the first `bestFor: ["video"]`
+  model to make it sway exactly as the app does, waits up to 10 minutes
+  for the video in `/v1/vault`, and says `ok` only when the video names
+  the picture in `editedFrom`. It prints both links so you can look.
+  It is not private (the video has to land in the vault), so it spends
+  credits and leaves both in the vault.
 
 ## 6. Check your work: `tool/check_engine.py`
 

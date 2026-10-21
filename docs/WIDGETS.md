@@ -68,7 +68,12 @@ everywhere else in this repo) and do this once.
    every file already in `ios/ShiftLeaderboardWidgets/` into the new
    target's group in the project navigator (make sure "Copy items if
    needed" is off — they are already in the right place — and that the
-   new target's membership checkbox is on for each).
+   new target's membership checkbox is on for each). That includes
+   `PrivacyInfo.xcprivacy`: check it is in the new target's **Build
+   Phases → Copy Bundle Resources**. An extension is its own bundle and
+   needs its own privacy manifest (it reads the App Group's
+   `UserDefaults`, reason `1C8F.1`); one that is not copied in is one
+   Apple never sees.
 4. Select the `ShiftLeaderboardWidgets` target → **Signing & Capabilities**
    → **+ Capability → App Groups** → add `group.club.shiftai.app` (the
    same group Runner already has). This should write to the

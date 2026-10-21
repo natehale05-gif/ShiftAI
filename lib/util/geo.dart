@@ -4,6 +4,15 @@ import 'package:geolocator/geolocator.dart';
 /// see `docs/API.md`'s `/v1/league` for why the server only needs this much.
 class GeoFix {
   const GeoFix(this.lat, this.lng);
+
+  /// [lat] and [lng] to two decimal places, about a kilometre: plenty for
+  /// a metro area. A low-accuracy fix still came back with every decimal
+  /// the device had, and Apple counts three or more as precise location,
+  /// which is not what the privacy label says this app collects.
+  factory GeoFix.coarse(double lat, double lng) => GeoFix(_two(lat), _two(lng));
+
+  static double _two(double v) => (v * 100).roundToDouble() / 100;
+
   final double lat;
   final double lng;
 }
@@ -29,7 +38,7 @@ abstract final class Geo {
           accuracy: LocationAccuracy.low,
         ),
       );
-      return GeoFix(position.latitude, position.longitude);
+      return GeoFix.coarse(position.latitude, position.longitude);
     } on Object {
       return null;
     }

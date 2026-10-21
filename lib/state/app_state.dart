@@ -2032,13 +2032,17 @@ class AppState extends ChangeNotifier {
         _saveThread();
         _changed();
       }
-      final List<SentFile> files = messages
-              .where((ChatMessage m) => m.id == question)
-              .firstOrNull
-              ?.files
-              .where((SentFile f) => !f.uploading)
-              .toList() ??
-          const <SentFile>[];
+      final List<SentFile> files = await _madeAsUploads(
+        messages
+                .where((ChatMessage m) => m.id == question)
+                .firstOrNull
+                ?.files
+                .where((SentFile f) => !f.uploading)
+                .toList() ??
+            const <SentFile>[],
+        to: answerer,
+      );
+      if (!current()) return;
       await _answer(
         stamp,
         prompt,
@@ -2317,6 +2321,95 @@ class AppState extends ChangeNotifier {
     } on ShiftApiException catch (error) {
       debugPrint('vault: not re-read — ${error.message}');
     }
+  }
+
+  /// Made pictures already sent on as uploads, by vault row: one upload
+  /// each, however many times it is edited or animated.
+  final Map<String, String> _madeUploads = <String, String>{};
+
+  /// A picture made in this chat, sent to an image or video model to
+  /// change or animate, goes as an upload too (`uploadId`, the way a
+  /// photo picked with "+" does), beside its vault reference, in the same
+  /// attachment. On 21 Oct a video of a leaf came back as a tree: the
+  /// server had the picture by reference and passed the model only the
+  /// words. A server that reads uploads now has the file itself. One
+  /// that will not download or upload is sent the reference alone.
+  Future<List<SentFile>> _madeAsUploads(
+    List<SentFile> files, {
+    required ChatModel? to,
+  }) async {
+    final bool makes = to != null &&
+        (to.bestFor.contains(TaskKind.image) ||
+            to.bestFor.contains(TaskKind.video));
+    if (!makes) return files;
+    final int signOuts = _signOuts;
+    final List<SentFile> out = <SentFile>[];
+    for (final SentFile f in files) {
+      final String? row = f.vaultItemId;
+      final String? link = f.url;
+      if (f.uploadId.isNotEmpty ||
+          row == null ||
+          row.isEmpty ||
+          link == null ||
+          !f.isImage) {
+        out.add(f);
+        continue;
+      }
+      String? id = _madeUploads[row];
+      String mime = f.mimeType;
+      int? size;
+      if (id == null) {
+        try {
+          final List<int> bytes = await _repo.download(link);
+          if (signOuts != _signOuts) return files;
+          if (bytes.isNotEmpty) {
+            mime = _imageTypeOf(bytes) ?? mime;
+            size = bytes.length;
+            id = await _repo.upload(
+              fileName: f.name,
+              mimeType: mime,
+              bytes: bytes,
+            );
+            _madeUploads[row] = id;
+          }
+        } on ShiftApiException catch (error) {
+          debugPrint('made picture: sent by reference only — '
+              '${error.message}');
+        }
+      }
+      out.add(id == null
+          ? f
+          : SentFile(
+              uploadId: id,
+              name: f.name,
+              mimeType: mime,
+              sizeBytes: size,
+              vaultItemId: row,
+              url: link,
+            ));
+    }
+    return out;
+  }
+
+  /// A picture's type by its first bytes: the vault says "image", and a
+  /// made picture is as often a JPEG or a WebP as a PNG.
+  static String? _imageTypeOf(List<int> b) {
+    bool starts(List<int> sig, [int at = 0]) {
+      if (b.length < at + sig.length) return false;
+      for (int i = 0; i < sig.length; i++) {
+        if (b[at + i] != sig[i]) return false;
+      }
+      return true;
+    }
+
+    if (starts(<int>[0x89, 0x50, 0x4E, 0x47])) return 'image/png';
+    if (starts(<int>[0xFF, 0xD8, 0xFF])) return 'image/jpeg';
+    if (starts(<int>[0x47, 0x49, 0x46, 0x38])) return 'image/gif';
+    if (starts(<int>[0x52, 0x49, 0x46, 0x46]) &&
+        starts(<int>[0x57, 0x45, 0x42, 0x50], 8)) {
+      return 'image/webp';
+    }
+    return null;
   }
 
   /// What a video model is asked when it is to make a picture from this

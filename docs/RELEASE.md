@@ -116,6 +116,9 @@ Auth), and the tokens live in the Keychain / Keystore.
 ### 4. Privacy declarations
 
 Both stores ask what you collect before they will take the build.
+`docs/PRIVACY.md` has what the app collects (from the code), a draft
+policy, and the answers for Apple's App Privacy and Play's Data safety;
+section 5 there is what has to be decided first.
 
 - **Apple:** the privacy nutrition label, plus a privacy policy URL that
   resolves. As the app stands it collects an email, a name, and a photo
