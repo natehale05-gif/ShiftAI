@@ -278,6 +278,10 @@ def make(body, model, history):
                    if f.get("vaultItemId")), None)
     if EDITS_IGNORED:
         source = None
+    if source:
+        # On the row too: a video saved after its answer has no
+        # attachment to say it, and the app reads it from here.
+        row["editedFrom"] = source["vaultItemId"]
     colour = next((rgb for word, rgb in COLOURS.items()
                    if word in prompt.lower()), (255, 60, 150))
     UPLOADS[f"made-{n}"] = (picture_png(colour=colour), "image/png")

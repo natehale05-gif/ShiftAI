@@ -467,7 +467,13 @@ class VaultItem {
     MediaType? mediaType,
     this.mediaUrl,
     this.thumbnailUrl,
+    this.editedFrom,
   }) : _mediaType = mediaType;
+
+  /// The vault row this one was made from, when the engine says: the
+  /// picture a video animates, or the picture an edit changed. A video
+  /// saved after its answer carries it here, there being no attachment.
+  final String? editedFrom;
 
   final String id;
   final String title;
@@ -553,6 +559,7 @@ class VaultItem {
         mediaType: _mediaType,
         mediaUrl: mediaUrl,
         thumbnailUrl: thumbnailUrl,
+        editedFrom: editedFrom,
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -571,6 +578,7 @@ class VaultItem {
         'mediaType': mediaType.name,
         'mediaUrl': mediaUrl,
         'thumbnailUrl': thumbnailUrl,
+        if (editedFrom != null) 'editedFrom': editedFrom,
         'byHandle': byHandle,
         'byName': byName,
         'byAvatarUrl': byAvatarUrl,
@@ -595,6 +603,7 @@ class VaultItem {
       mediaType: MediaType.parse(json['mediaType'] as String?, kind),
       mediaUrl: url('mediaUrl'),
       thumbnailUrl: url('thumbnailUrl'),
+      editedFrom: url('editedFrom'),
       prompt: json['prompt'] as String? ?? '',
       model: json['model'] as String? ?? '',
       createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ??
