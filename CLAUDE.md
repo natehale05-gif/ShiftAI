@@ -194,7 +194,9 @@ the new row in it. On 16 Oct the chat stopped at those words.
 "it" is and what it shows (`AppState._askedOf`), and a video of a picture
 without `editedFrom` says it may be a new one: on 21 Oct a leaf came back
 as a tree (`MOCK_EDITS=ignore` replays that; `tool/check_engine.py
---animate` checks a real server for it).
+--animate` checks a real server for it). The picture goes to an image or
+video model as an upload too (`uploadId` beside `vaultItemId`, one
+attachment), for a server that reads "+" uploads and not vault references.
 
 An image, video or audio request is never turned away on the model list
 on screen: that list is empty until the load lands (the app opens at
@@ -274,6 +276,6 @@ exploratory, branch.
 flutter analyze && flutter test
 ```
 
-419 tests. They have caught every regression listed above at least once,
+421 tests. They have caught every regression listed above at least once,
 including several of mine. If one fails, read it before changing it —
 twice now the test was right and my expectation was wrong.

@@ -64,6 +64,43 @@ class ApiClient {
           .get(_uri(path, query), headers: await _headers(json: false))
           .timeout(timeout));
 
+  /// The bytes of a made file at [url]: a link on an answer or a vault
+  /// row's `mediaUrl`, which need no auth header (docs/API.md). None is
+  /// sent, so a link to another host is never handed the token. A
+  /// relative link is read against the engine.
+  Future<List<int>> download(String url, {int maxBytes = 25 << 20}) async {
+    final Uri at = Uri.parse(baseUrl).resolve(url);
+    final http.Response response;
+    try {
+      response = await _client.get(at).timeout(const Duration(seconds: 30));
+    } on TimeoutException {
+      throw const ShiftApiException(
+        ShiftApiErrorKind.timeout,
+        'The file did not download in time.',
+      );
+    } on Object catch (error) {
+      throw ShiftApiException(
+        ShiftApiErrorKind.offline,
+        'Could not download the file. $error',
+      );
+    }
+    final int status = response.statusCode;
+    if (status < 200 || status >= 300) {
+      throw ShiftApiException(
+        ShiftApiErrorKind.server,
+        'The file answered $status.',
+        status: status,
+      );
+    }
+    if (response.bodyBytes.length > maxBytes) {
+      throw const ShiftApiException(
+        ShiftApiErrorKind.badRequest,
+        'The file is too big to send again.',
+      );
+    }
+    return response.bodyBytes;
+  }
+
   /// [wait] replaces [timeout] for one call that is expected to take
   /// longer (a model writing a long answer, or making a file). Completing
   /// [abort] cancels the request, and the call throws.

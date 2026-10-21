@@ -277,6 +277,11 @@ the way the image edits did on 7 October (5d).
   `mediaUrl`) to the video model as the image to animate: its
   image-to-video or first-frame input. A text-to-video call with only
   the prompt cannot make this video.
+- The picture now also arrives as an upload: the attachment carries an
+  `uploadId` (the app uploads the file through `POST /v1/uploads` first,
+  as for a "+" photo) beside `vaultItemId` and `url`. Whichever your
+  code already reads, it has the file. Use the original, not a
+  thumbnail.
 - The app now spells the picture out in the prompt as well ("Animate the
   attached picture (image-….png), which shows a green leaf in sunlight:
   make it sway in the wind. Keep its subject, framing and colours; do not

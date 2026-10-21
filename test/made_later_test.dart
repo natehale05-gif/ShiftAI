@@ -113,6 +113,28 @@ class _Engine extends SeedRepository {
     ];
   }
 
+  final List<({String name, String mimeType, int size})> uploads = [];
+  bool downloads = true;
+
+  @override
+  Future<List<int>> download(String url) async {
+    if (!downloads) {
+      throw const ShiftApiException(ShiftApiErrorKind.offline, 'no');
+    }
+    // A JPEG, whatever the vault calls it.
+    return <int>[0xFF, 0xD8, 0xFF, 0xE0, 1, 2, 3];
+  }
+
+  @override
+  Future<String> upload({
+    required String fileName,
+    required String mimeType,
+    required List<int> bytes,
+  }) async {
+    uploads.add((name: fileName, mimeType: mimeType, size: bytes.length));
+    return 'up-${uploads.length}';
+  }
+
   @override
   Future<List<VaultItem>> vault() async =>
       rows.reversed.map(VaultItem.fromJson).toList();
@@ -266,6 +288,49 @@ void main() {
     expect(leaf.attachment?.editedFrom, 'flag');
     expect(again.editNotConfirmed(leaf), isFalse);
     expect(again.editedFromName(leaf), 'image-flag.png');
+  });
+
+  test(
+      'the picture goes to the video model as an upload too, beside its '
+      'vault reference, and is uploaded once', () async {
+    final (AppState state, _Engine engine) = await _swaying();
+    final SentFile sent = engine.sent.last.files.single;
+    expect(sent.uploadId, 'up-1',
+        reason: 'the way a "+" photo goes, for a server that reads uploads '
+            'and not vault references');
+    expect(sent.vaultItemId, 'flag');
+    expect(sent.mimeType, 'image/jpeg', reason: 'by its bytes');
+    expect(sent.toJson()['uploadId'], 'up-1');
+    expect(sent.toJson()['vaultItemId'], 'flag');
+    expect(engine.uploads.single.name, 'image-flag.png');
+
+    state.regenerate();
+    await _settle();
+    expect(engine.sent.last.files.single.uploadId, 'up-1');
+    expect(engine.uploads, hasLength(1));
+  });
+
+  test(
+      'a picture that will not download goes by reference alone; a chat '
+      'model is not sent an upload', () async {
+    final _Engine engine = _Engine()..downloads = false;
+    final (AppState state, _) = await _signedIn(engine);
+    state.sendMessage('generate an image of the spanish flag');
+    await _settle();
+    state.sendMessage('make it sway in the wind');
+    await _settle();
+    expect(engine.sent.last.model, _video.id);
+    expect(engine.sent.last.files.single.uploadId, isEmpty);
+    expect(engine.sent.last.files.single.vaultItemId, 'flag');
+
+    engine.downloads = true;
+    state.clearThread();
+    state.sendMessage('generate an image of the spanish flag');
+    await _settle();
+    state.sendMessage('What is in this picture?');
+    await _settle();
+    expect(engine.sent.last.model, _chat.id);
+    expect(engine.uploads, isEmpty);
   });
 
   test('a question back from the video model is not waited on', () async {

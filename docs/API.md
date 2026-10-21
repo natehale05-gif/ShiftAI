@@ -522,6 +522,14 @@ upload:
   was sent>"` on that attachment. A text-to-image call with only the
   prompt is not an edit: on 7 Oct "make one of the petals blue" came
   back as a different flower. `tool/check_engine.py --edit` checks this.
+- A picture sent to an image or video model to change or animate goes
+  **both ways in one attachment**: by reference (`vaultItemId`, `url`)
+  and as an upload (`uploadId`, from `POST /v1/uploads`, exactly as a
+  photo picked with "+"), so a server that reads either has the file:
+  `{ "uploadId": "u6", "vaultItemId": "v5", "url": "…", "name":
+  "image-5.png", "mimeType": "image/png", "sizeBytes": 7992 }`. It is
+  one picture, not two. When the app cannot download it, only the
+  reference goes.
 - Movement asked of that picture ("make it sway in the wind", "animate
   it", "a video of it") goes to a model with `bestFor: ["video"]`, the
   picture in `attachments` the same way. A video model given a picture

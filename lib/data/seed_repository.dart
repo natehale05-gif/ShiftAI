@@ -330,6 +330,10 @@ class SeedRepository implements ShiftRepository {
   }) async =>
       'local-${DateTime.now().microsecondsSinceEpoch}-$fileName';
 
+  /// Nothing here has a file behind it.
+  @override
+  Future<List<int>> download(String url) async => const <int>[];
+
   @override
   void dispose() {}
 }
