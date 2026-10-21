@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Checks a server against what the ShiftAi app reads (docs/API.md).
 
-    python3 tool/check_engine.py BASE_URL --email ... --password ... [--spend] [--image] [--edit]
+    python3 tool/check_engine.py BASE_URL --email ... --password ... [--spend] [--image] [--edit] [--animate]
 
 Signs in, calls every route the app uses, and prints one line per check:
 
@@ -20,6 +20,12 @@ an attachment on the answer, a vault row with mediaUrl, and a file that
 loads with no auth header. --edit (implies --image) then asks the same
 model to change that picture, the way the chat's "Edit image" does, and
 checks it answered with a new picture marked as an edit of the first.
+--animate (implies --image) asks the first model with bestFor ["video"]
+to make that picture move, the way the chat sends "make it sway in the
+wind", waits for the video in /v1/vault as the chat does (up to --wait
+minutes), and checks it is marked as made from the picture. It is not
+private, since the chat finds a video made later through the vault, so it
+stays in the vault and spends real credits.
 
 Standard library only. Exit code 1 when anything differs.
 """
@@ -536,6 +542,103 @@ def check_edit(engine, enabled, made):
             f"words. Compare {made['url']} with {new_url}")
 
 
+def check_animate(engine, enabled, made, wait_minutes):
+    """A video of the made picture, as the chat asks for one.
+
+    On 21 Oct a leaf sent with "make it sway in the wind" came back as a
+    tree swaying at sunset: the video model was called with the words
+    alone. The pixels cannot be judged here; `editedFrom` on the video's
+    attachment or vault row is the server saying it animated the picture
+    it was sent, and both links are printed to look at.
+    """
+    if not enabled:
+        say("skipped", "video of a picture",
+            "makes a video of the made image; run with --animate")
+        return
+    if not made:
+        say("skipped", "video of a picture", "no made image (see above)")
+        return
+    _, body, _, _ = engine.call("GET", "/v1/models")
+    able = [m for m in rows(body) or []
+            if "video" in (m.get("bestFor") or [])]
+    if not able:
+        say("differs", "video of a picture",
+            "no model in /v1/models has bestFor [\"video\"], so the app "
+            "never sends a video request")
+        return
+    model = able[0]["id"]
+    source = made["attachment"]
+    source_id = source.get("vaultItemId") or ""
+    name = source.get("fileName") or "the picture"
+    picture = {"vaultItemId": source_id, "name": name,
+               "mimeType": "image/png", "url": made["url"]}
+    _, body, _, _ = engine.call("GET", "/v1/vault")
+    before = {r.get("id") for r in rows(body) or []}
+    asked = time.time()
+    status, msgs, _, error = ask(engine, {
+        "prompt": f"Animate the attached picture ({name}), which shows a "
+                  "pink flower: make it sway in the wind. Keep its subject, "
+                  "framing and colours; do not make a new scene.",
+        "model": model, "private": False,
+        "attachments": [picture],
+        "history": [
+            {"role": "user", "body": "Generate an image of a pink flower"},
+            {"role": "assistant", "model": made["model"],
+             "body": made["body"], "attachments": [picture]},
+        ]})
+    what = f"video of a picture ({model})"
+    if error or status != 200 or not msgs:
+        say("differs", what, error or f"{status}")
+        return
+    video = next((m.get("attachment") for m in msgs
+                  if isinstance(m.get("attachment"), dict)), None)
+    row = None
+    if video is None:
+        said = str(msgs[-1].get("body") or "")[:80]
+        say("note", what, f"answered with words, the video to follow in "
+            f"the vault: {said!r}. Waiting up to {wait_minutes:g} min, as "
+            "the chat does")
+        while time.time() - asked < wait_minutes * 60:
+            time.sleep(15)
+            _, body, _, _ = engine.call("GET", "/v1/vault")
+            fresh = [r for r in rows(body) or []
+                     if r.get("id") not in before
+                     and (r.get("mediaType") or r.get("kind")) == "video"
+                     and r.get("mediaUrl")]
+            if fresh:
+                row = fresh[0]
+                break
+        if row is None:
+            fresh = [r for r in rows(body) or [] if r.get("id") not in before]
+            say("differs", what,
+                f"no new video row with a mediaUrl in /v1/vault after "
+                f"{wait_minutes:g} min, so the chat never shows it. New "
+                f"rows: {[(r.get('id'), r.get('mediaType') or r.get('kind'), bool(r.get('mediaUrl'))) for r in fresh]}")
+            return
+        say("ok", "made video in /v1/vault",
+            f"row {row.get('id')} after {time.time() - asked:.0f} s")
+        video = row
+    url = video.get("url") or video.get("mediaUrl")
+    if not url and video.get("vaultItemId"):
+        _, body, _, _ = engine.call("GET", "/v1/vault")
+        row = next((r for r in rows(body) or []
+                    if r.get("id") == video.get("vaultItemId")), None)
+        url = (row or {}).get("mediaUrl") or (row or {}).get("thumbnailUrl")
+        if row and row.get("editedFrom") and not video.get("editedFrom"):
+            video = {**video, "editedFrom": row.get("editedFrom")}
+    url = url or "(no link)"
+    if video.get("editedFrom") == source_id and source_id:
+        say("ok", what,
+            f"editedFrom {source_id}: look at {made['url']} then {url}")
+    else:
+        say("differs", what,
+            "no editedFrom naming the picture sent, so nothing says the "
+            "video animates it rather than one made from the words: on "
+            "21 Oct a leaf came back as a tree. Call the model's image-to-"
+            "video mode with the attachment as its image, then set "
+            f"editedFrom. Compare {made['url']} with {url}")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("base", help="e.g. https://app.shiftai.club/app-preview/api")
@@ -545,6 +648,12 @@ def main():
                     help="also generate one image and check the app can show it")
     ap.add_argument("--edit", action="store_true",
                     help="also edit that image, as the chat's Edit image does")
+    ap.add_argument("--animate", action="store_true",
+                    help="also make a video of that image, as the chat's "
+                         "\"make it sway in the wind\" does")
+    ap.add_argument("--wait", type=float, default=10,
+                    help="minutes to wait for a video saved after its "
+                         "answer (the app waits 10)")
     ap.add_argument("--spend", action="store_true",
                     help="also send messages, polish, upload, save a chat")
     ap.add_argument("--timeout", type=float, default=20,
@@ -567,8 +676,9 @@ def main():
     check_threads(engine, args.spend)
     check_polish(engine, args.spend)
     check_messages(engine, args.spend)
-    made = check_image(engine, args.image or args.edit)
+    made = check_image(engine, args.image or args.edit or args.animate)
     check_edit(engine, args.edit, made)
+    check_animate(engine, args.animate, made, args.wait)
     say("skipped", "DELETE /v1/me", "it would delete this account")
 
     differs = RESULTS.count("differs")

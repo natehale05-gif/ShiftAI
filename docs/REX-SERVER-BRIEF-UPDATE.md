@@ -286,6 +286,13 @@ the way the image edits did on 7 October (5d).
   row (and on the attachment, when there is one). Without it the app
   says under the video that it may be a new video rather than the
   picture animated.
+- Check it with `python3 tool/check_engine.py <BASE> --email … --password
+  … --animate`. It makes a picture, asks the first `bestFor: ["video"]`
+  model to make it sway exactly as the app does, waits up to 10 minutes
+  for the video in `/v1/vault`, and says `ok` only when the video names
+  the picture in `editedFrom`. It prints both links so you can look.
+  It is not private (the video has to land in the vault), so it spends
+  credits and leaves both in the vault.
 
 ## 6. Check your work: `tool/check_engine.py`
 

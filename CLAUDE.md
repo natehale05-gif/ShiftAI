@@ -193,7 +193,8 @@ the new row in it. On 16 Oct the chat stopped at those words.
 `MOCK_VIDEO_LATER=1` replays it. The video model is told which picture
 "it" is and what it shows (`AppState._askedOf`), and a video of a picture
 without `editedFrom` says it may be a new one: on 21 Oct a leaf came back
-as a tree (`MOCK_EDITS=ignore` replays that).
+as a tree (`MOCK_EDITS=ignore` replays that; `tool/check_engine.py
+--animate` checks a real server for it).
 
 An image, video or audio request is never turned away on the model list
 on screen: that list is empty until the load lands (the app opens at
