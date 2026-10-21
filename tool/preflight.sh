@@ -23,10 +23,20 @@ for f in ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-1024x1024@1x.png
   [ -f "$f" ] && ok "$(basename "$f")" || bad "missing $f"
 done
 python3 - <<'PY' && ok "1024 icon is opaque (App Store rejects alpha)" || bad "1024 icon has an alpha channel"
-from PIL import Image
-import sys
-im = Image.open('ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-1024x1024@1x.png')
-sys.exit(0 if im.mode == 'RGB' else 1)
+# Read from the PNG itself, not with PIL, which is not always installed
+# (or importable) where this runs. Opaque means colour type 2 (RGB) or 0
+# (grey) and no tRNS chunk.
+import struct, sys
+data = open('ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-1024x1024@1x.png', 'rb').read()
+if data[:8] != b'\x89PNG\r\n\x1a\n':
+    sys.exit(1)
+colour = data[25]
+at, chunks = 8, set()
+while at + 8 <= len(data):
+    length, kind = struct.unpack('>I4s', data[at:at + 8])
+    chunks.add(kind)
+    at += 12 + length
+sys.exit(0 if colour in (0, 2) and b'tRNS' not in chunks else 1)
 PY
 
 echo
@@ -38,6 +48,9 @@ python3 -c "import plistlib;plistlib.load(open('ios/Runner/Info.plist','rb'))" 2
   && ok "Info.plist parses" || bad "Info.plist is not valid"
 python3 -c "import plistlib;plistlib.load(open('ios/Runner/PrivacyInfo.xcprivacy','rb'))" 2>/dev/null \
   && ok "PrivacyInfo.xcprivacy parses" || bad "PrivacyInfo.xcprivacy is not valid"
+python3 -c "import plistlib;plistlib.load(open('ios/ShiftLeaderboardWidgets/PrivacyInfo.xcprivacy','rb'))" 2>/dev/null \
+  && ok "widget extension PrivacyInfo.xcprivacy parses" \
+  || bad "ios/ShiftLeaderboardWidgets/PrivacyInfo.xcprivacy missing or not valid"
 grep -q "club.shiftai.app" ios/Runner.xcodeproj/project.pbxproj \
   && ok "bundle id set" || bad "bundle id not set"
 grep -q "NSLocationWhenInUseUsageDescription" ios/Runner/Info.plist \
