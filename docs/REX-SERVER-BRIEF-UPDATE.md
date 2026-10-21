@@ -266,6 +266,27 @@ find the row:
 - Leave the attachment off that first answer: an attachment there is
   taken as the finished file.
 
+## 5h. The video has to be of the picture sent
+
+On 21 October a leaf was made, then "make it sway in the wind" went to
+Showcase video with the leaf in `attachments`. The video that came back
+was a tree swaying at sunset: the model had worked from the words alone,
+the way the image edits did on 7 October (5d).
+
+- Pass the picture in `attachments` (its `url`, or the vault row's
+  `mediaUrl`) to the video model as the image to animate: its
+  image-to-video or first-frame input. A text-to-video call with only
+  the prompt cannot make this video.
+- The app now spells the picture out in the prompt as well ("Animate the
+  attached picture (image-….png), which shows a green leaf in sunlight:
+  make it sway in the wind. Keep its subject, framing and colours; do not
+  make a new scene."), so a model that only reads words gets the subject
+  right, but only the picture itself gets the same leaf.
+- Put `"editedFrom": "<the picture's vaultItemId>"` on the video's vault
+  row (and on the attachment, when there is one). Without it the app
+  says under the video that it may be a new video rather than the
+  picture animated.
+
 ## 6. Check your work: `tool/check_engine.py`
 
 It is in the ShiftAI repo and uses only the Python standard library. It

@@ -771,13 +771,14 @@ class AppState extends ChangeNotifier {
   /// made in this chat), came back with a picture, and does not say it
   /// changed the one it was sent. On 7 Oct "make one of the petals blue"
   /// came back as a different flower, labelled as if it were the edit.
+  ///
+  /// Same for a video of a picture: on 21 Oct "make it sway in the wind",
+  /// sent with a leaf, came back as a tree.
   bool editNotConfirmed(ChatMessage reply) {
     final MessageAttachment? made = reply.attachment;
-    if (made == null ||
-        madeTypeOf(made) != MediaType.image ||
-        made.editedFrom != null) {
-      return false;
-    }
+    if (made == null || made.editedFrom != null) return false;
+    final MediaType type = madeTypeOf(made, reply: reply);
+    if (type != MediaType.image && type != MediaType.video) return false;
     return questionOf(reply.id)?.files.any((SentFile f) =>
             f.isImage && (f.vaultItemId?.isNotEmpty ?? false)) ??
         false;
@@ -2041,6 +2042,7 @@ class AppState extends ChangeNotifier {
       await _answer(
         stamp,
         prompt,
+        sentAs: _askedOf(prompt, files, answerer),
         model: answerer?.id,
         history: history,
         as: answerer,
@@ -2116,6 +2118,7 @@ class AppState extends ChangeNotifier {
   Future<List<ChatMessage>> _answer(
     String stamp,
     String prompt, {
+    String? sentAs,
     required String? model,
     required List<ChatTurn> history,
     ChatModel? as,
@@ -2129,7 +2132,7 @@ class AppState extends ChangeNotifier {
     final Set<String> before = vault.map((VaultItem v) => v.id).toSet();
     try {
       final List<ChatMessage> sent = (await _repo.send(
-        prompt,
+        sentAs ?? prompt,
         private: privateChat,
         avatarId: activeAvatarId,
         model: model,
@@ -2316,6 +2319,61 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  /// What a video model is asked when it is to make a picture from this
+  /// chat move: the picture is named, and what it shows is said, so "it"
+  /// means that picture. On 21 Oct "make it sway in the wind", sent with a
+  /// picture of a leaf, came back as a tree swaying at sunset: the model
+  /// had worked from the words alone. The thread still shows what was
+  /// typed.
+  String _askedOf(String prompt, List<SentFile> files, ChatModel? to) {
+    if (!(to?.bestFor.contains(TaskKind.video) ?? false) ||
+        !ModelRouter.wantsVideoOf(prompt)) {
+      return prompt;
+    }
+    final SentFile? picture = files
+        .where(
+            (SentFile f) => f.isImage && (f.vaultItemId?.isNotEmpty ?? false))
+        .firstOrNull;
+    if (picture == null) return prompt;
+    final String? shows = _subjectOf(picture.vaultItemId!);
+    final String ask = prompt.trim().replaceAll(RegExp(r'[.!\s]+$'), '');
+    return 'Animate the attached picture (${picture.name})'
+        '${shows == null ? '' : ', which shows $shows'}: $ask. Keep its '
+        'subject, framing and colours; do not make a new scene.';
+  }
+
+  /// What the made picture [vaultItemId] shows, in the words it was asked
+  /// for with ("generate an image of the spanish flag" is "the spanish
+  /// flag"), or its vault row's prompt. Null when neither is known.
+  String? _subjectOf(String vaultItemId) {
+    final ChatMessage? made = messages
+        .where((ChatMessage m) => m.attachment?.vaultItemId == vaultItemId)
+        .lastOrNull;
+    final String? asked = made == null ? null : questionOf(made.id)?.body;
+    final String? row =
+        vault.where((VaultItem v) => v.id == vaultItemId).firstOrNull?.prompt;
+    for (final String? said in <String?>[asked, row]) {
+      if (said == null) continue;
+      final String subject = said
+          .replaceFirst(_askedFor, '')
+          .trim()
+          .replaceAll(RegExp(r'[.!?\s]+$'), '');
+      if (subject.isEmpty) continue;
+      return subject.length <= 300
+          ? subject
+          : '${subject.substring(0, 297).trimRight()}…';
+    }
+    return null;
+  }
+
+  static final RegExp _askedFor = RegExp(
+    r'^\s*(?:please\s+)?(?:(?:can|could)\s+you\s+)?'
+    r'(?:generate|create|make|draw|render|design|paint|give)\s+(?:me\s+)?'
+    r'(?:an?\s+)?(?:new\s+)?(?:image|picture|photo|illustration|drawing|'
+    r'render|poster|wallpaper)?\s*(?:of\s+)?',
+    caseSensitive: false,
+  );
+
   /// What [by] is still making, when it answered [prompt] without the
   /// file: the newest reply in [answer] is marked as waiting for it.
   ///
@@ -2479,6 +2537,7 @@ class AppState extends ChangeNotifier {
       vaultItemId: row.id,
       url: row.mediaUrl,
       thumbnailUrl: row.thumbnailUrl,
+      editedFrom: row.editedFrom,
     );
     _madeLate.remove(replyId);
     List<ChatMessage> filled(List<ChatMessage> thread) => <ChatMessage>[

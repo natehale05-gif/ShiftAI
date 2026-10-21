@@ -470,6 +470,9 @@ shown in that reply as if it had come with it. So:
 
 - Save the row with the person's own vault (no `byHandle`), its real
   `mediaType`, and `createdAt` the time it was made or started.
+- A video of a picture carries `editedFrom` on the row, as on an
+  attachment; the app reads it from the row when there was no
+  attachment.
 - Set `mediaUrl` only once the file is there. A row saved early as a
   placeholder is fine; the app waits for its `mediaUrl`.
 
@@ -526,7 +529,11 @@ upload:
   video's attachment naming the picture it was made from. The app says
   "Made from <name>" under it. On 16 Oct "make it sway in the wind"
   after a flag went to the image model as an edit and came back a still
-  flag.
+  flag. Its `prompt` names the picture and says what it shows ("Animate
+  the attached picture (image-1.png), which shows a green leaf: make it
+  sway in the wind. …"); the thread shows what was typed. Without
+  `editedFrom` the app says the video may not be of that picture: on
+  21 Oct a leaf came back as a tree.
 - Every assistant turn in `history` that made something carries it the
   same way, so a chat model asked "what flower is this?" or "write a
   caption for it" can be given the picture to look at.

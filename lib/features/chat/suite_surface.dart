@@ -1221,7 +1221,10 @@ class _EditNote extends StatelessWidget {
     final String? from = state.editedFromName(reply);
     final bool unsure = from == null && state.editNotConfirmed(reply);
     if (from == null && !unsure) return const SizedBox.shrink();
-    final String who = reply.modelName ?? 'The image model';
+    final bool video =
+        state.madeTypeOf(reply.attachment!, reply: reply) != MediaType.image;
+    final String who =
+        reply.modelName ?? (video ? 'The video model' : 'The image model');
     return Padding(
       padding: const EdgeInsets.only(top: Space.x2),
       child: Row(
@@ -1239,13 +1242,17 @@ class _EditNote extends StatelessWidget {
           Expanded(
             child: Text(
               unsure
-                  ? '$who may have made a new picture rather than changing '
-                      'yours: it did not say it edited the one you sent.'
-                  : state.madeTypeOf(reply.attachment!, reply: reply) ==
-                          MediaType.image
-                      ? 'Edited from $from'
+                  ? video
+                      ? '$who may have made a new video rather than '
+                          'animating your picture: it did not say it used '
+                          'the one you sent.'
+                      : '$who may have made a new picture rather than '
+                          'changing yours: it did not say it edited the one '
+                          'you sent.'
+                  : video
                       // A video of a picture: made from it, not a change.
-                      : 'Made from $from',
+                      ? 'Made from $from'
+                      : 'Edited from $from',
               style: ShiftType.caption(c.textMuted),
             ),
           ),

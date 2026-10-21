@@ -27,8 +27,10 @@ Map<String, dynamic> _row(
   String kind, {
   DateTime? at,
   bool file = true,
+  String? from,
 }) =>
     <String, dynamic>{
+      if (from != null) 'editedFrom': from,
       ...Seed.vault.first.toJson(),
       'id': id,
       'title': 'Row $id',
@@ -224,6 +226,46 @@ void main() {
     engine.rows.add(_row('this-one', 'video'));
     await _settle(40);
     expect(state.messages.last.attachment?.vaultItemId, 'this-one');
+  });
+
+  test(
+      'the video model is told which picture "it" is and what it shows; the '
+      'thread shows what was typed', () async {
+    final (AppState state, _Engine engine) = await _swaying();
+    final String sent = engine.sent.last.prompt;
+    expect(sent, contains('Animate the attached picture (image-flag.png)'),
+        reason: 'on 21 Oct a leaf came back as a tree: the model had only '
+            '"make it sway in the wind"');
+    expect(sent, contains('which shows the spanish flag'));
+    expect(sent, contains('make it sway in the wind'));
+    expect(sent, contains('do not make a new scene'));
+    expect(engine.sent.last.files.single.vaultItemId, 'flag');
+    expect(state.messages[state.messages.length - 2].body,
+        'make it sway in the wind');
+
+    // Words alone, about something else, go as they were typed.
+    state.sendMessage('make a video of Miami');
+    await _settle();
+    expect(engine.sent.last.prompt, 'make a video of Miami');
+  });
+
+  test(
+      'a video of the picture that does not say it used it says it may be '
+      'a new one; one that does says what it was made from', () async {
+    final (AppState state, _Engine engine) = await _swaying();
+    engine.rows.add(_row('tree', 'video'));
+    await _settle(40);
+    final ChatMessage tree = state.messages.last;
+    expect(tree.attachment?.vaultItemId, 'tree');
+    expect(state.editNotConfirmed(tree), isTrue);
+
+    final (AppState again, _Engine other) = await _swaying();
+    other.rows.add(_row('leaf', 'video', from: 'flag'));
+    await _settle(40);
+    final ChatMessage leaf = again.messages.last;
+    expect(leaf.attachment?.editedFrom, 'flag');
+    expect(again.editNotConfirmed(leaf), isFalse);
+    expect(again.editedFromName(leaf), 'image-flag.png');
   });
 
   test('a question back from the video model is not waited on', () async {
