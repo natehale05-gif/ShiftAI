@@ -496,12 +496,42 @@ cat > index.html <<'HTML'
       // below never fired) but not the app. Opened once more under the new
       // worker, page and code are the same build. Not on a first visit,
       // when there was no worker before.
+      //
+      // Never in front of someone using the app. The new build used to
+      // take over about 14 s into an open after a deploy (once its files
+      // had downloaded) and the page reloaded there and then: a loading
+      // screen in the middle of use, and whatever was being typed, or a
+      // reply still being written, gone (22 Oct: "the app is taking
+      // forever to load"). It reloads at once only while the loading
+      // screen is still up or the page is out of sight; otherwise the
+      // running app carries on, and the new build opens the next time
+      // the app is opened, or on coming back after AWAY_MS away, which
+      // reads as opening it.
       var hadWorker = !!navigator.serviceWorker.controller;
       var reloaded = false;
-      navigator.serviceWorker.addEventListener('controllerchange', function () {
-        if (!hadWorker || reloaded) return;
+      var pending = false;
+      var hiddenAt = 0;
+      var AWAY_MS = 5 * 60 * 1000;
+      function reloadNow() {
+        if (reloaded) return;
         reloaded = true;
         window.location.reload();
+      }
+      function inUse() {
+        return document.visibilityState === 'visible' &&
+          performance.getEntriesByName('shift-ready').length > 0;
+      }
+      navigator.serviceWorker.addEventListener('controllerchange', function () {
+        if (!hadWorker || reloaded) return;
+        if (inUse()) { pending = true; return; }
+        reloadNow();
+      });
+      document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'hidden') {
+          hiddenAt = Date.now();
+        } else if (pending && hiddenAt && Date.now() - hiddenAt >= AWAY_MS) {
+          reloadNow();
+        }
       });
       navigator.serviceWorker.register('offline_worker.js').catch(function () {});
       window.addEventListener('flutter-first-frame', function () {

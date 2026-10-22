@@ -106,7 +106,12 @@ same name in every build and Pages lets a browser reuse it for 10
 minutes, so a new build's cache was filled with the old one. And the page
 reloads once when a new build's worker takes over from an old one, since
 the old worker can hand a fresh page the old `main.dart.js` (6 Oct: "the
-app seems to not be updating"). `AppState.load` gives the engine 3 s and then opens on the
+app seems to not be updating"), but never in front of someone using it:
+it reloaded about 14 s into the first open after each deploy, a loading
+screen mid-use that lost what was being typed or a reply being written
+(22 Oct, "the app is taking forever to load"). While the app is drawn and
+visible the new build waits, and opens on the next open or on coming back
+after 5 minutes away. `AppState.load` gives the engine 3 s and then opens on the
 account's last-seen copy while the rest lands, or 0.6 s when that
 account's copy is on the device (a slow server held the loading screen
 for 3 s on every open). The hosted page also preconnects to the saved
@@ -276,6 +281,6 @@ exploratory, branch.
 flutter analyze && flutter test
 ```
 
-424 tests. They have caught every regression listed above at least once,
+425 tests. They have caught every regression listed above at least once,
 including several of mine. If one fails, read it before changing it —
 twice now the test was right and my expectation was wrong.
