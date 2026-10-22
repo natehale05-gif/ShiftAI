@@ -57,6 +57,21 @@ void main() {
     expect(script, contains('if (!hadWorker || reloaded) return;'));
   });
 
+  test('a new build never reloads the page in front of someone using it', () {
+    final String script = File('tool/build_web_hosted.sh').readAsStringSync();
+    final String handler = script.substring(
+        script.indexOf("addEventListener('controllerchange'"),
+        script
+            .indexOf("navigator.serviceWorker.register('offline_worker.js')"));
+    // It reloaded about 14 s into the first open after a deploy: a
+    // loading screen mid-use, and a reply being written was lost.
+    expect(handler, contains('if (inUse()) { pending = true; return; }'));
+    expect(script, contains("performance.getEntriesByName('shift-ready')"));
+    // Applied on coming back after a while away, which reads as an open.
+    expect(handler, contains('Date.now() - hiddenAt >= AWAY_MS'));
+    expect(handler, isNot(contains("=== 'visible') reloadNow")));
+  });
+
   test(
       'the page opens from this build\'s copy without waiting on the '
       'network', () {
@@ -103,9 +118,9 @@ void main() {
       'the new-build poll asks the worker to update rather than reloading '
       'the old build again', () {
     final String script = File('tool/build_web_hosted.sh').readAsStringSync();
-    final String poll = script.substring(
-        script.indexOf('function checkForUpdate()'),
-        script.indexOf("document.addEventListener('visibilitychange'"));
+    final int start = script.indexOf('function checkForUpdate()');
+    final String poll = script.substring(start,
+        script.indexOf("document.addEventListener('visibilitychange'", start));
     expect(poll, contains('reg.update()'));
     // Only a browser with no worker reloads.
     expect(poll.indexOf('window.location.reload()'),
