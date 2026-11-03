@@ -87,6 +87,11 @@ class AppState extends ChangeNotifier {
       _snap.ecoVault,
     );
     notes = _listOr<Note>(blob['notes'], Note.fromJson, _snap.notes);
+    _deletedThreads = <String>{
+      for (final Object? id
+          in (blob['deletedThreads'] as List<Object?>?) ?? const <Object?>[])
+        if (id is String) id,
+    };
     threads = _mergeThreads(
       <ChatThread>[
         for (final Object? t
@@ -94,7 +99,9 @@ class AppState extends ChangeNotifier {
           if (ChatThread.tryParse(t) case final ChatThread thread) thread,
       ],
       _snap.threads,
+      deleted: _deletedThreads,
     );
+    _deleteAgainOnServer(_snap.threads);
 
     final Map<String, dynamic> unlocked =
         (blob['trophies'] as Map<String, dynamic>?) ?? <String, dynamic>{};
@@ -184,7 +191,8 @@ class AppState extends ChangeNotifier {
     trophies = List<Trophy>.of(_snap.trophies);
     vault = List<VaultItem>.of(_snap.vault);
     notes = List<Note>.of(_snap.notes);
-    threads = _mergeThreads(threads, _snap.threads);
+    threads = _mergeThreads(threads, _snap.threads, deleted: _deletedThreads);
+    _deleteAgainOnServer(_snap.threads);
     agentRuns = List<AgentRun>.of(_snap.agentRuns);
     jobs = List<JobRow>.of(_snap.jobs);
     designs = List<DesignDoc>.of(_snap.designs);
@@ -365,6 +373,7 @@ class AppState extends ChangeNotifier {
           // Saved chats are the account's like the rest: someone else
           // signing in on this device must not get this one's Recents.
           ..remove('threads')
+          ..remove('deletedThreads')
           ..remove('rings');
       }
     }
@@ -441,17 +450,33 @@ class AppState extends ChangeNotifier {
   /// saved, and for a private one, which never is.
   String? currentThreadId;
 
+  /// The saved chat on screen, once it has been saved.
+  ChatThread? get currentThread => currentThreadId == null
+      ? null
+      : threads.where((ChatThread t) => t.id == currentThreadId).firstOrNull;
+
   static const int _keptThreads = 100;
 
-  /// The device's copy and the server's, by id, the newer of each.
+  /// Chats deleted on this device, by id. A delete the server did not
+  /// take (offline, an error) used to come back: the next load merged the
+  /// server's copy in again. These are kept out of every merge and
+  /// deleted on the server again while it still lists them.
+  Set<String> _deletedThreads = <String>{};
+  static const int _keptDeletions = 500;
+
+  /// The device's copy and the server's, by id, the newer of each, less
+  /// any deleted here.
   static List<ChatThread> _mergeThreads(
     List<ChatThread> local,
-    List<ChatThread>? server,
-  ) {
+    List<ChatThread>? server, {
+    Set<String> deleted = const <String>{},
+  }) {
     final Map<String, ChatThread> byId = <String, ChatThread>{
-      for (final ChatThread t in local) t.id: t,
+      for (final ChatThread t in local)
+        if (!deleted.contains(t.id)) t.id: t,
     };
     for (final ChatThread t in server ?? const <ChatThread>[]) {
+      if (deleted.contains(t.id)) continue;
       final ChatThread? mine = byId[t.id];
       if (mine == null || t.updatedAt.isAfter(mine.updatedAt)) byId[t.id] = t;
     }
@@ -523,15 +548,30 @@ class AppState extends ChangeNotifier {
   /// back to a new chat.
   void deleteThread(String id) {
     threads = threads.where((ChatThread t) => t.id != id).toList();
+    _deletedThreads = <String>{
+      ..._deletedThreads.skip(
+          (_deletedThreads.length - _keptDeletions + 1).clamp(0, 1 << 30)),
+      id,
+    };
     if (currentThreadId == id) clearThread();
     _changed();
-    unawaited(() async {
-      try {
-        await _repo.deleteThread(id);
-      } on Object catch (error) {
-        debugPrint('chat: not deleted on the server — $error');
-      }
-    }());
+    unawaited(_deleteOnServer(id));
+  }
+
+  Future<void> _deleteOnServer(String id) async {
+    try {
+      await _repo.deleteThread(id);
+    } on Object catch (error) {
+      debugPrint('chat: not deleted on the server yet — $error');
+    }
+  }
+
+  /// A chat deleted here that the server still lists: its delete did not
+  /// reach it. Asked again.
+  void _deleteAgainOnServer(List<ChatThread>? server) {
+    for (final ChatThread t in server ?? const <ChatThread>[]) {
+      if (_deletedThreads.contains(t.id)) unawaited(_deleteOnServer(t.id));
+    }
   }
 
   /// The line the Suite shows over an empty thread. Held on the state
@@ -2746,6 +2786,7 @@ class AppState extends ChangeNotifier {
       'ecoVault': ecoVault.map((VaultItem v) => v.toJson()).toList(),
       'notes': notes.map((Note n) => n.toJson()).toList(),
       'threads': threads.map((ChatThread t) => t.toJson()).toList(),
+      'deletedThreads': _deletedThreads.toList(growable: false),
       'rings': rings.toJson(),
     };
     await _prefs.setString(StoreKeys.app, jsonEncode(blob));

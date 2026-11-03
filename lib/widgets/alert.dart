@@ -222,3 +222,67 @@ class _Field extends StatelessWidget {
     );
   }
 }
+
+/// One row in a [showShiftActions] sheet.
+class ShiftSheetAction<T> {
+  const ShiftSheetAction(this.label,
+      {required this.value, this.destructive = false});
+
+  final String label;
+  final T value;
+
+  /// Red, for an action that cannot be taken back.
+  final bool destructive;
+}
+
+/// An Apple action sheet: what can be done with one thing, rising from the
+/// bottom, with Cancel set apart beneath. The "…" on a chat opens one.
+/// Null when it is cancelled or dismissed.
+Future<T?> showShiftActions<T>(
+  BuildContext context, {
+  String? title,
+  String? message,
+  required List<ShiftSheetAction<T>> actions,
+}) =>
+    showCupertinoModalPopup<T>(
+      context: context,
+      builder: (BuildContext sheet) {
+        final ShiftColors c = ShiftColors.of(context);
+        return CupertinoTheme(
+          data: CupertinoThemeData(
+            brightness: c.isDarkGround ? Brightness.dark : Brightness.light,
+            primaryColor: c.accent,
+          ),
+          child: CupertinoActionSheet(
+            title: title == null
+                ? null
+                : Text(title, style: ShiftType.caption(c.textMuted)),
+            message: message == null
+                ? null
+                : Text(message, style: ShiftType.caption(c.textMuted)),
+            actions: <Widget>[
+              for (final ShiftSheetAction<T> a in actions)
+                CupertinoActionSheetAction(
+                  isDestructiveAction: a.destructive,
+                  onPressed: () => Navigator.of(sheet).pop(a.value),
+                  child: Text(
+                    a.label,
+                    style: ShiftType.copy(
+                      a.destructive ? c.danger : c.accent,
+                      size: 17,
+                    ),
+                  ),
+                ),
+            ],
+            cancelButton: CupertinoActionSheetAction(
+              isDefaultAction: true,
+              onPressed: () => Navigator.of(sheet).pop(),
+              child: Text(
+                'Cancel',
+                style: ShiftType.copy(c.accent, size: 17, weight: 600),
+              ),
+            ),
+          ),
+        );
+      },
+    );

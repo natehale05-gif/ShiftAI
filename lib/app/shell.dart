@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../features/agents/agents_surface.dart';
+import '../features/chat/chat_actions.dart';
 import '../features/chat/daily_rings_bar.dart';
 import '../features/chat/suite_surface.dart';
 import '../features/design/design_surface.dart';
@@ -16,7 +17,6 @@ import '../theme/tokens.dart';
 import '../theme/type.dart';
 import '../util/system_bars.dart';
 import '../util/thread_search.dart';
-import '../widgets/alert.dart';
 import '../widgets/common.dart';
 import 'modes.dart';
 
@@ -224,6 +224,21 @@ class ShiftAppBar extends StatelessWidget {
                     ),
                   ),
                 const Spacer(),
+                if (state.surface == Surface.suite &&
+                    state.currentThread != null)
+                  IconButton(
+                    tooltip: 'Options for this chat',
+                    onPressed: () =>
+                        showChatActions(context, state.currentThread!),
+                    icon: Icon(
+                      Icons.more_horiz_rounded,
+                      color: c.textMuted,
+                      size: 22,
+                    ),
+                    style: IconButton.styleFrom(
+                      minimumSize: const Size(44, 44),
+                    ),
+                  ),
                 if (state.surface == Surface.suite) const DailyRingsButton(),
                 if (state.surface == Surface.suite)
                   IconButton(
@@ -388,7 +403,7 @@ class SidebarNav extends StatelessWidget {
                     ),
                   ],
                   // Saved chats, newest first, the way Claude and ChatGPT
-                  // keep them. Tap to open one again; hold to delete it.
+                  // keep them. Tap to open one again; "…" (or a long press) to delete it.
                   if (state.threads.isNotEmpty) ...<Widget>[
                     const _GroupLabel('Recents', spaced: true),
                     _Recents(rowHeight: rowHeight, go: go),
@@ -473,7 +488,11 @@ class _RecentsState extends State<_Recents> {
             active:
                 state.surface == Surface.suite && state.currentThreadId == t.id,
             onTap: () => widget.go(() => state.openThread(t.id)),
-            onLongPress: () => _confirmDeleteChat(context, t),
+            onLongPress: () => showChatActions(context, t),
+            trailing: _RowMenu(
+              tooltip: 'Options for this chat',
+              onPressed: () => showChatActions(context, t),
+            ),
           ),
         if (searching && found.isEmpty)
           Padding(
@@ -562,18 +581,25 @@ class _GroupLabel extends StatelessWidget {
   }
 }
 
-Future<void> _confirmDeleteChat(BuildContext context, ChatThread t) async {
-  final AppState state = AppScope.read(context);
-  final bool? yes = await showShiftAlert<bool>(
-    context,
-    title: 'Delete this chat?',
-    message: '\u201c${t.title}\u201d goes for good.',
-    actions: const <ShiftAlertAction<bool>>[
-      ShiftAlertAction<bool>('Cancel', value: false, isDefault: true),
-      ShiftAlertAction<bool>('Delete', value: true, destructive: true),
-    ],
-  );
-  if (yes ?? false) state.deleteThread(t.id);
+/// The "…" at the end of a row: what can be done with that one thing.
+class _RowMenu extends StatelessWidget {
+  const _RowMenu({required this.tooltip, required this.onPressed});
+
+  final String tooltip;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final ShiftColors c = ShiftColors.of(context);
+    return IconButton(
+      tooltip: tooltip,
+      onPressed: onPressed,
+      icon: Icon(Icons.more_horiz_rounded, size: 18, color: c.textMuted),
+      visualDensity: VisualDensity.compact,
+      padding: EdgeInsets.zero,
+      style: IconButton.styleFrom(minimumSize: const Size(32, 32)),
+    );
+  }
 }
 
 class _NavRow extends StatelessWidget {
