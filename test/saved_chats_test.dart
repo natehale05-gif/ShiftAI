@@ -235,6 +235,72 @@ void main() {
     expect(engine.deleted, <String>[id]);
   });
 
+  test(
+      'a deleted chat stays deleted when the server still has it, and is '
+      'deleted there again', () async {
+    final ChatThread onServer = ChatThread(
+      id: 'chat-1',
+      title: 'From the laptop',
+      updatedAt: DateTime.utc(2026, 9, 24, 9),
+      messages: const <ChatMessage>[
+        ChatMessage(
+            id: 'u', author: MessageAuthor.you, body: 'From the laptop'),
+      ],
+    );
+    final (AppState state, _Engine engine) =
+        await _signedIn(serverThreads: <ChatThread>[onServer]);
+    state.deleteThread('chat-1');
+    await _settle();
+    // The server's delete did not land: the next load still lists it.
+    await state.refresh();
+    expect(state.threads, isEmpty,
+        reason: 'it came back: the merge took the server\'s copy again');
+    expect(engine.deleted, <String>['chat-1', 'chat-1'],
+        reason: 'asked again while the server lists it');
+
+    // And after a reload of the app, from the device's copy.
+    final String blob = await _blob(state);
+    final (AppState again, _) = await _signedIn(
+      prefs: <String, Object>{StoreKeys.app: blob},
+      serverThreads: <ChatThread>[onServer],
+    );
+    expect(again.threads, isEmpty);
+  });
+
+  testWidgets('the "…" on a chat in Recents deletes it, after asking',
+      (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(412 * 3, 1400 * 3);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.reset);
+    final (AppState state, _Engine engine) = await _signedIn();
+    await tester.pumpWidget(ShiftApp(state: state));
+    await tester.pumpAndSettle();
+    final Finder close = find.byTooltip('Close');
+    if (close.evaluate().isNotEmpty) {
+      await tester.tap(close.first);
+      await tester.pumpAndSettle();
+    }
+    state.sendMessage('Plan the ferry shoot');
+    await tester.pumpAndSettle();
+    final String id = state.threads.single.id;
+
+    // Over the open chat too.
+    expect(find.byTooltip('Options for this chat'), findsOneWidget);
+    await tester.tap(find.byTooltip('Open navigation'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Options for this chat').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete chat'));
+    await tester.pumpAndSettle();
+    expect(find.text('Delete this chat?'), findsOneWidget);
+    await tester.tap(find.text('Delete'));
+    await tester.pumpAndSettle();
+
+    expect(state.threads, isEmpty);
+    expect(engine.deleted, <String>[id]);
+    expect(tester.takeException(), isNull);
+  });
+
   test('signing out takes the account\'s chats with it', () async {
     final (AppState state, _) = await _signedIn();
     state.sendMessage('Mine');

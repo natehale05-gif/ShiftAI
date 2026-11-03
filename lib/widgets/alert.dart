@@ -113,6 +113,19 @@ class _ShiftAlertState<T> extends State<_ShiftAlert<T>> {
 
   void _typed() => setState(() {});
 
+  /// Return in a one-line field takes the bold action, as on an iPhone:
+  /// "New project", a name typed, Return, and nothing happened. Never a
+  /// destructive one, and never one that is off for what is typed.
+  void _submit() {
+    final String typed = _text.text;
+    final ShiftAlertAction<T>? main = widget.actions
+        .where((ShiftAlertAction<T> a) => a.isDefault && !a.destructive)
+        .firstOrNull;
+    if (main == null || !(main.enabled?.call(typed) ?? true)) return;
+    Navigator.of(context)
+        .pop(main.valueOf != null ? main.valueOf!(typed) : main.value);
+  }
+
   @override
   void dispose() {
     _text
@@ -154,7 +167,11 @@ class _ShiftAlertState<T> extends State<_ShiftAlert<T>> {
                     // drawn outside the app's Scaffold.
                     Material(
                       type: MaterialType.transparency,
-                      child: _Field(controller: _text, spec: field),
+                      child: _Field(
+                        controller: _text,
+                        spec: field,
+                        onSubmitted: _submit,
+                      ),
                     ),
                   ],
                 ],
@@ -183,10 +200,15 @@ class _ShiftAlertState<T> extends State<_ShiftAlert<T>> {
 
 /// Compact, filled, rounded like the field in an iOS alert.
 class _Field extends StatelessWidget {
-  const _Field({required this.controller, required this.spec});
+  const _Field({
+    required this.controller,
+    required this.spec,
+    required this.onSubmitted,
+  });
 
   final TextEditingController controller;
   final ShiftAlertField spec;
+  final VoidCallback onSubmitted;
 
   @override
   Widget build(BuildContext context) {
@@ -196,6 +218,9 @@ class _Field extends StatelessWidget {
       autofocus: true,
       minLines: spec.minLines,
       maxLines: spec.maxLines,
+      // Return in a one-line field takes the bold action; in a longer one
+      // it is a new line.
+      onSubmitted: spec.maxLines == 1 ? (String _) => onSubmitted() : null,
       style: ShiftType.bodySm(c.text),
       decoration: InputDecoration(
         isDense: true,
@@ -222,3 +247,67 @@ class _Field extends StatelessWidget {
     );
   }
 }
+
+/// One row in a [showShiftActions] sheet.
+class ShiftSheetAction<T> {
+  const ShiftSheetAction(this.label,
+      {required this.value, this.destructive = false});
+
+  final String label;
+  final T value;
+
+  /// Red, for an action that cannot be taken back.
+  final bool destructive;
+}
+
+/// An Apple action sheet: what can be done with one thing, rising from the
+/// bottom, with Cancel set apart beneath. The "…" on a chat opens one.
+/// Null when it is cancelled or dismissed.
+Future<T?> showShiftActions<T>(
+  BuildContext context, {
+  String? title,
+  String? message,
+  required List<ShiftSheetAction<T>> actions,
+}) =>
+    showCupertinoModalPopup<T>(
+      context: context,
+      builder: (BuildContext sheet) {
+        final ShiftColors c = ShiftColors.of(context);
+        return CupertinoTheme(
+          data: CupertinoThemeData(
+            brightness: c.isDarkGround ? Brightness.dark : Brightness.light,
+            primaryColor: c.accent,
+          ),
+          child: CupertinoActionSheet(
+            title: title == null
+                ? null
+                : Text(title, style: ShiftType.caption(c.textMuted)),
+            message: message == null
+                ? null
+                : Text(message, style: ShiftType.caption(c.textMuted)),
+            actions: <Widget>[
+              for (final ShiftSheetAction<T> a in actions)
+                CupertinoActionSheetAction(
+                  isDestructiveAction: a.destructive,
+                  onPressed: () => Navigator.of(sheet).pop(a.value),
+                  child: Text(
+                    a.label,
+                    style: ShiftType.copy(
+                      a.destructive ? c.danger : c.accent,
+                      size: 17,
+                    ),
+                  ),
+                ),
+            ],
+            cancelButton: CupertinoActionSheetAction(
+              isDefaultAction: true,
+              onPressed: () => Navigator.of(sheet).pop(),
+              child: Text(
+                'Cancel',
+                style: ShiftType.copy(c.accent, size: 17, weight: 600),
+              ),
+            ),
+          ),
+        );
+      },
+    );

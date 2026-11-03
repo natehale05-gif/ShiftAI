@@ -91,7 +91,11 @@ enum Surface {
   design('Design', Icons.draw_outlined),
   notes('Notes', Icons.sticky_note_2_outlined),
   agents('Agents', Icons.bolt_outlined),
-  settings('Settings', Icons.settings_outlined);
+  settings('Settings', Icons.settings_outlined),
+
+  /// One project: its chats, instructions and resources
+  /// (`AppState.openProjectId`). Reached from the sidebar's Projects.
+  project('Project', Icons.folder_outlined);
 
   const Surface(this.label, this.icon);
 
@@ -101,7 +105,7 @@ enum Surface {
   /// The switch in Settings that hides this surface, or null when it is
   /// always reachable. Suite and Settings are always reachable.
   ShiftFeature? get feature => switch (this) {
-        Surface.suite || Surface.settings => null,
+        Surface.suite || Surface.settings || Surface.project => null,
         Surface.earnings => ShiftFeature.leaderboard,
         Surface.trophies => ShiftFeature.trophies,
         Surface.vault => ShiftFeature.vault,

@@ -780,6 +780,61 @@ the account to another device.
   only, without an error. The app merges the server's list with the
   device's by id, keeping the newer copy of each.
 - The Suite's own `chat/threads` routes can back these.
+- A chat in a project carries `"projectId"`. Keep it as sent; moving a
+  chat in or out of a project is a `PUT` with it changed (or gone).
+- A chat deleted in the app is deleted here with `DELETE`. The app
+  remembers what it deleted: while `GET` still lists one, it is left out
+  and the `DELETE` is sent again.
+
+### Projects: `/v1/projects`
+
+Chats kept together, with instructions and resources every chat in the
+project is given ("I need projects where I can add multiple chats and
+other resources to be used together", 3 Nov). The device keeps a copy for
+the signed-in account; these routes keep one on the server.
+
+| Method | Path | Body | Returns |
+|---|---|---|---|
+| GET | `/v1/projects` | — | this account's projects, newest first |
+| PUT | `/v1/projects/{id}` | the project | the project |
+| DELETE | `/v1/projects/{id}` | — | — |
+
+```json
+{ "id": "project-1730642400000000", "name": "Ferry launch",
+  "updatedAt": "2026-11-03T14:00:00Z",
+  "instructions": "Write for commuters. Short lines.",
+  "resources": [
+    { "kind": "note",  "ref": "n-brief", "name": "Brand brief" },
+    { "kind": "vault", "ref": "v-logo",  "name": "Ferry logo" },
+    { "kind": "file",  "ref": "u6", "name": "schedule.pdf",
+      "mimeType": "application/pdf", "sizeBytes": 2048 }] }
+```
+
+- `kind` is `vault` (`ref` is a vault row id), `note` (a note id) or
+  `file` (an upload id from `POST /v1/uploads`). Keep uploads a project
+  names for as long as the project does.
+- The id is the client's; `PUT` creates or replaces. Optional like
+  `/v1/threads`: a 404 and projects stay on the device. Merged by id,
+  newer copy wins; a deleted one is left out and deleted again while
+  `GET` still lists it.
+- Deleting a project does not delete its chats: the app moves them out
+  first (a `PUT` of each without `projectId`).
+
+**What a chat in a project sends.** The server keeps no project for the
+model, so every message in one carries it, and only to a model that
+answers in words (one with no image, video or audio in `bestFor`, or the
+server's own choice):
+
+- `prompt` opens with the project, then what was typed:
+  `This conversation is part of the project "Ferry launch". …`,
+  `Project instructions:`, `Project notes:` (each note as `### Title`
+  and its text, 12,000 characters in all) and `Project files (attached):`,
+  then `---` and the message. The thread, and every `history` turn,
+  carry only what was typed.
+- `attachments` add the project's vault pieces (by `vaultItemId` and
+  `url`) and uploads (by `uploadId`), up to 10, after the message's own.
+- A model that makes pictures, video or audio is sent the words alone:
+  a page of notes in an image prompt would be drawn.
 
 ### `POST /v1/polish`
 

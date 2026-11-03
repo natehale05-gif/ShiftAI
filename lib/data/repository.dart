@@ -25,7 +25,12 @@ class ShiftSnapshot {
     this.boards,
     this.models = const <ChatModel>[],
     this.threads,
+    this.projects,
   });
+
+  /// Projects from `GET /v1/projects`. Null when the engine keeps none;
+  /// the device's copy is then all there is.
+  final List<Project>? projects;
 
   /// Saved conversations from `GET /v1/threads`, newest first. Null when
   /// the engine keeps none; the device's copy is then all there is.
@@ -141,6 +146,14 @@ abstract interface class ShiftRepository {
   Future<void> saveThread(ChatThread thread);
 
   Future<void> deleteThread(String id);
+
+  // Projects ---------------------------------------------------------------
+  /// Keeps [project] on the server, replacing any copy with its id. Like
+  /// saved chats, an engine without `/v1/projects` keeps nothing, and the
+  /// device's copy stands.
+  Future<void> saveProject(Project project);
+
+  Future<void> deleteProject(String id);
 
   // Avatars ----------------------------------------------------------------
   /// This creator's avatars, on their own: what the gallery re-reads while

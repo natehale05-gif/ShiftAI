@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 
 import '../features/agents/agents_surface.dart';
+import '../features/chat/chat_actions.dart';
 import '../features/chat/daily_rings_bar.dart';
 import '../features/chat/suite_surface.dart';
 import '../features/design/design_surface.dart';
 import '../features/earnings/leaderboard_surface.dart';
 import '../features/notes/notes_surface.dart';
+import '../features/projects/project_surface.dart';
 import '../features/settings/avatar.dart';
 import '../features/settings/settings_surface.dart';
 import '../features/trophies/trophies_surface.dart';
@@ -16,7 +18,6 @@ import '../theme/tokens.dart';
 import '../theme/type.dart';
 import '../util/system_bars.dart';
 import '../util/thread_search.dart';
-import '../widgets/alert.dart';
 import '../widgets/common.dart';
 import 'modes.dart';
 
@@ -217,13 +218,28 @@ class ShiftAppBar extends StatelessWidget {
                   ConstrainedBox(
                     constraints: BoxConstraints(maxWidth: roomForTitle),
                     child: Text(
-                      state.surface.chromeTitle,
+                      state.chromeTitle,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: ShiftType.callout(c.text),
                     ),
                   ),
                 const Spacer(),
+                if (state.surface == Surface.suite &&
+                    state.currentThread != null)
+                  IconButton(
+                    tooltip: 'Options for this chat',
+                    onPressed: () =>
+                        showChatActions(context, state.currentThread!),
+                    icon: Icon(
+                      Icons.more_horiz_rounded,
+                      color: c.textMuted,
+                      size: 22,
+                    ),
+                    style: IconButton.styleFrom(
+                      minimumSize: const Size(44, 44),
+                    ),
+                  ),
                 if (state.surface == Surface.suite) const DailyRingsButton(),
                 if (state.surface == Surface.suite)
                   IconButton(
@@ -264,6 +280,7 @@ class _SurfaceBody extends StatelessWidget {
       Surface.notes => const NotesSurface(),
       Surface.agents => const AgentsSurface(),
       Surface.settings => const SettingsSurface(),
+      Surface.project => const ProjectSurface(),
     };
   }
 }
@@ -315,7 +332,7 @@ class SidebarNav extends StatelessWidget {
                     ),
                     Expanded(
                       child: Text(
-                        state.surface.chromeTitle,
+                        state.chromeTitle,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: ShiftType.callout(c.text),
@@ -387,8 +404,36 @@ class SidebarNav extends StatelessWidget {
                       ),
                     ),
                   ],
+                  // Chats kept together with instructions and files they
+                  // all use. Always listed, so "New project" is findable.
+                  const _GroupLabel('Projects', spaced: true),
+                  for (final Project p in state.projects)
+                    _NavRow(
+                      key: ValueKey<String>('project-${p.id}'),
+                      icon: Icons.folder_outlined,
+                      label: p.name,
+                      height: rowHeight,
+                      active: (state.surface == Surface.project &&
+                              state.openProjectId == p.id) ||
+                          (state.surface == Surface.suite &&
+                              state.currentProjectId == p.id),
+                      onTap: () => go(() => state.openProjectScreen(p.id)),
+                    ),
+                  _NavRow(
+                    icon: Icons.create_new_folder_outlined,
+                    label: 'New project',
+                    height: rowHeight,
+                    active: false,
+                    onTap: () {
+                      // Closed first, and not with a pop: a pop raced the
+                      // name alert, and the drawer stayed open over the
+                      // new project's screen.
+                      if (inDrawer) Scaffold.maybeOf(context)?.closeDrawer();
+                      startNewProject(context);
+                    },
+                  ),
                   // Saved chats, newest first, the way Claude and ChatGPT
-                  // keep them. Tap to open one again; hold to delete it.
+                  // keep them. Tap to open one again; "…" (or a long press) to delete it.
                   if (state.threads.isNotEmpty) ...<Widget>[
                     const _GroupLabel('Recents', spaced: true),
                     _Recents(rowHeight: rowHeight, go: go),
@@ -473,7 +518,11 @@ class _RecentsState extends State<_Recents> {
             active:
                 state.surface == Surface.suite && state.currentThreadId == t.id,
             onTap: () => widget.go(() => state.openThread(t.id)),
-            onLongPress: () => _confirmDeleteChat(context, t),
+            onLongPress: () => showChatActions(context, t),
+            trailing: _RowMenu(
+              tooltip: 'Options for this chat',
+              onPressed: () => showChatActions(context, t),
+            ),
           ),
         if (searching && found.isEmpty)
           Padding(
@@ -562,18 +611,25 @@ class _GroupLabel extends StatelessWidget {
   }
 }
 
-Future<void> _confirmDeleteChat(BuildContext context, ChatThread t) async {
-  final AppState state = AppScope.read(context);
-  final bool? yes = await showShiftAlert<bool>(
-    context,
-    title: 'Delete this chat?',
-    message: '\u201c${t.title}\u201d goes for good.',
-    actions: const <ShiftAlertAction<bool>>[
-      ShiftAlertAction<bool>('Cancel', value: false, isDefault: true),
-      ShiftAlertAction<bool>('Delete', value: true, destructive: true),
-    ],
-  );
-  if (yes ?? false) state.deleteThread(t.id);
+/// The "…" at the end of a row: what can be done with that one thing.
+class _RowMenu extends StatelessWidget {
+  const _RowMenu({required this.tooltip, required this.onPressed});
+
+  final String tooltip;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final ShiftColors c = ShiftColors.of(context);
+    return IconButton(
+      tooltip: tooltip,
+      onPressed: onPressed,
+      icon: Icon(Icons.more_horiz_rounded, size: 18, color: c.textMuted),
+      visualDensity: VisualDensity.compact,
+      padding: EdgeInsets.zero,
+      style: IconButton.styleFrom(minimumSize: const Size(32, 32)),
+    );
+  }
 }
 
 class _NavRow extends StatelessWidget {
