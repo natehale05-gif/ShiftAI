@@ -1228,12 +1228,25 @@ class ChatThread {
     required this.title,
     required this.updatedAt,
     required this.messages,
+    this.projectId,
   });
 
   final String id;
   final String title;
   final DateTime updatedAt;
   final List<ChatMessage> messages;
+
+  /// The [Project] this chat is in, or null for one that is in none.
+  final String? projectId;
+
+  /// This chat in another project, or in none.
+  ChatThread inProject(String? project) => ChatThread(
+        id: id,
+        title: title,
+        updatedAt: updatedAt,
+        messages: messages,
+        projectId: project,
+      );
 
   /// The first thing asked, on one line and short enough for a row.
   static String titleFor(List<ChatMessage> messages) {
@@ -1251,6 +1264,7 @@ class ChatThread {
         'id': id,
         'title': title,
         'updatedAt': updatedAt.toUtc().toIso8601String(),
+        if (projectId != null) 'projectId': projectId,
         'messages': messages.map((ChatMessage m) => m.toJson()).toList(),
       };
 
@@ -1270,6 +1284,134 @@ class ChatThread {
       updatedAt: DateTime.tryParse(raw['updatedAt'] as String? ?? '') ??
           DateTime.fromMillisecondsSinceEpoch(0),
       messages: messages,
+      projectId:
+          raw['projectId'] is String && (raw['projectId'] as String).isNotEmpty
+              ? raw['projectId'] as String
+              : null,
+    );
+  }
+}
+
+/// What a project keeps for its chats to use: a piece from the vault, a
+/// note, or a file uploaded to it.
+enum ProjectResourceKind {
+  vault,
+  note,
+  file;
+
+  static ProjectResourceKind? parse(Object? raw) => ProjectResourceKind.values
+      .where((ProjectResourceKind k) => k.name == raw)
+      .firstOrNull;
+}
+
+/// One thing a project's chats are given to work from.
+@immutable
+class ProjectResource {
+  const ProjectResource({
+    required this.kind,
+    required this.ref,
+    required this.name,
+    this.mimeType,
+    this.sizeBytes,
+  });
+
+  final ProjectResourceKind kind;
+
+  /// The vault row's id, the note's id, or the upload's id.
+  final String ref;
+
+  /// What it is called, as it was when it was added.
+  final String name;
+  final String? mimeType;
+  final int? sizeBytes;
+
+  /// The same thing, whatever it is called now.
+  String get key => '${kind.name}:$ref';
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'kind': kind.name,
+        'ref': ref,
+        'name': name,
+        if (mimeType != null) 'mimeType': mimeType,
+        if (sizeBytes != null) 'sizeBytes': sizeBytes,
+      };
+
+  static ProjectResource? tryParse(Object? raw) {
+    if (raw is! Map) return null;
+    final ProjectResourceKind? kind = ProjectResourceKind.parse(raw['kind']);
+    final Object? ref = raw['ref'];
+    if (kind == null || ref is! String || ref.isEmpty) return null;
+    final Object? name = raw['name'];
+    return ProjectResource(
+      kind: kind,
+      ref: ref,
+      name: name is String && name.trim().isNotEmpty ? name : ref,
+      mimeType: raw['mimeType'] is String ? raw['mimeType'] as String : null,
+      sizeBytes: (raw['sizeBytes'] as num?)?.toInt(),
+    );
+  }
+}
+
+/// Chats kept together, with instructions and resources every one of them
+/// is given: "I need projects where I can add multiple chats and other
+/// resources to be used together" (3 Nov). Kept on the device for the
+/// signed-in account, and on the server when it has `/v1/projects`.
+@immutable
+class Project {
+  const Project({
+    required this.id,
+    required this.name,
+    required this.updatedAt,
+    this.instructions = '',
+    this.resources = const <ProjectResource>[],
+  });
+
+  final String id;
+  final String name;
+  final DateTime updatedAt;
+
+  /// What every chat in it is told first: who it is for, the tone, what
+  /// to keep in mind.
+  final String instructions;
+  final List<ProjectResource> resources;
+
+  Project copyWith({
+    String? name,
+    String? instructions,
+    List<ProjectResource>? resources,
+  }) =>
+      Project(
+        id: id,
+        name: name ?? this.name,
+        instructions: instructions ?? this.instructions,
+        resources: resources ?? this.resources,
+        updatedAt: DateTime.now(),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'name': name,
+        'updatedAt': updatedAt.toUtc().toIso8601String(),
+        'instructions': instructions,
+        'resources': resources.map((ProjectResource r) => r.toJson()).toList(),
+      };
+
+  static Project? tryParse(Object? raw) {
+    if (raw is! Map || raw['id'] is! String) return null;
+    final Object? name = raw['name'];
+    return Project(
+      id: raw['id'] as String,
+      name:
+          name is String && name.trim().isNotEmpty ? name : 'Untitled project',
+      updatedAt: DateTime.tryParse(raw['updatedAt'] as String? ?? '') ??
+          DateTime.fromMillisecondsSinceEpoch(0),
+      instructions:
+          raw['instructions'] is String ? raw['instructions'] as String : '',
+      resources: <ProjectResource>[
+        for (final Object? r
+            in (raw['resources'] as List<Object?>?) ?? const <Object?>[])
+          if (ProjectResource.tryParse(r) case final ProjectResource res) res,
+      ],
     );
   }
 }

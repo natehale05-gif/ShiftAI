@@ -22,6 +22,8 @@ _next_id = [1]
 UPLOADS = {}
 # Saved chats by id, the way /v1/threads keeps them.
 THREADS = {}
+# Projects by id, the way /v1/projects keeps them (docs/API.md).
+PROJECTS = {}
 # What the image and video models made, newest first: /v1/vault.
 VAULT = []
 # How long the stand-in "render" takes. Long enough to watch the gallery
@@ -624,6 +626,10 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, sorted(
                 THREADS.values(), key=lambda t: t.get("updatedAt", ""),
                 reverse=True))
+        if path == "/v1/projects":
+            return self._send(200, sorted(
+                PROJECTS.values(), key=lambda p: p.get("updatedAt", ""),
+                reverse=True))
         if path == "/v1/avatars":
             settle_avatars()
             return self._send(200, [public(a) for a in AVATARS])
@@ -766,12 +772,21 @@ class Handler(BaseHTTPRequestHandler):
             body["id"] = path.split("/")[3]
             THREADS[body["id"]] = body
             return self._send(200, body)
+        if path.startswith("/v1/projects/"):
+            length = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(length) or b"{}")
+            body["id"] = path.split("/")[3]
+            PROJECTS[body["id"]] = body
+            return self._send(200, body)
         self._send(404, {"message": f"No route {path}."})
 
     def do_DELETE(self):
         path = self.path.split("?")[0]
         if path.startswith("/v1/threads/"):
             THREADS.pop(path.split("/")[3], None)
+            return self._send(204)
+        if path.startswith("/v1/projects/"):
+            PROJECTS.pop(path.split("/")[3], None)
             return self._send(204)
         if path.startswith("/v1/ecovault/") and path.endswith("/save"):
             return self._send(200, {"id": path.split("/")[3], "saved": False})

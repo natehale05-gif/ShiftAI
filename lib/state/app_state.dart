@@ -102,6 +102,23 @@ class AppState extends ChangeNotifier {
       deleted: _deletedThreads,
     );
     _deleteAgainOnServer(_snap.threads);
+    _deletedProjects = <String>{
+      for (final Object? id
+          in (blob['deletedProjects'] as List<Object?>?) ?? const <Object?>[])
+        if (id is String) id,
+    };
+    projects = _mergeProjects(
+      <Project>[
+        for (final Object? p
+            in (blob['projects'] as List<Object?>?) ?? const <Object?>[])
+          if (Project.tryParse(p) case final Project project) project,
+      ],
+      _snap.projects,
+    );
+    openProjectId = blob['openProject'] as String?;
+    if (surface == Surface.project && openProject == null) {
+      surface = Surface.suite;
+    }
 
     final Map<String, dynamic> unlocked =
         (blob['trophies'] as Map<String, dynamic>?) ?? <String, dynamic>{};
@@ -193,6 +210,7 @@ class AppState extends ChangeNotifier {
     notes = List<Note>.of(_snap.notes);
     threads = _mergeThreads(threads, _snap.threads, deleted: _deletedThreads);
     _deleteAgainOnServer(_snap.threads);
+    projects = _mergeProjects(projects, _snap.projects);
     agentRuns = List<AgentRun>.of(_snap.agentRuns);
     jobs = List<JobRow>.of(_snap.jobs);
     designs = List<DesignDoc>.of(_snap.designs);
@@ -374,6 +392,9 @@ class AppState extends ChangeNotifier {
           // signing in on this device must not get this one's Recents.
           ..remove('threads')
           ..remove('deletedThreads')
+          ..remove('projects')
+          ..remove('deletedProjects')
+          ..remove('openProject')
           ..remove('rings');
       }
     }
@@ -503,6 +524,7 @@ class AppState extends ChangeNotifier {
       title: ChatThread.titleFor(kept),
       updatedAt: DateTime.now(),
       messages: kept,
+      projectId: currentProjectId,
     );
     threads = <ChatThread>[
       thread,
@@ -531,6 +553,7 @@ class AppState extends ChangeNotifier {
     privateChat = false;
     messages = List<ChatMessage>.of(thread.messages);
     currentThreadId = thread.id;
+    currentProjectId = projectById(thread.projectId)?.id;
     lastAsk = thread.messages
         .where((ChatMessage m) => m.author == MessageAuthor.you)
         .map((ChatMessage m) => m.body)
@@ -564,6 +587,223 @@ class AppState extends ChangeNotifier {
     } on Object catch (error) {
       debugPrint('chat: not deleted on the server yet — $error');
     }
+  }
+
+  // Projects ---------------------------------------------------------------
+
+  /// Chats kept together with instructions and resources they all use,
+  /// newest first.
+  late List<Project> projects;
+
+  /// The project the chat on screen is in: the one it was opened from or
+  /// started in. Null for a chat in none.
+  String? currentProjectId;
+
+  /// The project on the Project screen.
+  String? openProjectId;
+
+  Set<String> _deletedProjects = <String>{};
+
+  Project? projectById(String? id) =>
+      id == null ? null : projects.where((Project p) => p.id == id).firstOrNull;
+
+  Project? get currentProject => projectById(currentProjectId);
+  Project? get openProject => projectById(openProjectId);
+
+  /// What the bar over the content is titled: a project's name on its
+  /// screen and over its chats, the screen's own name otherwise.
+  String get chromeTitle => switch (surface) {
+        Surface.project => openProject?.name ?? surface.chromeTitle,
+        Surface.suite => currentProject?.name ?? surface.chromeTitle,
+        _ => surface.chromeTitle,
+      };
+
+  /// The saved chats in project [id], newest first.
+  List<ChatThread> threadsIn(String id) =>
+      threads.where((ChatThread t) => t.projectId == id).toList();
+
+  static List<Project> _mergeProjectsWith(
+    List<Project> local,
+    List<Project>? server,
+    Set<String> deleted,
+  ) {
+    final Map<String, Project> byId = <String, Project>{
+      for (final Project p in local)
+        if (!deleted.contains(p.id)) p.id: p,
+    };
+    for (final Project p in server ?? const <Project>[]) {
+      if (deleted.contains(p.id)) continue;
+      final Project? mine = byId[p.id];
+      if (mine == null || p.updatedAt.isAfter(mine.updatedAt)) byId[p.id] = p;
+    }
+    return byId.values.toList()
+      ..sort((Project a, Project b) => b.updatedAt.compareTo(a.updatedAt));
+  }
+
+  List<Project> _mergeProjects(List<Project> local, List<Project>? server) {
+    for (final Project p in server ?? const <Project>[]) {
+      if (_deletedProjects.contains(p.id)) {
+        unawaited(_deleteProjectOnServer(p.id));
+      }
+    }
+    return _mergeProjectsWith(local, server, _deletedProjects);
+  }
+
+  /// Puts [next] in place of the project with its id, here and on the
+  /// server.
+  void _keepProject(Project next) {
+    projects = <Project>[
+      next,
+      ...projects.where((Project p) => p.id != next.id),
+    ];
+    _changed();
+    unawaited(() async {
+      try {
+        await _repo.saveProject(next);
+      } on Object catch (error) {
+        debugPrint('project: not saved on the server — $error');
+      }
+    }());
+  }
+
+  /// A new project called [name], opened on its screen unless [open] is
+  /// false.
+  Project createProject(String name, {bool open = true}) {
+    final Project made = Project(
+      id: 'project-${DateTime.now().microsecondsSinceEpoch}',
+      name: name.trim().isEmpty ? 'Untitled project' : name.trim(),
+      updatedAt: DateTime.now(),
+    );
+    _keepProject(made);
+    if (open) openProjectScreen(made.id);
+    return made;
+  }
+
+  void openProjectScreen(String id) {
+    if (projectById(id) == null) return;
+    openProjectId = id;
+    surface = Surface.project;
+    _changed();
+  }
+
+  void renameProject(String id, String name) {
+    final Project? p = projectById(id);
+    if (p == null || name.trim().isEmpty || name.trim() == p.name) return;
+    _keepProject(p.copyWith(name: name.trim()));
+  }
+
+  void setProjectInstructions(String id, String instructions) {
+    final Project? p = projectById(id);
+    if (p == null || instructions.trim() == p.instructions) return;
+    _keepProject(p.copyWith(instructions: instructions.trim()));
+  }
+
+  /// Adds [resource] to project [id]; false when it is already there.
+  bool addProjectResource(String id, ProjectResource resource) {
+    final Project? p = projectById(id);
+    if (p == null ||
+        p.resources.any((ProjectResource r) => r.key == resource.key)) {
+      return false;
+    }
+    _keepProject(
+        p.copyWith(resources: <ProjectResource>[...p.resources, resource]));
+    return true;
+  }
+
+  void removeProjectResource(String id, String key) {
+    final Project? p = projectById(id);
+    if (p == null) return;
+    _keepProject(p.copyWith(
+      resources: p.resources
+          .where((ProjectResource r) => r.key != key)
+          .toList(growable: false),
+    ));
+  }
+
+  /// Uploads [file] (`POST /v1/uploads`) and keeps it in project [id].
+  /// The engine's sentence when it would not take it.
+  Future<String?> uploadToProject(String id, PickedFile file) async {
+    try {
+      final String upload = await _repo.upload(
+        fileName: file.name,
+        mimeType: file.mimeType,
+        bytes: file.bytes,
+      );
+      addProjectResource(
+        id,
+        ProjectResource(
+          kind: ProjectResourceKind.file,
+          ref: upload,
+          name: file.name,
+          mimeType: file.mimeType,
+          sizeBytes: file.sizeBytes,
+        ),
+      );
+      return null;
+    } on ShiftApiException catch (error) {
+      return error.message;
+    }
+  }
+
+  /// Deletes project [id]. Its chats are kept, in no project: deleting a
+  /// folder of work should not quietly delete the work.
+  void deleteProject(String id) {
+    if (projectById(id) == null) return;
+    for (final ChatThread t in threadsIn(id)) {
+      moveThread(t.id, null);
+    }
+    projects = projects.where((Project p) => p.id != id).toList();
+    _deletedProjects = <String>{
+      ..._deletedProjects.skip(
+          (_deletedProjects.length - _keptDeletions + 1).clamp(0, 1 << 30)),
+      id,
+    };
+    if (currentProjectId == id) currentProjectId = null;
+    if (openProjectId == id) {
+      openProjectId = null;
+      if (surface == Surface.project) surface = Surface.suite;
+    }
+    _changed();
+    unawaited(_deleteProjectOnServer(id));
+  }
+
+  Future<void> _deleteProjectOnServer(String id) async {
+    try {
+      await _repo.deleteProject(id);
+    } on Object catch (error) {
+      debugPrint('project: not deleted on the server yet — $error');
+    }
+  }
+
+  /// Puts saved chat [threadId] in [projectId], or in no project.
+  void moveThread(String threadId, String? projectId) {
+    final ChatThread? t =
+        threads.where((ChatThread t) => t.id == threadId).firstOrNull;
+    if (t == null || t.projectId == projectId) return;
+    final ChatThread moved = t.inProject(projectById(projectId)?.id);
+    threads = <ChatThread>[
+      for (final ChatThread x in threads) x.id == threadId ? moved : x,
+    ];
+    if (currentThreadId == threadId) currentProjectId = moved.projectId;
+    _changed();
+    unawaited(() async {
+      try {
+        await _repo.saveThread(moved);
+      } on Object catch (error) {
+        debugPrint('chat: not moved on the server — $error');
+      }
+    }());
+  }
+
+  /// A new chat in project [id], on the Suite.
+  void newChatIn(String id) {
+    if (projectById(id) == null) return;
+    if (privateChat) privateChat = false;
+    clearThread();
+    currentProjectId = id;
+    surface = Surface.suite;
+    mode = ShiftMode.suite;
+    _changed();
   }
 
   /// A chat deleted here that the server still lists: its delete did not
@@ -1636,6 +1876,10 @@ class AppState extends ChangeNotifier {
     // device does not get this one's Recents.
     threads = <ChatThread>[];
     currentThreadId = null;
+    projects = <Project>[];
+    currentProjectId = null;
+    openProjectId = null;
+    if (surface == Surface.project) surface = Surface.suite;
     if (!seededDemo) {
       vault = <VaultItem>[];
       ecoVault = <VaultItem>[];
@@ -1930,6 +2174,9 @@ class AppState extends ChangeNotifier {
     // before it: its late answer is not appended to a conversation that
     // moved on, and the request is cancelled.
     _dropReply();
+    // The project this chat is in, as it is now: its instructions, notes
+    // and files go with the question.
+    final Project? project = privateChat ? null : currentProject;
     lastAsk = prompt;
     _saveThread();
     // An image (or video, or audio) with no model connected that makes
@@ -2072,7 +2319,7 @@ class AppState extends ChangeNotifier {
         _saveThread();
         _changed();
       }
-      final List<SentFile> files = await _madeAsUploads(
+      final List<SentFile> asked = await _madeAsUploads(
         messages
                 .where((ChatMessage m) => m.id == question)
                 .firstOrNull
@@ -2083,10 +2330,15 @@ class AppState extends ChangeNotifier {
         to: answerer,
       );
       if (!current()) return;
+      final bool words = _answersInWords(answerer);
+      final List<SentFile> files =
+          project == null || !words ? asked : _withProjectFiles(asked, project);
       await _answer(
         stamp,
         prompt,
-        sentAs: _askedOf(prompt, files, answerer),
+        sentAs: project != null && words
+            ? _inProject(prompt, project)
+            : _askedOf(prompt, files, answerer),
         model: answerer?.id,
         history: history,
         as: answerer,
@@ -2361,6 +2613,97 @@ class AppState extends ChangeNotifier {
     } on ShiftApiException catch (error) {
       debugPrint('vault: not re-read — ${error.message}');
     }
+  }
+
+  /// Whether [to] answers in words: a chat model, or the server's own
+  /// choice. A model that makes pictures, video or audio is not one, and
+  /// is not handed a project's notes: they would be drawn.
+  static bool _answersInWords(ChatModel? to) =>
+      !(to?.bestFor.any(ModelRouter.made.contains) ?? false);
+
+  /// Most of a project's files sent with one message.
+  static const int projectFilesSent = 10;
+
+  /// Most of a project's notes, in characters, written into one message.
+  static const int projectNotesChars = 12000;
+
+  /// [asked] and project [p]'s files after them: its vault pieces by
+  /// reference, its uploads by id, none twice, at most [projectFilesSent].
+  List<SentFile> _withProjectFiles(List<SentFile> asked, Project p) {
+    final Set<String> have = <String>{
+      for (final SentFile f in asked) ...<String>[
+        if (f.uploadId.isNotEmpty) 'file:${f.uploadId}',
+        if (f.vaultItemId != null) 'vault:${f.vaultItemId}',
+      ],
+    };
+    final List<SentFile> more = <SentFile>[];
+    for (final ProjectResource r in p.resources) {
+      if (more.length >= projectFilesSent) break;
+      if (have.contains(r.key)) continue;
+      switch (r.kind) {
+        case ProjectResourceKind.file:
+          more.add(SentFile(
+            uploadId: r.ref,
+            name: r.name,
+            mimeType: r.mimeType ?? 'application/octet-stream',
+            sizeBytes: r.sizeBytes,
+          ));
+        case ProjectResourceKind.vault:
+          final VaultItem? row =
+              vault.where((VaultItem v) => v.id == r.ref).firstOrNull;
+          // A piece deleted from the vault since is not sent.
+          if (row == null) continue;
+          final String? link = row.mediaUrl ?? row.thumbnailUrl;
+          more.add(SentFile.made(
+            vaultItemId: row.id,
+            name: row.title,
+            mimeType: switch (row.mediaType) {
+              MediaType.video => 'video/mp4',
+              MediaType.audio => 'audio/mpeg',
+              MediaType.document => 'application/pdf',
+              MediaType.image => 'image/png',
+            },
+            url: link,
+          ));
+        case ProjectResourceKind.note:
+          break;
+      }
+    }
+    return <SentFile>[...asked, ...more];
+  }
+
+  /// [prompt] as a model in project [p] is asked it: the project's
+  /// instructions and notes first, then what was typed. The thread shows
+  /// only what was typed; the server keeps no project, so every message
+  /// carries it.
+  String _inProject(String prompt, Project p) {
+    final List<String> notesText = <String>[];
+    int room = projectNotesChars;
+    for (final ProjectResource r in p.resources) {
+      if (r.kind != ProjectResourceKind.note || room <= 0) continue;
+      final Note? n = notes.where((Note n) => n.id == r.ref).firstOrNull;
+      if (n == null) continue;
+      String body = n.body.trim();
+      if (body.length > room) body = '${body.substring(0, room)}…';
+      room -= body.length;
+      notesText.add('### ${n.title.trim().isEmpty ? r.name : n.title.trim()}'
+          '\n$body');
+    }
+    final List<String> fileNames = <String>[
+      for (final ProjectResource r in p.resources)
+        if (r.kind != ProjectResourceKind.note) r.name,
+    ];
+    final String instructions = p.instructions.trim();
+    return <String>[
+      'This conversation is part of the project "${p.name}". Use its '
+          'instructions and resources below as context.',
+      if (instructions.isNotEmpty) 'Project instructions:\n$instructions',
+      if (notesText.isNotEmpty) 'Project notes:\n${notesText.join('\n\n')}',
+      if (fileNames.isNotEmpty)
+        'Project files (attached): ${fileNames.take(projectFilesSent).join(', ')}',
+      '---',
+      prompt,
+    ].join('\n\n');
   }
 
   /// Made pictures already sent on as uploads, by vault row: one upload
@@ -2691,6 +3034,7 @@ class AppState extends ChangeNotifier {
         title: saved.title,
         updatedAt: saved.updatedAt,
         messages: filled(saved.messages),
+        projectId: saved.projectId,
       );
       threads = <ChatThread>[
         for (final ChatThread t in threads) t.id == saved.id ? thread : t,
@@ -2728,8 +3072,10 @@ class AppState extends ChangeNotifier {
     _dropReply();
     editingId = null;
     messages = <ChatMessage>[];
-    // The chat that was on screen is already saved; this is a new one.
+    // The chat that was on screen is already saved; this is a new one,
+    // in no project (newChatIn puts one in a project).
     currentThreadId = null;
+    currentProjectId = null;
     lastAsk = null;
     greeting = Greetings.next(avoid: greeting);
     _changed();
@@ -2787,6 +3133,9 @@ class AppState extends ChangeNotifier {
       'notes': notes.map((Note n) => n.toJson()).toList(),
       'threads': threads.map((ChatThread t) => t.toJson()).toList(),
       'deletedThreads': _deletedThreads.toList(growable: false),
+      'projects': projects.map((Project p) => p.toJson()).toList(),
+      'deletedProjects': _deletedProjects.toList(growable: false),
+      if (openProjectId != null) 'openProject': openProjectId,
       'rings': rings.toJson(),
     };
     await _prefs.setString(StoreKeys.app, jsonEncode(blob));

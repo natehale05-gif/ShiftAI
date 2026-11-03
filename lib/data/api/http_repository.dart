@@ -75,6 +75,7 @@ class HttpRepository implements ShiftRepository {
   static const String _boards = '/v1/boards';
   static const String _models = '/v1/models';
   static const String _threads = '/v1/threads';
+  static const String _projects = '/v1/projects';
   static const String _location = '/v1/me/location';
 
   /// The Suite's boards, if this engine serves them. Optional: an engine
@@ -129,6 +130,37 @@ class HttpRepository implements ShiftRepository {
     }
   }
 
+  /// Projects, when the engine keeps them; any refusal means the device's
+  /// copy is the one, as for saved chats.
+  Future<List<Project>?> _projectList() async {
+    try {
+      return Decode.rows(await _api.get(_projects), 'projects')
+          .map(Project.tryParse)
+          .whereType<Project>()
+          .toList(growable: false);
+    } on ShiftApiException {
+      return null;
+    }
+  }
+
+  @override
+  Future<void> saveProject(Project project) async {
+    try {
+      await _api.put('$_projects/${project.id}', body: project.toJson());
+    } on ShiftApiException catch (error) {
+      if (error.kind != ShiftApiErrorKind.notFound) rethrow;
+    }
+  }
+
+  @override
+  Future<void> deleteProject(String id) async {
+    try {
+      await _api.delete('$_projects/$id');
+    } on ShiftApiException catch (error) {
+      if (error.kind != ShiftApiErrorKind.notFound) rethrow;
+    }
+  }
+
   @override
   Future<void> saveThread(ChatThread thread) async {
     try {
@@ -152,6 +184,7 @@ class HttpRepository implements ShiftRepository {
     final Future<SuiteBoards?> boards = _suiteBoards();
     final Future<List<ChatModel>> models = _chatModels();
     final Future<List<ChatThread>?> threads = _chatThreads();
+    final Future<List<Project>?> projects = _projectList();
     // One round trip each, in parallel. A backend that would rather answer
     // in one shot can add a /v1/snapshot and this becomes a single call.
     final List<dynamic> parts = await Future.wait(<Future<dynamic>>[
@@ -207,6 +240,7 @@ class HttpRepository implements ShiftRepository {
       boards: await boards,
       models: await models,
       threads: await threads,
+      projects: await projects,
     );
   }
 

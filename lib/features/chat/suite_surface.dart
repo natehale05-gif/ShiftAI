@@ -399,12 +399,36 @@ class _EmptyState extends StatelessWidget {
     return Center(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: Space.x5),
-        child: Text(
-          // Rotates — a new line per thread and per return to the app.
-          // See `Greetings` for why it is not one fixed sentence.
-          state.greeting,
-          textAlign: TextAlign.center,
-          style: ShiftType.heading(c.textMuted),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Text(
+              // Rotates — a new line per thread and per return to the app.
+              // See `Greetings` for why it is not one fixed sentence.
+              state.greeting,
+              textAlign: TextAlign.center,
+              style: ShiftType.heading(c.textMuted),
+            ),
+            // A new chat in a project says so: it is given the project's
+            // instructions and files.
+            if (state.currentProject case final Project p) ...<Widget>[
+              const SizedBox(height: Space.x3),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  Icon(Icons.folder_outlined, size: 16, color: c.accent),
+                  const SizedBox(width: Space.x2),
+                  Flexible(
+                    child: Text(
+                      'In ${p.name}',
+                      overflow: TextOverflow.ellipsis,
+                      style: ShiftType.callout(c.accent),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ],
         ),
       ),
     );

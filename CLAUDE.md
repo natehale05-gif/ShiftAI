@@ -260,6 +260,16 @@ drawer): on the device, in the account-keyed blob, and on the server via
 saved nowhere, and going private or back starts a fresh chat so a private
 part can never land in a saved one.
 
+Chats are deleted from the "…" on their Recents row or over the open
+chat (it used to be an undiscoverable long press), and a deleted chat
+stays deleted: its id is kept and left out of every merge with
+`/v1/threads`, which used to bring it back. Projects (`Project`,
+`/v1/projects`, the Project screen) keep chats together with
+instructions, notes, vault pieces and uploads; a message in a project
+chat to a model that answers in words opens with all of it and attaches
+the files (`AppState._inProject`), and an image, video or audio model is
+sent the words alone. Deleting a project keeps its chats.
+
 `DELETE /v1/me` is store-blocking — Apple rejects account creation
 without in-app deletion (Guideline 5.1.1(v)). The button and the
 confirmation exist; they need something to call.
@@ -281,6 +291,6 @@ exploratory, branch.
 flutter analyze && flutter test
 ```
 
-427 tests. They have caught every regression listed above at least once,
+437 tests. They have caught every regression listed above at least once,
 including several of mine. If one fails, read it before changing it —
 twice now the test was right and my expectation was wrong.
