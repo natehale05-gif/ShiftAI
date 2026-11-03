@@ -113,6 +113,19 @@ class _ShiftAlertState<T> extends State<_ShiftAlert<T>> {
 
   void _typed() => setState(() {});
 
+  /// Return in a one-line field takes the bold action, as on an iPhone:
+  /// "New project", a name typed, Return, and nothing happened. Never a
+  /// destructive one, and never one that is off for what is typed.
+  void _submit() {
+    final String typed = _text.text;
+    final ShiftAlertAction<T>? main = widget.actions
+        .where((ShiftAlertAction<T> a) => a.isDefault && !a.destructive)
+        .firstOrNull;
+    if (main == null || !(main.enabled?.call(typed) ?? true)) return;
+    Navigator.of(context)
+        .pop(main.valueOf != null ? main.valueOf!(typed) : main.value);
+  }
+
   @override
   void dispose() {
     _text
@@ -154,7 +167,11 @@ class _ShiftAlertState<T> extends State<_ShiftAlert<T>> {
                     // drawn outside the app's Scaffold.
                     Material(
                       type: MaterialType.transparency,
-                      child: _Field(controller: _text, spec: field),
+                      child: _Field(
+                        controller: _text,
+                        spec: field,
+                        onSubmitted: _submit,
+                      ),
                     ),
                   ],
                 ],
@@ -183,10 +200,15 @@ class _ShiftAlertState<T> extends State<_ShiftAlert<T>> {
 
 /// Compact, filled, rounded like the field in an iOS alert.
 class _Field extends StatelessWidget {
-  const _Field({required this.controller, required this.spec});
+  const _Field({
+    required this.controller,
+    required this.spec,
+    required this.onSubmitted,
+  });
 
   final TextEditingController controller;
   final ShiftAlertField spec;
+  final VoidCallback onSubmitted;
 
   @override
   Widget build(BuildContext context) {
@@ -196,6 +218,9 @@ class _Field extends StatelessWidget {
       autofocus: true,
       minLines: spec.minLines,
       maxLines: spec.maxLines,
+      // Return in a one-line field takes the bold action; in a longer one
+      // it is a new line.
+      onSubmitted: spec.maxLines == 1 ? (String _) => onSubmitted() : null,
       style: ShiftType.bodySm(c.text),
       decoration: InputDecoration(
         isDense: true,
